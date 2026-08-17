@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+.pytest_cache/
+.hypothesis/
+# dogfooding state for this repo itself
+.damped-plan/
