@@ -80,7 +80,8 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
             "instructions. Minimal call: {'plan': {'title': '...', 'kind': "
             "'measurement|implementation|repair|rollback'}}. A full plan adds "
             "goal_ids, addresses_failure_ids, hypothesis, intervention "
-            "(allowed_files!), validation_steps, decision_rule, rollback_description."
+            "(allowed_files!), validation_steps, decision_rule, rollback_description. "
+            "Set parent_plan_id when this plan follows from another plan's findings."
         )
     )
     def create_plan(plan: dict[str, Any]) -> dict[str, Any]:

@@ -36,6 +36,12 @@ The tool returns an evaluation immediately. Partial plans are fine — every
 blocker message is a concrete repair instruction; apply them with another
 `create_plan` call using the same plan id.
 
+When a plan follows from another plan's findings — an implementation built on
+a measurement's evidence, a follow-up after a rejection, a split mandated by
+a replan decision — set `parent_plan_id` to that plan's id. Lineage recorded
+structurally (not just in prose) keeps the audit trail traceable and feeds
+future drift analysis.
+
 ## 3. Respect the gate
 
 - `blocked` on `UNRESOLVED_HARD_CONSTRAINT`: do NOT argue the constraint is
