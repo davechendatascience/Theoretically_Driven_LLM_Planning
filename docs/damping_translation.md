@@ -63,6 +63,52 @@ because the criteria predate the result — the qualitative analogue of a
 setpoint. The same discipline reaches individual validation steps through the
 `expected_result` warning.
 
+## Refinement: the residual is not driven to zero — it is driven at the right angle
+
+Critical damping, taken literally, describes the transient of a system
+returning to a *reachable* equilibrium at zero error. Most project residuals
+have no such equilibrium: irreducible uncertainty, resource limits, and
+open-world disturbance keep parts of the residual permanently nonzero. So the
+mathematically honest frame is not asymptotic convergence to the origin but
+**regulation into a small stable set**: hold the residual bounded and
+certified while reducing the components that *are* reducible. What matters is
+the **angle** of each action in residual space, not its magnitude:
+
+1. The action's effect should have positive projection onto the dominant
+   *reducible* residual component — a descent direction, chosen by
+   measurement (a discriminative measurement is exactly an estimate of which
+   direction reduces residual).
+2. It should have near-zero projection onto the components already certified
+   stable. Scope creep and evaluation drift are precisely actions with
+   components pointing *out* of the certified subspace, which is why the gate
+   scopes `allowed_files` and the frozen evaluation protocol is a hard
+   constraint.
+
+The mechanisms line up with this reading better than with literal damping:
+
+- **Floors, not zeros.** A goal like "≥ 70% of falls graded RED, currently
+  78%" deliberately holds a nonzero residual (the non-RED falls) inside a
+  certified bound enforced as a regression test. The residual is small and
+  *stable*, not eliminated.
+- **The ratchet.** A floor is tightened (silent falls: "≤ 3" → "== 0") only
+  after measurement shows the tighter set is reachable — the boundary of the
+  invariant set moves inward stepwise, each step certified before the next.
+- **Escalation as angle-error detection.** Repeated failed repairs with no
+  new evidence mean the current action direction has ~zero projection on the
+  residual. The correct response is not a larger step in the same direction
+  but re-estimating the direction — new hypothesis, representation,
+  interface, or oracle. That is what `escalate` demands.
+- **Angle selection between measurements.** A baseline of 8/15 with a Wilson
+  CI of [30%, 75%] shows that "run the same comparison harder" is a nearly
+  orthogonal direction at that sample size; the recorded evidence itself
+  redirects the next plan toward a paired per-scene test — same residual,
+  better angle.
+
+Critical damping survives as the *transient* discipline along the chosen
+direction — no overshoot (commitment beyond evidence), no ringing (repair
+loops) — while stability of everything else is guaranteed by invariants
+rather than dynamics.
+
 ## What is honestly not captured
 
 - **No gain.** The policy chooses the *category* of the next action, never its
