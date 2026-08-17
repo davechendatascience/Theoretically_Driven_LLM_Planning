@@ -75,6 +75,26 @@ data or evaluation change):
 6. Never report "fixed" or "validated" without a recorded validation.
 ```
 
+## 2b. Install the adversarial plan reviewer (optional)
+
+`agents/plan-reviewer.md` is a fresh-context reviewer agent that tries to
+refute a `ready_for_review` plan (verifies evidence artifacts against their
+summaries, attacks closure quality, re-runs cheap read-only probes) and
+returns a structured verdict before the human decides. It is advisory only:
+it has no mutating tools and never calls `approve_plan` — the human stays the
+approver.
+
+```bash
+mkdir -p .claude/agents
+cp /absolute/path/to/damped-plan-mcp/agents/plan-reviewer.md .claude/agents/
+```
+
+Control: the reviewer runs when the session delegates to it (its
+`description` triggers on plans reaching ready_for_review) or when you invoke
+it explicitly. To skip it for one plan, say so ("approve without review"); to
+disable it entirely, delete or move the agent file. Approval always requires
+the human regardless of whether the reviewer ran.
+
 ## 3. Enable the enforcement hook (optional)
 
 See [hooks/README.md](../hooks/README.md). Without the hook, the gate is
