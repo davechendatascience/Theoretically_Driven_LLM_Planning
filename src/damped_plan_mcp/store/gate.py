@@ -6,6 +6,7 @@ Rewritten after every mutation so the hook never needs to start the server.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from ..models import (
@@ -73,15 +74,31 @@ def compute_gate(project: ProjectState, plans: list[Plan]) -> GateSnapshot:
 
 def write_gate(store: JsonStore, project: ProjectState, plans: list[Plan]) -> GateSnapshot:
     snapshot = compute_gate(project, plans)
-    atomic_write_json(store.data_dir / "gate.json", snapshot.model_dump(mode="json"))
-    events.append_event(
-        store.data_dir,
-        event="gate_updated",
-        actor="mcp:gate",
-        entity_type="gate",
-        entity_id=project.project_id,
-        data={"gate_open": snapshot.gate_open,
-              "open_plans": [p.plan_id for p in snapshot.open_plans]},
-        project_version=project.version,
-    )
+    path = store.data_dir / "gate.json"
+    payload = snapshot.model_dump(mode="json")
+
+    changed = True
+    if path.exists():
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+            previous.pop("generated_at", None)
+            current = dict(payload)
+            current.pop("generated_at", None)
+            changed = previous != current
+        except (OSError, ValueError):
+            changed = True
+
+    atomic_write_json(path, payload)
+    # Event-log only substantive changes, not timestamp refreshes.
+    if changed:
+        events.append_event(
+            store.data_dir,
+            event="gate_updated",
+            actor="mcp:gate",
+            entity_type="gate",
+            entity_id=project.project_id,
+            data={"gate_open": snapshot.gate_open,
+                  "open_plans": [p.plan_id for p in snapshot.open_plans]},
+            project_version=project.version,
+        )
     return snapshot

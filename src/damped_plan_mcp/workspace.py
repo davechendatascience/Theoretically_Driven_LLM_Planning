@@ -363,6 +363,9 @@ class Workspace:
                 self._persist_evaluation(
                     plan, result, actor="mcp:update_constraint_status"
                 )
+            # Refresh the gate even when no plans exist (state-ledger usage):
+            # unresolved_hard_constraints and deny_message must track statuses.
+            gate_store.write_gate(self.store, project, self.store.list_plans())
             summary = (
                 f"Constraint {constraint_id}: {old_status.value} -> "
                 f"{constraint.status.value}."

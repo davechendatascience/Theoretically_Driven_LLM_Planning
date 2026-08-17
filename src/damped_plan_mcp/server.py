@@ -35,6 +35,17 @@ damped-plan is a constraint-closure gate for nontrivial changes. Workflow:
 def build_server(data_dir: Path | None = None) -> MCPServer:
     root = config.ensure_data_dir(data_dir)
     workspace = Workspace(root)
+
+    # Self-heal on startup: gate.json is derived state, so recompute it in case
+    # an older server version (or a crash) left it stale. Logs an event only if
+    # the content actually changed.
+    existing_project = workspace.store.load_project()
+    if existing_project is not None:
+        with workspace.store.locked():
+            gate_store.write_gate(
+                workspace.store, existing_project, workspace.store.list_plans()
+            )
+
     server = MCPServer("damped-plan", instructions=INSTRUCTIONS)
 
     # -- tools ---------------------------------------------------------------

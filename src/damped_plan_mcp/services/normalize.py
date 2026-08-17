@@ -9,6 +9,7 @@ InputError, and its message is itself an instruction for the caller.
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -110,7 +111,7 @@ def normalize_project(
         existing.project_id
         if existing
         else str(data.get("project_id") or "").strip()
-        or name.lower().replace(" ", "-")
+        or re.sub(r"[^a-z0-9_-]+", "-", name.lower()).strip("-")
     )
 
     goals = list(existing.goals) if existing else []
@@ -137,8 +138,11 @@ def normalize_project(
         failure_ids.add(failure.id)
 
     fact_ids = {f.id for f in facts}
+    facts_without_truth_status: list[str] = []
     for raw in _as_list(data.get("facts")):
         fact = _normalize_fact(raw, fact_ids)
+        if isinstance(raw, dict) and not raw.get("truth_status"):
+            facts_without_truth_status.append(fact.id)
         _upsert(facts, fact)
         fact_ids.add(fact.id)
 
@@ -164,6 +168,34 @@ def normalize_project(
                 f"Goal {goal.id} has no metric/target yet; plans linked to it will be "
                 f"UNDER_SPECIFIED until you re-register it with metric_name and target."
             )
+
+    # Hollow-entity warnings: ids alone don't preserve meaning in the audit
+    # trail. Advisory only — never blocks, so existing stores keep working.
+    hollow_goals = [g.id for g in state.goals if not g.statement.strip()]
+    if hollow_goals:
+        warnings.append(
+            f"Goal(s) {hollow_goals} have an empty statement; re-register them with "
+            f'"statement" (aliases: title/description) saying what success means.'
+        )
+    hollow_constraints = [c.id for c in state.constraints if not c.statement.strip()]
+    if hollow_constraints:
+        warnings.append(
+            f"Constraint(s) {hollow_constraints} have an empty statement; re-register "
+            f'them with "statement" (aliases: description/text) saying what must hold.'
+        )
+    hollow_failures = [f.id for f in state.failure_modes if not f.symptom.strip()]
+    if hollow_failures:
+        warnings.append(
+            f"Failure mode(s) {hollow_failures} have an empty symptom; re-register "
+            f'them with "symptom" (aliases: statement/description) describing what '
+            f"was observed."
+        )
+    if facts_without_truth_status:
+        warnings.append(
+            f"Fact(s) {facts_without_truth_status} defaulted to truth_status "
+            f'"assumed"; pass observed|inferred|assumed|unknown to preserve the '
+            f"distinction between measured and assumed knowledge."
+        )
     return state, warnings
 
 
@@ -181,7 +213,13 @@ def _normalize_goal(raw: Any, taken: set[str], warnings: list[str]) -> Goal:
     data = _as_dict(raw, "goal")
     return Goal(
         id=str(data.get("id") or ids.next_id(ids.GOAL_PREFIX, taken)),
-        statement=str(data.get("statement") or data.get("title") or ""),
+        statement=str(
+            data.get("statement")
+            or data.get("title")
+            or data.get("description")
+            or data.get("name")
+            or ""
+        ),
         metric_name=str(data.get("metric_name") or data.get("metric") or ""),
         target=str(data.get("target") or ""),
         evaluation_protocol=data.get("evaluation_protocol"),
@@ -223,7 +261,9 @@ def _normalize_constraint(
             status = ConstraintStatus.UNKNOWN
     return Constraint(
         id=constraint_id,
-        statement=str(data.get("statement") or ""),
+        statement=str(
+            data.get("statement") or data.get("description") or data.get("text") or ""
+        ),
         kind=_coerce_enum(ConstraintKind, data.get("kind"), ConstraintKind.HARD),
         severity=_coerce_enum(Severity, data.get("severity"), Severity.HIGH),
         status=status,
@@ -243,7 +283,13 @@ def _normalize_failure(raw: Any, taken: set[str]) -> FailureMode:
     data = _as_dict(raw, "failure_mode")
     return FailureMode(
         id=str(data.get("id") or ids.next_id(ids.FAILURE_PREFIX, taken)),
-        symptom=str(data.get("symptom") or data.get("statement") or ""),
+        symptom=str(
+            data.get("symptom")
+            or data.get("statement")
+            or data.get("description")
+            or data.get("name")
+            or ""
+        ),
         severity=_coerce_enum(Severity, data.get("severity"), Severity.HIGH),
         subsystem=data.get("subsystem"),
         evidence_ids=_str_list(data.get("evidence_ids")),
@@ -260,7 +306,9 @@ def _normalize_fact(raw: Any, taken: set[str]) -> Fact:
     data = _as_dict(raw, "fact")
     return Fact(
         id=str(data.get("id") or ids.next_id(ids.FACT_PREFIX, taken)),
-        statement=str(data.get("statement") or ""),
+        statement=str(
+            data.get("statement") or data.get("description") or data.get("text") or ""
+        ),
         truth_status=_coerce_enum(
             TruthStatus, data.get("truth_status"), TruthStatus.ASSUMED
         ),
@@ -337,6 +385,16 @@ def normalize_plan(
     audit = _normalize_audit(
         data.get("constraint_audit"), project, existing_plan, warnings
     )
+
+    steps_without_expectation = [
+        s.id for s in validation_steps if s.required and not s.expected_result.strip()
+    ]
+    if steps_without_expectation:
+        warnings.append(
+            f"Required validation step(s) {steps_without_expectation} have no "
+            f"expected_result; state what outcome counts as a pass so the "
+            f"decision_rule can be applied without judgment calls."
+        )
 
     timestamp = now()
     plan = Plan(

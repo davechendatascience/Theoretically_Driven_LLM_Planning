@@ -145,6 +145,62 @@ def test_plan_upsert_preserves_created_at_and_bumps_version():
     assert second.hypothesis is not None
 
 
+def test_alias_fields_accepted():
+    # Real-world sessions passed description/name instead of statement/symptom;
+    # aliases must capture the content instead of storing hollow entities.
+    state, warnings = normalize_project(
+        {
+            "name": "demo",
+            "goals": [{"id": "G1", "description": "reach the target"}],
+            "constraints": [{"id": "C1", "description": "must hold"}],
+            "failure_modes": [{"id": "F1", "description": "it breaks"}],
+            "facts": [{"id": "FA1", "text": "observed thing", "truth_status": "observed"}],
+        }
+    )
+    assert state.goals[0].statement == "reach the target"
+    assert state.constraints[0].statement == "must hold"
+    assert state.failure_modes[0].symptom == "it breaks"
+    assert state.facts[0].statement == "observed thing"
+    assert not any("empty" in w for w in warnings)
+
+
+def test_hollow_entities_warned_not_blocked():
+    state, warnings = normalize_project(
+        {
+            "name": "demo",
+            "goals": [{"id": "G1", "metric_name": "m", "target": "t"}],
+            "failure_modes": [{"id": "F-cryptic"}],
+            "facts": [{"id": "FA1", "statement": "measured X"}],
+        }
+    )
+    # Stored anyway (existing users keep working)...
+    assert state.goals[0].statement == ""
+    assert state.failure_modes[0].symptom == ""
+    # ...but each hollow field and the defaulted truth_status get a warning.
+    assert any("G1" in w and "empty statement" in w for w in warnings)
+    assert any("F-cryptic" in w and "empty symptom" in w for w in warnings)
+    assert any("FA1" in w and "assumed" in w for w in warnings)
+
+
+def test_project_id_slug_strips_punctuation():
+    state, _ = normalize_project({"name": "embodied_ai: grounding a VLA!"})
+    assert state.project_id == "embodied_ai-grounding-a-vla"
+
+
+def test_required_validation_without_expected_result_warned():
+    project = make_project()
+    _, warnings = normalize_plan(
+        {
+            "title": "x",
+            "kind": "measurement",
+            "validation_steps": [{"description": "run it", "required": True}],
+        },
+        project,
+        set(),
+    )
+    assert any("expected_result" in w for w in warnings)
+
+
 def test_evidence_minimal():
     project = make_project()
     record = normalize_evidence({"summary": "saw a thing"}, project, set())
