@@ -37,10 +37,52 @@ uv run pytest -q                          # 66 tests
 uv run python scripts/demo_end_to_end.py  # full blocked->measure->unblock flow
 ```
 
-Register the server for a target project (see
-[docs/claude_code_integration.md](docs/claude_code_integration.md) for the
-`.mcp.json` snippet, the optional enforcement hook, and the `/damped-plan`
-skill).
+## Set up for your project
+
+Three pieces, each opt-in, all configured in the *target* project (the repo
+whose changes you want gated). Full details in
+[docs/claude_code_integration.md](docs/claude_code_integration.md).
+
+**1. Register the MCP server** — add `.mcp.json` at the target repo's root
+(or use `claude mcp add`, see the integration doc):
+
+```json
+{
+  "mcpServers": {
+    "damped-plan": {
+      "command": "uv",
+      "args": [
+        "--directory", "/absolute/path/to/damped-plan-mcp",
+        "run", "damped-plan-mcp"
+      ],
+      "env": {
+        "DAMPED_PLAN_DATA_DIR": "/absolute/path/to/your-project/.damped-plan"
+      }
+    }
+  }
+}
+```
+
+Add `.damped-plan/` to the target project's `.gitignore` (or commit it if you
+want plans and evidence reviewed alongside code).
+
+**2. Install the `/damped-plan` skill** (recommended — teaches Claude the
+workflow and auto-triggers on nontrivial changes):
+
+```bash
+mkdir -p .claude/skills
+cp -r /absolute/path/to/damped-plan-mcp/skills/damped-plan .claude/skills/
+```
+
+**3. Enable the enforcement hook** (optional — turns the gate from advisory
+into an actual deny on uncovered edits): add the PreToolUse entry from
+[hooks/README.md](hooks/README.md) to the target project's
+`.claude/settings.json`.
+
+Then restart Claude Code in the target project (MCP servers connect at
+session start), approve the server when prompted, and verify with `/mcp`.
+First use: ask Claude to register the project's goals, hard constraints, and
+failure modes, then propose a change and watch it get gated.
 
 ## How state is stored
 
