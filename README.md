@@ -9,7 +9,9 @@ and every hard constraint is evidence-backed `SAT`.
 
 Design blueprint: [docs/blueprint.md](docs/blueprint.md). Tool reference:
 [docs/tool_contracts.md](docs/tool_contracts.md). Claude Code setup:
-[docs/claude_code_integration.md](docs/claude_code_integration.md).
+[docs/claude_code_integration.md](docs/claude_code_integration.md). Why this
+works on qualitative measures — how the critical-damping idea maps to
+discrete state: [docs/damping_translation.md](docs/damping_translation.md).
 
 ## What it enforces
 
