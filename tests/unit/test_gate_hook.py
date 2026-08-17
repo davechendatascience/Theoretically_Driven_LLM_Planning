@@ -99,10 +99,10 @@ def test_always_allowed_paths(tmp_path):
     assert code == 0 and output is None
 
 
-def test_warn_mode_asks(tmp_path):
+def test_warn_mode_escalates_to_human(tmp_path):
     write_gate(tmp_path, [])
     code, output = run_hook(edit_event(tmp_path, "src/x.py"), env_mode="warn")
-    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "escalate"
 
 
 def test_corrupt_gate_strict_denies(tmp_path):

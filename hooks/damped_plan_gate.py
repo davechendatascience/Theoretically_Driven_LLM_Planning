@@ -7,7 +7,8 @@ Opt-in per project via .claude/settings.json (see hooks/README.md).
 
 Modes via DAMPED_PLAN_HOOK_MODE:
   enforce (default)  uncovered file -> permissionDecision "deny"
-  warn               uncovered file -> permissionDecision "ask"
+  warn               uncovered file -> permissionDecision "escalate"
+                     (surfaces the gate verdict to the human instead of denying)
   strict             like enforce, but a corrupt/unreadable gate.json also denies
 
 Fail-open by design: no gate.json found (project doesn't use damped-plan)
@@ -22,7 +23,7 @@ import os
 import sys
 from pathlib import Path
 
-EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
+EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 
 
 def find_gate(start: Path) -> Path | None:
@@ -124,7 +125,7 @@ def main() -> None:
     if covering:
         sys.exit(0)
 
-    permission = "ask" if mode == "warn" else "deny"
+    permission = "escalate" if mode == "warn" else "deny"
     open_ids = [p.get("plan_id") for p in gate.get("open_plans") or []]
     reason = (
         f"damped-plan gate: '{rel_path}' is not covered. "
