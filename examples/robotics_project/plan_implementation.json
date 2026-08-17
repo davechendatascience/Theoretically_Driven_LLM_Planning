@@ -1,0 +1,59 @@
+{
+  "id": "P-002",
+  "title": "Add pick-conditioned placement head",
+  "kind": "implementation",
+  "goal_ids": ["G-final-fold-success"],
+  "addresses_failure_ids": ["F-placement-sensitivity"],
+  "hypothesis": {
+    "statement": "The placement prediction lacks explicit dependence on the selected pick point and local post-pick visual state",
+    "linked_failure_ids": ["F-placement-sensitivity"],
+    "alternative_hypothesis_ids": ["H-visual-ambiguity", "H-contact-mismatch"]
+  },
+  "intervention": {
+    "description": "Condition the placement head on selected pick coordinates and local visual features while preserving the pick/place action API",
+    "allowed_files": [
+      "src/policy/placement_head.py",
+      "src/policy/model.py",
+      "configs/placement_conditioned.yaml",
+      "tests/test_placement_head.py"
+    ],
+    "expected_api_changes": [],
+    "reversible": true,
+    "estimated_cost": "One short profile run plus one fixed-seed training run"
+  },
+  "validation_steps": [
+    {
+      "description": "Validate shape and API contract",
+      "kind": "command",
+      "command": "unit_placement_head",
+      "expected_result": "All tests pass",
+      "required": true
+    },
+    {
+      "description": "Run deterministic one-episode rollout",
+      "kind": "command",
+      "command": "placement_smoke",
+      "expected_result": "Valid pick/place outputs and no simulator assertion",
+      "required": true
+    },
+    {
+      "description": "Evaluate frozen held-out split by placement perturbation bin",
+      "kind": "command",
+      "command": "frozen_placement_eval",
+      "expected_result": "Metrics artifact generated",
+      "required": true
+    }
+  ],
+  "decision_rule": {
+    "adopt_if": [
+      "Held-out placement robustness improves by at least 5 percentage points",
+      "Action feasibility remains within 1 percentage point of baseline"
+    ],
+    "reject_if": [
+      "No measurable improvement under matched initial states",
+      "Gains disappear under the frozen evaluation protocol",
+      "Oracle-pick comparison indicates visual ambiguity dominates"
+    ]
+  },
+  "rollback_description": "Disable conditioned head via config and retain baseline checkpoint"
+}

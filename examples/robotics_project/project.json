@@ -1,0 +1,57 @@
+{
+  "name": "lehome",
+  "goals": [
+    {
+      "id": "G-final-fold-success",
+      "statement": "Robust final-fold placement under initial-state perturbation",
+      "metric_name": "placement_success_rate",
+      "target": ">= 0.8 on the frozen held-out split",
+      "evaluation_protocol": "configs/eval_frozen.yaml"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "C-no-new-real-labels",
+      "statement": "No new real-world annotation collection",
+      "kind": "hard"
+    },
+    {
+      "id": "C-action-api",
+      "statement": "Policy output remains pick_xy and place_xy",
+      "kind": "hard"
+    },
+    {
+      "id": "C-compute-budget",
+      "statement": "Peak allocated VRAM below 20 GB on each of two GPUs",
+      "kind": "hard"
+    },
+    {
+      "id": "C-frozen-evaluation",
+      "statement": "Evaluation uses the frozen protocol configs/eval_frozen.yaml",
+      "kind": "hard"
+    },
+    {
+      "id": "C-hardware-safety",
+      "statement": "Simulation/training only; no physical robot actuation",
+      "kind": "hard",
+      "severity": "critical"
+    }
+  ],
+  "failure_modes": [
+    {
+      "id": "F-placement-sensitivity",
+      "symptom": "Placement fails when the initial garment pose is perturbed",
+      "severity": "high",
+      "subsystem": "policy/placement"
+    }
+  ],
+  "facts": [
+    {
+      "statement": "Existing demonstrations provide image and action tensors",
+      "truth_status": "observed"
+    }
+  ],
+  "available_resources": ["2x 24GB GPUs", "recorded demonstrations", "simulator"],
+  "forbidden_actions": ["real robot execution", "new data collection"],
+  "current_baseline": "baseline policy checkpoint bc-2026-07"
+}
