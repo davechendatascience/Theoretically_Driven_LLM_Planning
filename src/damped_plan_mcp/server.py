@@ -110,6 +110,19 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
 
     @server.tool(
         description=(
+            "Execute an approved plan's validation step through the allowlisted "
+            "command registry (.damped-plan/commands.json: argv arrays only, no "
+            "shell). Captures stdout/stderr/exit code to an artifact and "
+            "auto-records evidence linked to the plan (exit 0 = supports, else "
+            "refutes). The plan must be approved; the step's 'command' field must "
+            "name a registered command id."
+        )
+    )
+    def run_validation(plan_id: str, validation_step_id: str) -> dict[str, Any]:
+        return workspace.run_validation(plan_id, validation_step_id)
+
+    @server.tool(
+        description=(
             "Record an observation with provenance: {'evidence': {'summary': '...', "
             "'source_type': 'test|benchmark|simulation|log|manual_review|paper|"
             "commit|profiling|solver', 'polarity': 'supports|refutes|neutral', "
@@ -189,6 +202,15 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
             return _dump({"gate_open": False, "error": "no project registered"})
         snapshot = gate_store.compute_gate(project, workspace.store.list_plans())
         return _dump(snapshot.model_dump(mode="json"))
+
+    @server.resource("damped://project/current/commands")
+    def command_registry() -> str:
+        from .services import command_runner as runner
+
+        try:
+            return _dump(runner.load_registry(workspace.store.data_dir))
+        except runner.CommandRunnerError as exc:
+            return _dump({"error": str(exc)})
 
     @server.resource("damped://project/current/decision-log")
     def decision_log() -> str:

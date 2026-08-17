@@ -102,8 +102,10 @@ JSON — human-diffable, git-friendly:
 
 ## Status
 
-v0 implements the blueprint's Phases 1–3 plus the enforcement hook:
+v0 implements the blueprint's Phases 1–4 plus the enforcement hook:
 pure-Python kernel (models, closure validator, residuals, decision policy),
-JSON store with event log, MCP server (9 tools, 6 resources, 4 prompts), and
-the gate hook. Deferred: allowlisted validator execution (Phase 4), dependency
-graph and drift analysis (Phase 5), robotics adapters (Phase 6).
+JSON store with event log, MCP server (10 tools, 7 resources, 4 prompts), the
+gate hook, and the allowlisted command runner (`run_validation` +
+`.damped-plan/commands.json`) that converts captured command results into
+evidence automatically. Deferred: dependency graph and drift analysis
+(Phase 5), robotics adapters (Phase 6).

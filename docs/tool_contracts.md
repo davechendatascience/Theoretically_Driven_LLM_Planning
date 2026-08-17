@@ -83,6 +83,44 @@ human's name/handle as stated by them; values like "claude"/"assistant"/"ai"
 are refused. This is an honor-system audit trail: the real approval happens
 in the conversation, and the tool records who gave it.
 
+## run_validation(plan_id, validation_step_id) -> {run, passed, evidence, human_summary}
+
+Executes an **approved** plan's validation step through the allowlisted
+command registry and converts the captured result into evidence
+automatically — the mechanical alternative to narrating command output into
+`record_evidence`.
+
+The registry is `.damped-plan/commands.json` in the target project:
+
+```json
+{
+  "unit_tests": {
+    "allowed": true,
+    "argv": ["uv", "run", "pytest", "-q"],
+    "timeout_s": 300,
+    "source_type": "test",
+    "description": "full unit suite"
+  }
+}
+```
+
+Rules: argv arrays only (`shell=False`, no interpolation or templating);
+timeout enforced (default 600 s, cap 3600 s); working directory pinned to the
+project root; full stdout/stderr written to an immutable artifact under
+`.damped-plan/artifacts/`. The validation step's `command` field must name a
+registered id (set it before approval — approved plans cannot be edited), and
+the plan must be `approved`/`executable`/`executing`; the first run promotes
+`executable` → `executing`.
+
+Evidence polarity is mechanical: exit 0 → `supports`, non-zero or timeout →
+`refutes`, linked to the plan with the artifact as provenance. A failing
+required validation means repair or reject — never `validated`.
+
+Honest limit: the registry is allowlist-by-convention (plain JSON in the data
+dir), not a security boundary — its job is reviewable provenance, and a human
+should treat `commands.json` changes like code review. Read it via the
+`damped://project/current/commands` resource.
+
 ## record_evidence(evidence: dict) -> {evidence, human_summary}
 
 Minimal call: `{"summary": "what was observed"}`. Optional: `source_type`
@@ -115,6 +153,7 @@ the gate contribution of that plan.
 | `damped://project/current/plans` | Plan index |
 | `damped://project/current/plans/{plan_id}` | Plan + evaluation |
 | `damped://project/current/gate` | Gate snapshot (what the hook reads) |
+| `damped://project/current/commands` | Allowlisted command registry |
 | `damped://project/current/decision-log` | Last 200 events |
 
 ## Prompts

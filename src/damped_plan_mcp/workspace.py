@@ -12,6 +12,7 @@ from typing import Any
 
 from .models import (
     ConstraintStatus,
+    GATE_OPEN_STATUSES,
     NextAction,
     Plan,
     PlanEvaluation,
@@ -23,7 +24,7 @@ from .models import (
     TERMINAL_PLAN_STATUSES,
 )
 from .render import reports
-from .services import constraint_service, evaluation, normalize
+from .services import command_runner, constraint_service, evaluation, normalize
 from .store import JsonStore
 from .store import events as event_log
 from .store import gate as gate_store
@@ -378,6 +379,125 @@ class Workspace:
                 "constraint": constraint.model_dump(mode="json"),
                 "plan_transitions": transitions,
                 "human_summary": summary,
+            }
+
+    def run_validation(self, plan_id: str, validation_step_id: str) -> dict[str, Any]:
+        with self.store.locked():
+            plan = self._require_plan(plan_id)
+            if plan.status not in GATE_OPEN_STATUSES:
+                raise WorkspaceError(
+                    f"Plan {plan_id} is {plan.status.value}; validations run through "
+                    f"the MCP only for approved plans (approved/executable/"
+                    f"executing). Get the plan approved first — or run the command "
+                    f"yourself and record_evidence manually."
+                )
+            step = next(
+                (s for s in plan.validation_steps if s.id == validation_step_id), None
+            )
+            if step is None:
+                known = [s.id for s in plan.validation_steps]
+                raise WorkspaceError(
+                    f"Plan {plan_id} has no validation step {validation_step_id!r}. "
+                    f"Steps: {known}."
+                )
+            if not step.command:
+                raise WorkspaceError(
+                    f"Validation step {step.id} has no command id (kind="
+                    f"{step.kind.value}). Reference a registered command id in the "
+                    f"step's 'command' field before approval, or perform it "
+                    f"manually and record_evidence."
+                )
+
+            try:
+                result = command_runner.run_command(self.store.data_dir, step.command)
+            except command_runner.CommandRunnerError as exc:
+                raise WorkspaceError(str(exc)) from exc
+
+            project = self._require_project()
+            passed = result["exit_code"] == 0 and not result["timed_out"]
+            outcome_word = (
+                "TIMED OUT"
+                if result["timed_out"]
+                else f"exit {result['exit_code']}"
+            )
+            summary = (
+                f"run_validation {plan.id}/{step.id}: command {step.command} "
+                f"({' '.join(result['argv'])}) {outcome_word} in "
+                f"{result['duration_s']}s. Expected: "
+                f"{step.expected_result or 'unspecified'}. "
+                f"stdout tail: {result['stdout_tail'][-1500:] or '(empty)'}"
+            )
+            if result["stderr_tail"].strip():
+                summary += f" | stderr tail: {result['stderr_tail'][-500:]}"
+            record = normalize.normalize_evidence(
+                {
+                    "summary": summary,
+                    "source_type": result["source_type"],
+                    "polarity": "supports" if passed else "refutes",
+                    "artifact_uri": result["artifact_uri"],
+                    "linked_plan_id": plan.id,
+                },
+                project,
+                {e.id for e in self.store.list_evidence()},
+            )
+            self.store.save_evidence(record)
+            event_log.append_event(
+                self.store.data_dir,
+                event="validation_run",
+                actor="mcp:run_validation",
+                entity_type="plan",
+                entity_id=plan.id,
+                data={
+                    "validation_step_id": step.id,
+                    "command_id": step.command,
+                    "exit_code": result["exit_code"],
+                    "timed_out": result["timed_out"],
+                    "duration_s": result["duration_s"],
+                    "evidence_id": record.id,
+                    "artifact_uri": result["artifact_uri"],
+                },
+                project_version=project.version,
+            )
+
+            if plan.status == PlanStatus.EXECUTABLE:
+                event_log.append_event(
+                    self.store.data_dir,
+                    event="plan_status_changed",
+                    actor="mcp:run_validation",
+                    entity_type="plan",
+                    entity_id=plan.id,
+                    data={"from": "executable", "to": "executing",
+                          "reason": ["validation_started"]},
+                    project_version=project.version,
+                )
+                plan = plan.model_copy(update={"status": PlanStatus.EXECUTING})
+                self.store.save_plan(plan)
+                gate_store.write_gate(self.store, project, self.store.list_plans())
+
+            verdict = "passed" if passed else "FAILED"
+            # Key is "run", not "result" — MCP hosts unwrap a top-level "result"
+            # key when tools return primitives, so that name is ambiguous.
+            return {
+                "run": {
+                    k: result[k]
+                    for k in ("command_id", "argv", "exit_code", "timed_out",
+                              "duration_s", "stdout_tail", "stderr_tail",
+                              "artifact_uri")
+                },
+                "passed": passed,
+                "evidence": record.model_dump(mode="json"),
+                "human_summary": (
+                    f"Validation {step.id} {verdict} ({outcome_word}, "
+                    f"{result['duration_s']}s). Evidence {record.id} recorded with "
+                    f"artifact {result['artifact_uri']}. "
+                    + (
+                        "Compare against the plan's decision_rule before recording "
+                        "the outcome."
+                        if passed
+                        else "A failing required validation means repair or reject "
+                        "— do not record 'validated'."
+                    )
+                ),
             }
 
     def record_plan_outcome(

@@ -34,6 +34,7 @@ async def test_list_tools(server):
             "create_plan",
             "evaluate_plan",
             "approve_plan",
+            "run_validation",
             "record_evidence",
             "update_constraint_status",
             "record_plan_outcome",
@@ -115,6 +116,56 @@ async def test_resources_readable(server):
         gate = await client.read_resource("damped://project/current/gate")
         data = json.loads(gate.contents[0].text)
         assert data["gate_open"] is False
+
+
+async def test_run_validation_end_to_end(server, tmp_path):
+    import sys
+
+    data_dir = tmp_path / ".damped-plan"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    (data_dir / "commands.json").write_text(
+        json.dumps(
+            {"check": {"allowed": True,
+                       "argv": [sys.executable, "-c", "print('validated-output')"]}}
+        )
+    )
+    async with Client(server) as client:
+        await client.call_tool(
+            "register_project",
+            {"project": {"name": "demo",
+                         "goals": [{"statement": "g", "metric_name": "m",
+                                    "target": "t"}]}},
+        )
+        evaluation = payload(
+            await client.call_tool(
+                "create_plan",
+                {"plan": {
+                    "title": "measure", "kind": "measurement", "hypothesis": "h",
+                    "intervention": {"description": "probe",
+                                     "allowed_files": ["probe.py"]},
+                    "validation_steps": [
+                        {"id": "V-1", "description": "run check", "kind": "command",
+                         "command": "check", "expected_result": "exit 0",
+                         "required": True}
+                    ],
+                    "decision_rule": {"adopt_if": ["ok"], "reject_if": ["bad"]},
+                }},
+            )
+        )
+        await client.call_tool(
+            "approve_plan", {"plan_id": evaluation["plan_id"], "approver": "Dana"}
+        )
+        outcome = payload(
+            await client.call_tool(
+                "run_validation",
+                {"plan_id": evaluation["plan_id"], "validation_step_id": "V-1"},
+            )
+        )
+        assert outcome["passed"] is True
+        assert "validated-output" in outcome["run"]["stdout_tail"]
+        assert outcome["evidence"]["polarity"] == "supports"
+        registry = await client.read_resource("damped://project/current/commands")
+        assert "check" in registry.contents[0].text
 
 
 async def test_prompts_listed(server):
