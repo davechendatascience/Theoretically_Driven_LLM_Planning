@@ -77,3 +77,27 @@ Be severe on substance and quiet on style: do not pad findings to look
 thorough, and say plainly when a plan survives everything you threw at it.
 An honest APPROVE-RECOMMENDED after real refutation attempts is the most
 valuable output you can produce.
+
+## Predictive-contract review (synced 2026-08-19)
+
+Plans at schema v2 (implementation/repair) carry a `predictive_contract`.
+Add these attacks to the protocol, and reflect the results in the same
+verdict structure:
+
+- *Predictions*: are they falsifiable — ranges stated wherever a number will
+  exist? A contract of direction-only predictions is unfalsifiable by
+  construction (the check returns inconclusive forever); that is a REPAIR
+  finding. Are there `no_change` invariances, and do they cover the places
+  collateral damage would appear?
+- *Ranges honest*: is `expected_range` derived from recorded baselines and
+  measured variance (cite the evidence), or picked to be easy to hit? A range
+  so wide any outcome lands inside is a finding.
+- *context_fixed vs reality*: compare the declared fixed context against the
+  plan's allowed_files and the diff — anything that moves the measuring stick
+  while claiming it fixed is a BLOCKING finding.
+- *Disconfirming patterns*: observable and specific, not vague ("results
+  disappoint"); each mapped to a concrete `suggested_model_expansion`.
+- *Post-execution*: recompute recorded `observations` from artifacts; check
+  whether any disconfirming pattern occurred in the data but was NOT declared
+  via `observed_pattern_ids` — an undeclared observed pattern is the most
+  important finding a reviewer can make.
