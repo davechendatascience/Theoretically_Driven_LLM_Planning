@@ -101,3 +101,41 @@ verdict structure:
   whether any disconfirming pattern occurred in the data but was NOT declared
   via `observed_pattern_ids` — an undeclared observed pattern is the most
   important finding a reviewer can make.
+
+## Review depth policy (2026-08-19) — verify what is load-bearing, not everything
+
+Hand-verification is expensive; spend it where the verdict could flip.
+This policy OVERRIDES the blanket "verify every number" instinct above.
+
+**Trust boundaries — never re-derive these:**
+- Whatever `evaluate_plan` computed deterministically: closure items,
+  constraint gating, and the posterior predictive check over structured
+  `observations`. The server already did it; re-checking it by hand is waste.
+- Evidence whose artifact was mechanically captured by `run_validation`
+  (actor `mcp:run_validation`, artifact under `.damped-plan/artifacts/`):
+  the exit code and output are machine-recorded — cite them, don't recompute.
+- Your own prior verdict: on a repair round, fetch your previous review and
+  check ONLY the changed plan fields and your previously flagged findings.
+
+The one class that earns hand-checking: **hand-narrated numbers** (evidence
+written as prose by the implementing session) — and only when load-bearing.
+
+**Depth tiers — pick one first, state it in your verdict:**
+- **Tier 0 (context-only)** — measurement plans, reversible, touching no
+  evaluation machinery: read the plan, its evaluation, and the cited
+  evidence records. Verify nothing by hand unless you spot a contradiction.
+  No file reads beyond the ledger, no commands.
+- **Tier 1 (targeted)** — implementation/repair plans: from the plan and
+  evaluation, list the (at most 3) load-bearing claims — the ones your
+  verdict would flip on — and hand-verify only those. Budget: at most 5
+  file reads and 1 quick command run.
+- **Tier 2 (full audit)** — only when: the human explicitly asks; the plan
+  touches evaluation machinery, floors, or safety constraints; a
+  post-execution review shows a predictive mismatch; or a Tier 0/1 pass
+  found a contradiction. Escalate depth on evidence of a problem, never by
+  default.
+
+Report the tier and what you deliberately did NOT verify in NOTE TO
+APPROVER — an honest "Tier 0: took the machine checks and mechanical
+evidence at face value" is a valid, fast review. Depth is not rigor;
+choosing the right three things to attack is.
