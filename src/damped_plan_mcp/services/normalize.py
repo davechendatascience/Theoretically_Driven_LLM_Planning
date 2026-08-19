@@ -15,7 +15,12 @@ from typing import Any
 
 from .. import ids
 from ..models import (
+    PLAN_SCHEMA_VERSION,
     CausalHypothesis,
+    DisconfirmingPattern,
+    MetricObservation,
+    Prediction,
+    PredictiveContract,
     Constraint,
     ConstraintKind,
     ConstraintStatus,
@@ -381,6 +386,9 @@ def normalize_plan(
     decision_rule = _normalize_decision_rule(data.get("decision_rule")) or (
         existing_plan.decision_rule if existing_plan else None
     )
+    contract = _normalize_contract(data.get("predictive_contract")) or (
+        existing_plan.predictive_contract if existing_plan else None
+    )
 
     audit = _normalize_audit(
         data.get("constraint_audit"), project, existing_plan, warnings
@@ -415,6 +423,12 @@ def normalize_plan(
         or (existing_plan.unknowns if existing_plan else []),
         validation_steps=validation_steps,
         decision_rule=decision_rule,
+        predictive_contract=contract,
+        # New plans get the current schema; edited plans keep the version they
+        # were created under (grandfathered closure rules).
+        schema_version=(
+            existing_plan.schema_version if existing_plan else PLAN_SCHEMA_VERSION
+        ),
         rollback_description=data.get("rollback_description")
         or (existing_plan.rollback_description if existing_plan else None),
         parent_plan_id=data.get("parent_plan_id")
@@ -473,6 +487,7 @@ def _normalize_validation_step(raw: Any, index: int) -> ValidationStep:
             kind=ValidatorKind.MANUAL,
         )
     data = _as_dict(raw, "validation_step")
+    phase = str(data.get("phase") or "posterior").strip().lower()
     return ValidationStep(
         id=str(data.get("id") or f"V-{index:03d}"),
         description=str(data.get("description") or ""),
@@ -480,7 +495,83 @@ def _normalize_validation_step(raw: Any, index: int) -> ValidationStep:
         command=data.get("command"),
         expected_result=str(data.get("expected_result") or ""),
         required=bool(data.get("required", True)),
+        phase=phase if phase in ("prior", "posterior") else "posterior",
     )
+
+
+def _normalize_contract(raw: Any) -> PredictiveContract | None:
+    if raw is None:
+        return None
+    data = _as_dict(raw, "predictive_contract")
+
+    predictions: list[Prediction] = []
+    for index, entry in enumerate(_as_list(data.get("predictions")), start=1):
+        p = _as_dict(entry, "prediction")
+        metric_id = str(p.get("metric_id") or p.get("metric") or "").strip()
+        if not metric_id:
+            continue
+        expected_range = None
+        raw_range = p.get("expected_range")
+        if isinstance(raw_range, (list, tuple)) and len(raw_range) == 2:
+            try:
+                expected_range = (float(raw_range[0]), float(raw_range[1]))
+            except (TypeError, ValueError):
+                expected_range = None
+        direction = str(p.get("direction") or "no_change").strip().lower()
+        if direction not in ("increase", "decrease", "no_change", "non_monotonic"):
+            direction = "no_change"
+        confidence = str(p.get("confidence") or "medium").strip().lower()
+        if confidence not in ("low", "medium", "high"):
+            confidence = "medium"
+        predictions.append(
+            Prediction(
+                id=str(p.get("id") or f"PR-{index:03d}"),
+                metric_id=metric_id,
+                direction=direction,
+                expected_range=expected_range,
+                expected_pattern=str(p.get("expected_pattern") or p.get("prediction") or ""),
+                confidence=confidence,
+                rationale=str(p.get("rationale") or ""),
+            )
+        )
+
+    patterns: list[DisconfirmingPattern] = []
+    for index, entry in enumerate(_as_list(data.get("disconfirming_patterns")), start=1):
+        if isinstance(entry, str):
+            patterns.append(
+                DisconfirmingPattern(id=f"D-{index:03d}", description=entry)
+            )
+            continue
+        d = _as_dict(entry, "disconfirming_pattern")
+        description = str(d.get("description") or d.get("pattern") or "").strip()
+        if not description:
+            continue
+        patterns.append(
+            DisconfirmingPattern(
+                id=str(d.get("id") or f"D-{index:03d}"),
+                description=description,
+                implication=str(d.get("implication") or ""),
+                suggested_model_expansion=d.get("suggested_model_expansion")
+                or d.get("expansion"),
+            )
+        )
+
+    contract = PredictiveContract(
+        context_fixed=_str_list(data.get("context_fixed")),
+        context_varied=_str_list(data.get("context_varied")),
+        predictions=predictions,
+        disconfirming_patterns=patterns,
+        next_expansions=_str_list(
+            data.get("next_expansions") or data.get("next_model_expansion_if_failed")
+        ),
+    )
+    if (
+        not contract.predictions
+        and not contract.disconfirming_patterns
+        and not contract.context_fixed
+    ):
+        return None
+    return contract
 
 
 def _normalize_decision_rule(raw: Any) -> DecisionRule | None:
@@ -586,6 +677,29 @@ def normalize_evidence(
     }
     if source_type not in valid_sources:
         source_type = "manual_review"
+    observations: list[MetricObservation] = []
+    for entry in _as_list(data.get("observations")):
+        o = _as_dict(entry, "observation")
+        metric_id = str(o.get("metric_id") or o.get("metric") or "").strip()
+        if not metric_id or o.get("value") is None:
+            continue
+        try:
+            value = float(o.get("value"))
+        except (TypeError, ValueError):
+            continue
+        seeds = []
+        for s in _as_list(o.get("seed_values")):
+            try:
+                seeds.append(float(s))
+            except (TypeError, ValueError):
+                continue
+        observations.append(
+            MetricObservation(
+                metric_id=metric_id, value=value, unit=o.get("unit"),
+                seed_values=seeds,
+            )
+        )
+
     return EvidenceRecord(
         id=str(data.get("id") or ids.next_id(ids.EVIDENCE_PREFIX, existing_evidence_ids)),
         project_id=project.project_id,
@@ -598,5 +712,7 @@ def normalize_evidence(
         linked_hypothesis_ids=_str_list(data.get("linked_hypothesis_ids")),
         linked_constraint_ids=_str_list(data.get("linked_constraint_ids")),
         linked_plan_id=data.get("linked_plan_id"),
+        observations=observations,
+        observed_pattern_ids=_str_list(data.get("observed_pattern_ids")),
         created_at=now(),
     )

@@ -30,6 +30,16 @@ from ..models import (
     Severity,
     TERMINAL_PLAN_STATUSES,
 )
+from . import predictive
+
+
+def contract_required(plan: Plan) -> bool:
+    """v2 implementation/repair plans must carry a predictive contract;
+    plans created before the predictive layer are grandfathered."""
+    return plan.schema_version >= 2 and plan.kind in (
+        PlanKind.IMPLEMENTATION,
+        PlanKind.REPAIR,
+    )
 
 
 def effective_constraint_status(
@@ -163,6 +173,11 @@ def compute_closure(plan: Plan, project: ProjectState) -> ClosureReport:
         measurement_exception_applies(plan, project)
         and not unsat_hard_constraints(plan, project)
     )
+    contract_ok = True
+    if contract_required(plan):
+        contract_ok = not predictive.contract_structural_gaps(
+            plan.predictive_contract
+        )
     return ClosureReport(
         goal_defined=bool(linked_goals),
         metric_defined=any(g.metric_name and g.target for g in linked_goals),
@@ -173,6 +188,7 @@ def compute_closure(plan: Plan, project: ProjectState) -> ClosureReport:
         validation_defined=any(step.required for step in plan.validation_steps),
         decision_rule_defined=has_decision_rule(plan),
         rollback_defined=has_safe_rollback(plan),
+        predictive_contract_ok=contract_ok,
     )
 
 
@@ -238,6 +254,14 @@ def structural_blockers(plan: Plan, closure: ClosureReport) -> list[Blocker]:
             "State rollback_description, or mark the intervention reversible, so the "
             "change can be undone.",
         )
+    if not closure.predictive_contract_ok:
+        code = (
+            "MISSING_PREDICTIVE_CONTRACT"
+            if plan.predictive_contract is None
+            else "INCOMPLETE_PREDICTIVE_CONTRACT"
+        )
+        for gap in predictive.contract_structural_gaps(plan.predictive_contract):
+            add(code, gap)
     return blockers
 
 

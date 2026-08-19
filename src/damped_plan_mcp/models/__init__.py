@@ -13,12 +13,21 @@ from .enums import (
 )
 from .evidence import EvidenceRecord, EvidenceSourceType
 from .plan import (
+    PLAN_SCHEMA_VERSION,
     CausalHypothesis,
     DecisionRule,
     Intervention,
     Plan,
     PlanConstraintAudit,
     ValidationStep,
+)
+from .predictive import (
+    DisconfirmingPattern,
+    MetricObservation,
+    Prediction,
+    PredictiveCheck,
+    PredictiveContract,
+    PredictiveStatus,
 )
 from .project import Constraint, Fact, FailureMode, Goal, ProjectState
 from .results import (
@@ -36,8 +45,15 @@ from .results import (
 
 __all__ = [
     "GATE_OPEN_STATUSES",
+    "PLAN_SCHEMA_VERSION",
     "TERMINAL_PLAN_STATUSES",
     "Blocker",
+    "DisconfirmingPattern",
+    "MetricObservation",
+    "Prediction",
+    "PredictiveCheck",
+    "PredictiveContract",
+    "PredictiveStatus",
     "CausalHypothesis",
     "ClosureReport",
     "Constraint",

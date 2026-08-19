@@ -7,11 +7,15 @@ with a metric, a hard-constraint audit, a causal hypothesis, a scoped
 intervention, a validation path, adopt/reject criteria, and a rollback story —
 and every hard constraint is evidence-backed `SAT`.
 
-Design blueprint: [docs/blueprint.md](docs/blueprint.md). Tool reference:
-[docs/tool_contracts.md](docs/tool_contracts.md). Claude Code setup:
-[docs/claude_code_integration.md](docs/claude_code_integration.md). Why this
-works on qualitative measures — how the critical-damping idea maps to
-discrete state: [docs/damping_translation.md](docs/damping_translation.md).
+Design blueprints: [docs/blueprint.md](docs/blueprint.md) (constraint
+closure) and [docs/damped-plan-mcp-bayesian-scope.md](docs/damped-plan-mcp-bayesian-scope.md)
+(predictive layer). Tool reference: [docs/tool_contracts.md](docs/tool_contracts.md).
+Claude Code setup: [docs/claude_code_integration.md](docs/claude_code_integration.md).
+Why this works on qualitative measures:
+[docs/damping_translation.md](docs/damping_translation.md). The predictive
+contract and posterior checks — the model-checking discipline borrowed from
+Gelman et al., *Bayesian Data Analysis* (3rd ed., CRC Press, 2013):
+[docs/predictive_layer.md](docs/predictive_layer.md).
 
 ## What it enforces
 
@@ -30,6 +34,11 @@ discrete state: [docs/damping_translation.md](docs/damping_translation.md).
 - **Escalation over repair loops.** After two failed sibling plans with no new
   evidence, the recommendation is `escalate` (change the causal framing), not
   another local patch.
+- **Predictive contracts.** New implementation/repair plans must state what
+  should move, what must stay invariant, under what fixed context, and which
+  observed patterns would refute the causal story — and a posterior predictive
+  check compares recorded observations against those predictions, turning
+  mismatch into a named model expansion instead of a generic failure.
 
 ## Quick start
 

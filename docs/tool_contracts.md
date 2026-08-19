@@ -60,7 +60,13 @@ Closure requires: linked goal with metric, failure-mode link **or** unmet-goal
 link, causal hypothesis, scoped intervention (list `allowed_files` — the gate
 hook enforces them), required validation step, `decision_rule` with both
 `adopt_if` and `reject_if`, and rollback (or reversible intervention;
-measurement plans are exempt).
+measurement plans are exempt). **New implementation and repair plans** (schema
+v2; pre-existing plans are grandfathered) additionally require a
+`predictive_contract` — predictions with invariances, non-empty
+`context_fixed`, at least one disconfirming pattern, and a named
+mismatch-to-expansion path. See
+[predictive_layer.md](predictive_layer.md). Validation steps may set
+`"phase": "prior"` for checks that must run before implementing.
 
 Hard-constraint rule: an implementation/repair plan is `blocked` while any
 hard constraint is not `sat`/`not_applicable`. A **measurement** plan may
@@ -129,6 +135,14 @@ default `manual_review`), `polarity` (`supports|refutes|neutral`),
 `artifact_uri`, `linked_constraint_ids`, `linked_hypothesis_ids`,
 `linked_plan_id`. One record may back several constraints. The response hints
 which `unknown` hard constraints this evidence could resolve.
+
+For posterior predictive checks, add structured numbers and pattern
+declarations: `"observations": [{"metric_id": ..., "value": 0.43,
+"seed_values": [...]}]` and `"observed_pattern_ids": ["D-1"]` (declares that
+a contract's disconfirming pattern was seen). `evaluate_plan` then reports
+`predictive_status` (`not_ready|consistent|mismatch|inconclusive`),
+`dominant_residual`, and `model_expansion_target`; a mismatch recommends
+`escalate` with the contract's own expansion as the next step.
 
 ## update_constraint_status(constraint_id, status, rationale, evidence_ids?) -> {constraint, plan_transitions, human_summary}
 

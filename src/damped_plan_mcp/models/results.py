@@ -9,6 +9,7 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from .enums import ConstraintStatus, NextAction, PlanKind, PlanStatus
+from .predictive import PredictiveCheck
 
 
 class Blocker(BaseModel):
@@ -27,6 +28,9 @@ class ClosureReport(BaseModel):
     validation_defined: bool
     decision_rule_defined: bool
     rollback_defined: bool
+    # True unless this plan's schema version requires a predictive contract
+    # (v2 implementation/repair) and the contract is missing or incomplete.
+    predictive_contract_ok: bool = True
 
     def complete(self) -> bool:
         return all(self.model_dump().values())
@@ -60,6 +64,10 @@ class PlanEvaluation(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     residuals: ResidualReport
     recommended_next_action: NextAction
+    predictive_status: str = "not_ready"
+    predictive: "PredictiveCheck | None" = None
+    dominant_residual: str = "none"
+    model_expansion_target: str | None = None
     human_summary: str = ""
 
 

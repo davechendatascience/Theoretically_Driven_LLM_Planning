@@ -12,6 +12,13 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from .enums import ConstraintStatus, PlanKind, PlanStatus, ValidatorKind
+from .predictive import PredictiveContract
+
+# Plans stamped with this schema version (or later) must carry a
+# predictive_contract when kind is implementation or repair. Plans created
+# before the predictive layer existed default to 1 and are grandfathered:
+# they evaluate under the original closure rules forever.
+PLAN_SCHEMA_VERSION = 2
 
 
 class CausalHypothesis(BaseModel):
@@ -38,6 +45,7 @@ class ValidationStep(BaseModel):
     command: str | None = None
     expected_result: str = ""
     required: bool = True
+    phase: str = "posterior"  # "prior" steps run before implementing (§7)
 
 
 class DecisionRule(BaseModel):
@@ -67,6 +75,8 @@ class Plan(BaseModel):
     unknowns: list[str] = Field(default_factory=list)
     validation_steps: list[ValidationStep] = Field(default_factory=list)
     decision_rule: DecisionRule | None = None
+    predictive_contract: PredictiveContract | None = None
+    schema_version: int = 1
     rollback_description: str | None = None
     parent_plan_id: str | None = None
     approved_by: str | None = None

@@ -27,8 +27,16 @@ def render_evaluation_summary(plan: Plan, evaluation: PlanEvaluation) -> str:
         for warning in evaluation.warnings:
             lines.append(f"  - {warning}")
 
+    if evaluation.predictive is not None:
+        line = f"Predictive check: {evaluation.predictive_status}"
+        if evaluation.predictive.discrepancy_summary:
+            line += f" ({evaluation.predictive.discrepancy_summary})"
+        if evaluation.model_expansion_target:
+            line += f". Suggested model expansion: {evaluation.model_expansion_target}"
+        lines.append(line + ".")
     lines.append(
-        f"Recommended next action: {evaluation.recommended_next_action.value}."
+        f"Recommended next action: {evaluation.recommended_next_action.value} "
+        f"(dominant residual: {evaluation.dominant_residual})."
     )
     for reason in evaluation.residuals.rationale:
         lines.append(f"  {reason}")

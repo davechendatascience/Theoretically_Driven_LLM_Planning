@@ -47,6 +47,7 @@ def recommend_next_action(
     closure: ClosureReport,
     all_plans: list[Plan],
     evidence: list[EvidenceRecord],
+    predictive_check=None,
 ) -> tuple[NextAction, list[str]]:
     rationale: list[str] = []
 
@@ -89,6 +90,17 @@ def recommend_next_action(
             f"mode were rejected or rolled back with no new evidence since. Escalate: "
             f"change the causal hypothesis, representation, interface, or oracle "
             f"before another local patch."
+        )
+        return NextAction.ESCALATE, rationale
+
+    if predictive_check is not None and predictive_check.status == "mismatch":
+        expansion = predictive_check.recommended_expansion
+        rationale.append(
+            "Posterior predictive check MISMATCH: the causal model behind this "
+            "plan did not produce the predicted observable pattern"
+            + (f" ({predictive_check.discrepancy_summary})" if predictive_check.discrepancy_summary else "")
+            + ". Escalate: expand the model"
+            + (f" — start with: {expansion}." if expansion else " per the contract's disconfirming patterns.")
         )
         return NextAction.ESCALATE, rationale
 

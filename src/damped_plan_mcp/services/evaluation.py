@@ -11,7 +11,7 @@ from ..models import (
     PlanStatus,
     ProjectState,
 )
-from . import decision_policy, plan_validation, residuals
+from . import decision_policy, plan_validation, predictive, residuals
 from ..render import reports
 
 
@@ -52,8 +52,19 @@ def evaluate_plan(
                 f"prefer one discriminative measurement per plan."
             )
 
+    check = predictive.posterior_check(plan, evidence)
+    if (
+        plan.schema_version < 2
+        and plan.kind.value in ("implementation", "repair")
+        and plan.predictive_contract is None
+    ):
+        warnings.append(
+            "Legacy plan (pre-predictive-layer): no predictive contract required; "
+            "new implementation/repair plans must state one."
+        )
+
     recommended, rationale = decision_policy.recommend_next_action(
-        plan, project, closure, all_plans, evidence
+        plan, project, closure, all_plans, evidence, predictive_check=check
     )
     residual_report = residuals.compute_residuals(
         plan,
@@ -64,6 +75,19 @@ def evaluate_plan(
         rationale=rationale,
     )
 
+    if not closure.hard_constraints_resolved:
+        dominant = "feasibility"
+    elif not closure.structurally_complete():
+        dominant = "specification"
+    elif check.status == "mismatch":
+        dominant = "causal_model"
+    elif residual_report.validation_gap > 0:
+        dominant = "validation"
+    elif residual_report.evidence_gap > 0:
+        dominant = "evidence"
+    else:
+        dominant = "none"
+
     evaluation = PlanEvaluation(
         plan_id=plan.id,
         plan_status=status,
@@ -73,6 +97,10 @@ def evaluate_plan(
         warnings=warnings,
         residuals=residual_report,
         recommended_next_action=recommended,
+        predictive_status=check.status,
+        predictive=check if plan.predictive_contract is not None else None,
+        dominant_residual=dominant,
+        model_expansion_target=check.recommended_expansion,
     )
     evaluation.human_summary = reports.render_evaluation_summary(plan, evaluation)
     return evaluation

@@ -31,6 +31,16 @@ Call `create_plan` with exactly one candidate plan:
   with exact `allowed_files`, required `validation_steps` that could refute
   the hypothesis, a `decision_rule` with both `adopt_if` and `reject_if`, and
   a rollback story.
+- Implementation and repair plans also require a `predictive_contract`: the
+  mechanism-level claim. State `context_fixed` (what is held constant so the
+  comparison is valid), predictions for observables that should move AND ones
+  that must stay invariant (`direction: no_change` — the most valuable kind),
+  at least one `disconfirming_pattern` (what you would see if the causal
+  story is wrong), each with a `suggested_model_expansion`. When recording
+  results, put numbers in `record_evidence`'s `observations` (metric_id +
+  value) so the posterior check runs deterministically, and declare any
+  observed failure signature via `observed_pattern_ids`. A `mismatch` verdict
+  means escalate to the named expansion — not another local patch.
 
 The tool returns an evaluation immediately. Partial plans are fine — every
 blocker message is a concrete repair instruction; apply them with another

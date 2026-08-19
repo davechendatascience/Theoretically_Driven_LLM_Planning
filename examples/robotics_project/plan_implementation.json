@@ -44,6 +44,53 @@
       "required": true
     }
   ],
+  "predictive_contract": {
+    "context_fixed": [
+      "Frozen held-out garment split (configs/eval_frozen.yaml)",
+      "Fixed simulator version and physics configuration",
+      "Same pick/place action API and training budget"
+    ],
+    "context_varied": [
+      "Placement perturbation magnitude",
+      "Policy architecture: baseline vs pick-conditioned placement head"
+    ],
+    "predictions": [
+      {
+        "metric_id": "placement_success_rate",
+        "direction": "increase",
+        "expected_range": [0.47, 0.60],
+        "expected_pattern": "Improvement grows with perturbation magnitude",
+        "confidence": "medium"
+      },
+      {
+        "metric_id": "action_feasibility_rate",
+        "direction": "no_change",
+        "expected_range": [0.95, 1.0],
+        "expected_pattern": "No material decline relative to baseline",
+        "confidence": "medium"
+      },
+      {
+        "metric_id": "one_step_pick_success",
+        "direction": "no_change",
+        "expected_pattern": "Little change: intervention targets placement, not pick",
+        "confidence": "high"
+      }
+    ],
+    "disconfirming_patterns": [
+      {
+        "id": "D-generalization-failure",
+        "description": "Improvement appears only in-distribution and disappears on the held-out split",
+        "implication": "Apparent gain may be overfitting, not pick-place coupling",
+        "suggested_model_expansion": "Leakage/regularization diagnostic before any architecture change"
+      },
+      {
+        "id": "D-oracle-pick-no-gain",
+        "description": "Baseline and conditioned policies fail similarly given an oracle pick point",
+        "implication": "Missing pick-conditioning is unlikely to be the main mechanism",
+        "suggested_model_expansion": "Test visual-state ambiguity with an oracle state or segmentation intervention"
+      }
+    ]
+  },
   "decision_rule": {
     "adopt_if": [
       "Held-out placement robustness improves by at least 5 percentage points",

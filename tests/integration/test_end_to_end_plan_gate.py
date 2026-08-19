@@ -63,6 +63,18 @@ IMPLEMENTATION_PLAN = {
         "adopt_if": ["robustness improves >= 5pp"],
         "reject_if": ["no improvement under matched initial states"],
     },
+    "predictive_contract": {
+        "context_fixed": ["frozen eval protocol", "pinned scenes"],
+        "context_varied": ["placement head conditioning"],
+        "predictions": [
+            {"metric_id": "placement_success_rate", "direction": "increase",
+             "expected_range": [0.47, 0.60]}
+        ],
+        "disconfirming_patterns": [
+            {"description": "Gain disappears on the frozen held-out split",
+             "suggested_model_expansion": "test visual ambiguity with oracle pick"}
+        ],
+    },
     "rollback_description": "Disable conditioned head via config",
 }
 
