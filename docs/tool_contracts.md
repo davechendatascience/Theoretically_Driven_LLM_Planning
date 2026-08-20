@@ -127,7 +127,29 @@ dir), not a security boundary — its job is reviewable provenance, and a human
 should treat `commands.json` changes like code review. Read it via the
 `damped://project/current/commands` resource.
 
-## record_evidence(evidence: dict) -> {evidence, human_summary}
+## record_run_metrics(plan_id, metrics, summary="", source_type="test", artifact_uri=None, polarity="neutral", observed_pattern_ids=None) -> {evidence, evaluation, predictive_status, notes, human_summary}
+
+The metrics-first channel — the inverse of `record_evidence`. Minimal call:
+`record_run_metrics("P-0007", {"success_rate": 0.62, "spl": 0.41})`.
+
+Values land in the evidence record's `observations`, which is the **only**
+field `posterior_check` can read. A number written into a `summary` scores
+nothing: the check returns `inconclusive` forever and the plan cannot honestly
+reach `validated`.
+
+The recomputed `PlanEvaluation` comes back in the same call, so the predictive
+verdict (`consistent` | `mismatch` | `inconclusive`) is visible at the moment
+of recording rather than after a separate `evaluate_plan` round-trip.
+
+`notes` reports two things the caller cannot see from the values alone:
+metrics recorded that the contract never predicted (nothing scores them), and
+contract metrics still unobserved across all evidence linked to the plan.
+
+Refuses an empty `metrics` mapping and non-numeric values, with a message
+pointing at `record_evidence` — an observation with no measurement is not
+weaker evidence, it is a different kind of record.
+
+## record_evidence(evidence: dict) -> {evidence, warnings, human_summary}
 
 Minimal call: `{"summary": "what was observed"}`. Optional: `source_type`
 (`test|benchmark|simulation|log|manual_review|paper|commit|profiling|solver`,
@@ -135,6 +157,16 @@ default `manual_review`), `polarity` (`supports|refutes|neutral`),
 `artifact_uri`, `linked_constraint_ids`, `linked_hypothesis_ids`,
 `linked_plan_id`. One record may back several constraints. The response hints
 which `unknown` hard constraints this evidence could resolve.
+
+**Narrated-number warning.** When a record is linked to a plan whose contract
+carries ranged predictions, its `observations` are empty, and its `summary`
+states a numeral, the response's `warnings` list names the outstanding
+`metric_id`s and points at `record_run_metrics`. The record is **always still
+saved** — this warns and never refuses (`C-advisory-quality`). The design
+argument goes further than the constraint: a refusal is satisfiable by
+fabricating a metric value, converting a visible honesty problem into an
+invisible compliance one, while the warning plus `predictive_status=
+inconclusive` already prevents an honest `validated` outcome.
 
 For posterior predictive checks, add structured numbers and pattern
 declarations: `"observations": [{"metric_id": ..., "value": 0.43,

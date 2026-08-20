@@ -36,6 +36,7 @@ async def test_list_tools(server):
             "approve_plan",
             "run_validation",
             "record_evidence",
+            "record_run_metrics",
             "update_constraint_status",
             "record_plan_outcome",
         }
@@ -173,3 +174,158 @@ async def test_prompts_listed(server):
         prompts = await client.list_prompts()
         names = {p.name for p in prompts.prompts}
         assert "draft_feasible_plan" in names
+
+
+# --- record_run_metrics: the metrics-first channel --------------------------
+
+CONTRACT_PLAN = {
+    "id": "P-m",
+    "title": "metrics plan",
+    "kind": "implementation",
+    "hypothesis": {"statement": "x causes y", "linked_failure_ids": ["F-1"]},
+    "intervention": {"description": "change x", "allowed_files": ["src/x.py"]},
+    "validation_steps": [
+        {"id": "V-1", "description": "run it", "kind": "manual",
+         "expected_result": "score in range"}
+    ],
+    "decision_rule": {"adopt_if": ["score >= 0.8"], "reject_if": ["score < 0.8"]},
+    "rollback_description": "revert",
+    "predictive_contract": {
+        "context_fixed": ["seed"],
+        "predictions": [
+            {"id": "PR-1", "metric_id": "score", "direction": "increase",
+             "expected_range": [0.8, 1.0]}
+        ],
+        "disconfirming_patterns": [
+            {"id": "D-1", "description": "score collapses",
+             "suggested_model_expansion": "revisit the mechanism"}
+        ],
+    },
+}
+
+
+async def _project_with_contract_plan(client):
+    await client.call_tool("register_project", {"project": {
+        "name": "p",
+        "goals": [{"statement": "g", "metric_name": "score", "target": "0.9"}],
+        "failure_modes": [{"id": "F-1", "symptom": "low score"}],
+    }})
+    return payload(await client.call_tool("create_plan", {"plan": CONTRACT_PLAN}))
+
+
+async def test_record_run_metrics_populates_observations(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {"score": 0.9}}))
+        assert out["evidence"]["observations"] == [
+            {"metric_id": "score", "value": 0.9, "unit": None, "seed_values": []}
+        ]
+        assert out["evidence"]["linked_plan_id"] == "P-m"
+
+
+async def test_record_run_metrics_returns_scored_evaluation(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {"score": 0.9}}))
+        assert out["predictive_status"] == "consistent"
+        assert out["evaluation"]["predictive"]["matched_prediction_ids"] == ["PR-1"]
+
+
+async def test_record_run_metrics_scores_a_violation(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {"score": 0.1}}))
+        assert out["predictive_status"] == "mismatch"
+        assert out["evaluation"]["predictive"]["violated_prediction_ids"] == ["PR-1"]
+
+
+async def test_record_run_metrics_flags_unpredicted_metrics(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool(
+            "record_run_metrics",
+            {"plan_id": "P-m", "metrics": {"score": 0.9, "stray": 3}}))
+        assert any("stray" in n for n in out["notes"])
+
+
+async def test_record_run_metrics_reports_outstanding_metrics(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {"other": 1.0}}))
+        assert any("score" in n and "unobserved" in n for n in out["notes"])
+
+
+async def test_record_run_metrics_rejects_empty_metrics(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        result = await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {}})
+        assert result.is_error
+        assert "record_evidence" in result.content[0].text
+
+
+async def test_record_run_metrics_rejects_non_numeric(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        result = await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-m", "metrics": {"score": "high"}})
+        assert result.is_error
+
+
+async def test_record_run_metrics_rejects_unknown_plan(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        result = await client.call_tool(
+            "record_run_metrics", {"plan_id": "P-nope", "metrics": {"score": 1.0}})
+        assert result.is_error
+
+
+# --- record_evidence: the narrated-number warning ---------------------------
+
+
+async def test_record_evidence_warns_on_narrated_number(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool("record_evidence", {"evidence": {
+            "summary": "the run scored 0.91 across the board",
+            "linked_plan_id": "P-m",
+        }}))
+        assert len(out["warnings"]) == 1
+        assert "score" in out["warnings"][0]
+        assert "record_run_metrics" in out["warnings"][0]
+
+
+async def test_record_evidence_still_saves_the_warned_record(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool("record_evidence", {"evidence": {
+            "summary": "the run scored 0.91 across the board",
+            "linked_plan_id": "P-m",
+        }}))
+        assert out["evidence"]["id"]
+        listed = payload(await client.call_tool("get_plan", {"plan_id": "P-m"}))
+        assert listed["plan"]["id"] == "P-m"
+
+
+async def test_record_evidence_silent_without_plan_link(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool("record_evidence", {"evidence": {
+            "summary": "counted 69 records across four stores",
+        }}))
+        assert out["warnings"] == []
+
+
+async def test_record_evidence_silent_when_observations_given(server):
+    async with Client(server) as client:
+        await _project_with_contract_plan(client)
+        out = payload(await client.call_tool("record_evidence", {"evidence": {
+            "summary": "the run scored 0.91",
+            "linked_plan_id": "P-m",
+            "observations": [{"metric_id": "score", "value": 0.91}],
+        }}))
+        assert out["warnings"] == []

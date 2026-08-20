@@ -24,7 +24,13 @@ from .models import (
     TERMINAL_PLAN_STATUSES,
 )
 from .render import reports
-from .services import command_runner, constraint_service, evaluation, normalize
+from .services import (
+    command_runner,
+    constraint_service,
+    evaluation,
+    narration,
+    normalize,
+)
 from .store import JsonStore
 from .store import events as event_log
 from .store import gate as gate_store
@@ -310,9 +316,120 @@ class Workspace:
                 if unknown
                 else "No hard constraints are currently UNKNOWN."
             )
+            linked_plan = (
+                self.store.load_plan(record.linked_plan_id)
+                if record.linked_plan_id
+                else None
+            )
+            warning = narration.narration_warning(record, linked_plan)
+            summary = f"Recorded {record.id}. {hint}"
+            if warning:
+                summary = f"Recorded {record.id}. {warning} {hint}"
             return {
                 "evidence": record.model_dump(mode="json"),
-                "human_summary": f"Recorded {record.id}. {hint}",
+                "warnings": [warning] if warning else [],
+                "human_summary": summary,
+            }
+
+    def record_run_metrics(
+        self,
+        plan_id: str,
+        metrics: dict[str, float],
+        summary: str = "",
+        source_type: str = "test",
+        artifact_uri: str | None = None,
+        polarity: str = "neutral",
+        observed_pattern_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Record measured values structurally and return the scored evaluation.
+
+        The inverse of record_evidence: metrics first, prose optional. Values
+        land in `observations`, where posterior_check can actually read them,
+        and the recomputed PlanEvaluation comes back in the same call so the
+        posterior verdict is visible at the moment of recording rather than
+        after a separate evaluate_plan round-trip.
+        """
+        with self.store.locked():
+            plan = self._require_plan(plan_id)
+            if not metrics:
+                raise WorkspaceError(
+                    "record_run_metrics needs at least one {metric_id: value} "
+                    "pair. For an observation with no measurement — a process "
+                    "record, a paper, a code reading — use record_evidence: "
+                    "evidence without a metric is not weaker, it is a "
+                    "different kind of record."
+                )
+            bad = sorted(k for k, v in metrics.items() if not isinstance(v, (int, float)) or isinstance(v, bool))
+            if bad:
+                raise WorkspaceError(
+                    f"record_run_metrics values must be numbers; {bad} are not. "
+                    f"A value that cannot be compared to an expected_range "
+                    f"cannot be scored."
+                )
+
+            predicted = narration.predicted_metric_ids(plan)
+            unpredicted = sorted(set(metrics) - set(predicted))
+
+            evidence_payload: dict[str, Any] = {
+                "summary": summary.strip()
+                or (
+                    f"Measured values for {plan_id}: "
+                    + ", ".join(f"{k}={v}" for k, v in sorted(metrics.items()))
+                ),
+                "source_type": source_type,
+                "polarity": polarity,
+                "linked_plan_id": plan_id,
+                "artifact_uri": artifact_uri,
+                "observations": [
+                    {"metric_id": k, "value": float(v)} for k, v in metrics.items()
+                ],
+                "observed_pattern_ids": observed_pattern_ids or [],
+            }
+            project = self._require_project()
+            record = normalize.normalize_evidence(
+                evidence_payload, project, {e.id for e in self.store.list_evidence()}
+            )
+            self.store.save_evidence(record)
+            event_log.append_event(
+                self.store.data_dir,
+                event="run_metrics_recorded",
+                actor="mcp:record_run_metrics",
+                entity_type="evidence",
+                entity_id=record.id,
+                data={"plan_id": plan_id, "metrics": dict(metrics)},
+                project_version=project.version,
+            )
+
+            result = self._evaluate(plan)
+            self._persist_evaluation(plan, result, actor="mcp:record_run_metrics")
+
+            notes = []
+            if unpredicted:
+                notes.append(
+                    f"Recorded but unpredicted (nothing to score them against): "
+                    f"{unpredicted}."
+                )
+            outstanding = sorted(
+                set(predicted)
+                - {
+                    obs.metric_id
+                    for e in self.store.list_evidence()
+                    if e.linked_plan_id == plan_id
+                    for obs in e.observations
+                }
+            )
+            if outstanding:
+                notes.append(f"Still unobserved from the contract: {outstanding}.")
+            return {
+                "evidence": record.model_dump(mode="json"),
+                "evaluation": result.model_dump(mode="json"),
+                "predictive_status": result.predictive_status,
+                "notes": notes,
+                "human_summary": (
+                    f"Recorded {record.id} with {len(metrics)} observation(s) on "
+                    f"{plan_id}. Predictive check: {result.predictive_status}. "
+                    + " ".join(notes)
+                ).strip(),
             }
 
     def update_constraint_status(

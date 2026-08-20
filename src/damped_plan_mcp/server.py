@@ -27,8 +27,10 @@ damped-plan is a constraint-closure gate for nontrivial changes. Workflow:
    update_constraint_status.
 4. A plan becomes EXECUTABLE only after the human approves it (approve_plan
    with the human's name). Implement only the plan's allowed_files.
-5. Afterwards: record_evidence, then record_plan_outcome (validated needs
-   evidence). Never report "fixed" or "validated" without a validation record.
+5. Afterwards: record_run_metrics for every number the contract predicted
+   (record_evidence prose cannot be scored), then record_plan_outcome
+   (validated needs evidence). Never report "fixed" or "validated" without a
+   validation record.
 """
 
 
@@ -123,11 +125,52 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
 
     @server.tool(
         description=(
-            "Record an observation with provenance: {'evidence': {'summary': '...', "
-            "'source_type': 'test|benchmark|simulation|log|manual_review|paper|"
-            "commit|profiling|solver', 'polarity': 'supports|refutes|neutral', "
-            "'artifact_uri': ..., 'linked_constraint_ids': [...], "
-            "'linked_plan_id': ...}}"
+            "Record MEASURED NUMBERS against a plan's predictive contract: "
+            "record_run_metrics(plan_id, {'metric_id': value, ...}). This is the "
+            "channel the posterior predictive check actually reads — a number "
+            "written into an evidence summary instead scores nothing, and leaves "
+            "the plan unable to honestly reach 'validated'. Prefer this over "
+            "record_evidence whenever the observation IS a number. Returns the "
+            "recomputed evaluation, so the predictive verdict (consistent | "
+            "mismatch | inconclusive) comes back in the same call. Optional: "
+            "summary, source_type, artifact_uri, polarity, observed_pattern_ids "
+            "(declare a disconfirming pattern you saw)."
+        )
+    )
+    def record_run_metrics(
+        plan_id: str,
+        metrics: dict[str, float],
+        summary: str = "",
+        source_type: str = "test",
+        artifact_uri: str | None = None,
+        polarity: str = "neutral",
+        observed_pattern_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return workspace.record_run_metrics(
+            plan_id,
+            metrics,
+            summary,
+            source_type,
+            artifact_uri,
+            polarity,
+            observed_pattern_ids,
+        )
+
+    @server.tool(
+        description=(
+            "Record a NON-NUMERIC observation with provenance: a process record, "
+            "a code reading, a paper, a commit, a qualitative failure. "
+            "{'evidence': {'summary': '...', 'source_type': 'test|benchmark|"
+            "simulation|log|manual_review|paper|commit|profiling|solver', "
+            "'polarity': 'supports|refutes|neutral', 'artifact_uri': ..., "
+            "'linked_constraint_ids': [...], 'linked_plan_id': ...}}. "
+            "If the observation is a NUMBER the plan predicted, use "
+            "record_run_metrics instead — evidence without a metric is not "
+            "weaker, it is a different kind of record, but a number narrated "
+            "into prose is a number nothing can score. Numbers may still be "
+            "passed here structurally via 'observations': [{'metric_id': ..., "
+            "'value': ...}]; a plan-linked summary that states numerals with no "
+            "observations comes back with a warning."
         )
     )
     def record_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
