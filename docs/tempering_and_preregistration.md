@@ -277,6 +277,64 @@ question we should not have to ask.
 Remaining blind spot: user-level `~/.claude/settings.json`, and anything that
 shapes what the agent may do but never reaches a hook payload.
 
+## 3b. The missing parent model (raised 2026-08-20, not built)
+
+Every plan carries a `predictive_contract` — a mechanism-level claim about one
+intervention. Nothing carries the **project's** mechanism-level claim. That is
+the gap.
+
+`ProjectState` holds `goals`, `constraints`, `facts`, `failure_modes`,
+`available_resources`, `forbidden_actions`, `current_baseline`. Read the list
+again: those are **targets and limits**, not a generative description. There is
+no statement of what the project believes the system *is*, what mechanism it is
+operating on, or what is held fixed across the whole programme of work.
+
+The consequence is structural, not cosmetic:
+
+> Each plan's contract is a local model with **no parent model** to be
+> consistent with. Drift from the project's model is undetectable because there
+> is no project model to drift from.
+
+In the Gelman framing this document opens with, that is the real omission. Every
+plan is a little M being checked and expanded, and there is no M above them.
+Expansion is therefore always local: a mismatch can only ever suggest a
+narrower or different intervention, never a revision of what the project thinks
+it is doing.
+
+### One concrete defect feeding the same failure
+
+`normalize.py:369-374`: when `goal_ids` is omitted, the plan is auto-linked to
+**every unmet goal**, with a warning and nothing else. `closure.goal_defined`
+then passes without the author having chosen a goal at all. A plan linked to
+everything is linked to nothing — which is exactly how a plan comes out
+"drafted vaguely" while satisfying the gate.
+
+### What a goal document would have to do to be worth adding
+
+Not a prose preamble. It has to be **checkable**, or it becomes the next thing
+that gets written to satisfy a field:
+
+- a **metric registry** — the metric_ids this project measures. A plan
+  predicting a metric outside it is either drift or a registry update, and
+  either way should be surfaced rather than silent.
+- a **project-level `context_fixed`** — what is held constant across all plans.
+  A plan whose local `context_fixed` contradicts it is moving the measuring
+  stick, which is already a BLOCKING finding at plan level and currently has no
+  project-level equivalent.
+- a **mechanism statement** — what the project believes it is operating on, so
+  a `mismatch` can escalate to "the project model is wrong" rather than only
+  "this intervention was wrong."
+- **goal selection made explicit** — remove the auto-link-to-everything
+  default, or make it a blocker rather than a warning.
+
+### The caution that applies here as everywhere
+
+The recurring trap in this codebase applies with full force: *require a goal
+document and you will get a filler goal document.* A mandatory prose field that
+nothing checks is worse than no field, because it looks like the project has a
+model when it has a paragraph. Every element above is proposed as something a
+plan can be **compared against**, not something an author must fill in.
+
 ## 4. What none of this fixes
 
 - **Mode generation.** Tempering explores a given space better; it does not

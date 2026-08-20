@@ -148,8 +148,15 @@ still-stubbed `oscillation_risk`), robotics adapters (Phase 6).
 
 Known gaps, with the reasoning recorded in
 [docs/tempering_and_preregistration.md](docs/tempering_and_preregistration.md):
-contract fields are not hashed at first set, so "was this range fixed before
-the data existed?" is narrated rather than checkable; commitment is binary
-(approved or not) with no probe rung, so `alternative_hypothesis_ids` is
-counted as a penalty and never carried as a live candidate; and the harness
-configuration that shapes what the agent may do appears in no ledger.
+there is **no project-level model document** — `ProjectState` records goals,
+constraints and failure modes (targets and limits) but no statement of the
+mechanism the project believes it is operating on, so each plan's
+`predictive_contract` is a local model with no parent to be consistent with and
+drift is undetectable; relatedly, `create_plan` auto-links a plan to *all*
+unmet goals when `goal_ids` is omitted (`normalize.py:369`), so closure passes
+without the author ever choosing a goal. Contract fields are not hashed at
+first set, so "was this range fixed before the data existed?" is narrated
+rather than checkable. Commitment is binary (approved or not) with no probe
+rung, so `alternative_hypothesis_ids` is counted as a penalty and never carried
+as a live candidate. And the harness configuration that shapes what the agent
+may do appears in no ledger.
