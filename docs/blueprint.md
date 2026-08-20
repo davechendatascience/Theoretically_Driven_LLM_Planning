@@ -1085,6 +1085,11 @@ record_evidence(
 ) -> EvidenceRecord
 ```
 
+> This section records the tool surface as originally designed. The shipped
+> surface has since gained `record_run_metrics`, the metrics-first channel
+> that feeds the posterior check; see
+> [tool_contracts.md](tool_contracts.md) for the live reference.
+
 #### `update_constraint_status`
 
 ```text

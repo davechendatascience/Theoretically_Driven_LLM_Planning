@@ -51,7 +51,25 @@ most valuable entries: they are what plain adopt/reject criteria never state.
 ## Structured observations
 
 Posterior checks are deterministic, so numbers must enter the store
-structurally, not as prose. `record_evidence` accepts:
+structurally, not as prose. The intended door is `record_run_metrics`:
+
+```text
+record_run_metrics("P-0007", {"placement_success_rate": 0.43})
+```
+
+It writes the values into `observations`, links the record to the plan, and
+returns the recomputed evaluation in the same call — so the verdict
+(`consistent` | `mismatch` | `inconclusive`) is visible at the moment of
+recording, along with which contract metrics remain unobserved.
+
+A plan-linked record whose summary states numerals while `observations` stays
+empty now comes back with a warning naming the metrics the contract is waiting
+on. It warns and never refuses: a mandatory field is satisfiable by
+fabricating a value, and `predictive_status: inconclusive` already prevents an
+honest `validated`. See [evidence_discipline.md](evidence_discipline.md).
+
+`record_evidence` still accepts the same structure directly, which is what
+`record_run_metrics` builds:
 
 ```json
 "observations": [

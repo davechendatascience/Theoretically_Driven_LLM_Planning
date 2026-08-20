@@ -37,10 +37,10 @@ Call `create_plan` with exactly one candidate plan:
   that must stay invariant (`direction: no_change` — the most valuable kind),
   at least one `disconfirming_pattern` (what you would see if the causal
   story is wrong), each with a `suggested_model_expansion`. When recording
-  results, put numbers in `record_evidence`'s `observations` (metric_id +
-  value) so the posterior check runs deterministically, and declare any
-  observed failure signature via `observed_pattern_ids`. A `mismatch` verdict
-  means escalate to the named expansion — not another local patch.
+  results, call `record_run_metrics(plan_id, {"metric_id": value, ...})` so
+  the posterior check runs deterministically, and declare any observed
+  failure signature via `observed_pattern_ids`. A `mismatch` verdict means
+  escalate to the named expansion — not another local patch.
 
 The tool returns an evaluation immediately. Partial plans are fine — every
 blocker message is a concrete repair instruction; apply them with another
@@ -64,8 +64,21 @@ future drift analysis.
 
 ## 4. Close the loop
 
-After running validations: `record_evidence` for each artifact (with
-`polarity` and links), `update_constraint_status` for anything resolved, then
+After running validations, record what you observed through the right door:
+
+- `run_validation` when a registered command produced it — mechanical, with
+  an immutable artifact and polarity from the exit code.
+- `record_run_metrics(plan_id, {"metric_id": value, ...})` for every number
+  the contract predicted. Values land in `observations`, the only field the
+  posterior check reads, and the verdict comes back in the same call. A
+  number narrated into a summary scores nothing.
+- `record_evidence` when the observation is not a number — a process record,
+  a paper, a commit, a qualitative failure. Not weaker evidence, a different
+  kind of record; never invent a `metric_id` to satisfy a field. A
+  plan-linked summary stating numerals with empty `observations` comes back
+  with a warning naming the metrics the contract is waiting on.
+
+Then `update_constraint_status` for anything resolved, and
 `record_plan_outcome` (`validated` requires evidence ids; use `rejected` or
 `rolled_back` honestly). Never report "fixed", "working", or "validated"
 without a recorded validation.

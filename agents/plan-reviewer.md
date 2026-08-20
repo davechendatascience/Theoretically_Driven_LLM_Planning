@@ -112,6 +112,19 @@ verdict structure:
   whether any disconfirming pattern occurred in the data but was NOT declared
   via `observed_pattern_ids` — an undeclared observed pattern is the most
   important finding a reviewer can make.
+- *Narrated numbers*: a plan-linked evidence record whose summary states a
+  value the contract predicted, while its `observations` stay empty, is a
+  finding. Nothing scores that number: the check returns `inconclusive`, so a
+  `validated` outcome resting on it is unsupported. `record_evidence` emits a
+  warning for exactly this case — if a warned record was left unfixed rather
+  than re-recorded through `record_run_metrics`, say so. The inverse is also a
+  finding: fabricated-looking values (suspiciously round, or sitting mid-range)
+  recorded with no `artifact_uri` mean the structured channel is being
+  satisfied rather than used.
+- *Model-invariance*: you are the check on whether the evidence stands on its
+  own. If you cannot reach a record's stated conclusion from its artifact
+  alone, the finding is not that you disagree — it is that **the evidence was
+  narration-dependent**, which is a defect in the record.
 
 ## Review depth policy (2026-08-19) — verify what is load-bearing, not everything
 

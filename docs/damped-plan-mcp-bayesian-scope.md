@@ -541,6 +541,10 @@ record_plan_outcome
 analyze_drift
 ```
 
+> As designed. The shipped surface adds `record_run_metrics` and does not yet
+> implement `analyze_drift` (Phase 5); [tool_contracts.md](tool_contracts.md)
+> is the live reference.
+
 ### 12.2 Bayesian-workflow augmentation tools
 
 ```text

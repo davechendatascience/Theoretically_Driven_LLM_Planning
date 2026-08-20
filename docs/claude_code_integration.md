@@ -72,7 +72,10 @@ data or evaluation change):
 3. Do not edit source files until the plan is EXECUTABLE, or the user has
    explicitly approved a safe measurement plan.
 4. Implement only files in the approved plan's allowed_files.
-5. record_evidence, update_constraint_status, record_plan_outcome afterward.
+5. Afterwards: record_run_metrics for every number the plan's contract
+   predicted (a number narrated into an evidence summary scores nothing),
+   record_evidence for observations that are not numbers,
+   update_constraint_status for anything resolved, then record_plan_outcome.
 6. Never report "fixed" or "validated" without a recorded validation.
 ```
 
