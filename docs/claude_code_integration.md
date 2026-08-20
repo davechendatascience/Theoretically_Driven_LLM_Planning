@@ -4,7 +4,8 @@ Three pieces, each opt-in per target project:
 
 1. **MCP server** — the tools/resources/prompts (required).
 2. **`/damped-plan` skill** — teaches Claude the workflow (recommended).
-3. **PreToolUse hook** — hard enforcement of the gate (optional).
+3. **PreToolUse hooks** — hard enforcement, on the implementer and on the
+   reviewer (optional).
 
 ## 1. Register the MCP server
 
@@ -78,11 +79,21 @@ data or evaluation change):
 ## 2b. Install the adversarial plan reviewer (optional)
 
 `agents/plan-reviewer.md` is a fresh-context reviewer agent that tries to
-refute a `ready_for_review` plan (verifies evidence artifacts against their
-summaries, attacks closure quality, re-runs cheap read-only probes) and
-returns a structured verdict before the human decides. It is advisory only:
-it has no mutating tools and never calls `approve_plan` — the human stays the
-approver.
+refute a `ready_for_review` plan (checks evidence artifacts against their
+summaries, attacks closure quality, reads the diff against the predictive
+contract's `context_fixed`) and returns a structured verdict before the human
+decides. It is advisory only: the human stays the approver.
+
+Its tool allowlist is the enforcement, not the prompt. `approve_plan`,
+`create_plan`, `record_evidence`, and `run_validation` are absent, and so is
+`evaluate_plan` — despite reading as a query, it persists status transitions,
+appends an event, and rewrites `gate.json` (`workspace.py:228-233`), so a
+reviewer holding it could move the gate before the human decided. `get_plan`
+returns the same evaluation without writing. The reviewer also does not execute
+the project's checks: it cites artifacts captured by `run_validation` rather
+than re-running commands, because a number produced in a reviewer's shell has
+no `artifact_uri` and no event. Pair the agent with the reviewer gate hook
+(step 3) to make that mechanical rather than merely instructed.
 
 ```bash
 mkdir -p .claude/agents
@@ -95,12 +106,23 @@ it explicitly. To skip it for one plan, say so ("approve without review"); to
 disable it entirely, delete or move the agent file. Approval always requires
 the human regardless of whether the reviewer ran.
 
-## 3. Enable the enforcement hook (optional)
+## 3. Enable the enforcement hooks (optional)
 
-See [hooks/README.md](../hooks/README.md). Without the hook, the gate is
-advisory (the model is instructed to respect it); with the hook, uncovered
-`Edit`/`Write` calls are actually denied with the server's explanation of what
-to do instead.
+See [hooks/README.md](../hooks/README.md). Two independent PreToolUse hooks,
+each opt-in:
+
+- `damped_plan_gate.py` (matcher `Edit|Write|NotebookEdit`) gates the
+  **implementer**. Without it the gate is advisory (the model is instructed to
+  respect it); with it, uncovered edits are denied with the server's
+  explanation of what to do instead.
+- `damped_plan_reviewer_gate.py` (matcher `Bash`) gates the **reviewer**,
+  denying execution for the `plan-reviewer` agent while leaving read-only
+  inspection (`git diff`, `cat`, `grep`, ...) open. Every other agent,
+  including the main session, passes through untouched.
+
+Together they express the same rule from both sides: the implementer may not
+change what no approved plan covers, and the reviewer may not manufacture
+evidence outside the ledger.
 
 ## 4. Verify
 
