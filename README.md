@@ -168,8 +168,15 @@ mechanism the project believes it is operating on, so each plan's
 `predictive_contract` is a local model with no parent to be consistent with and
 drift is undetectable; relatedly, `create_plan` auto-links a plan to *all*
 unmet goals when `goal_ids` is omitted (`normalize.py:369`), so closure passes
-without the author ever choosing a goal. Contract fields are not hashed at
-first set, so "was this range fixed before the data existed?" is narrated
+without the author ever choosing a goal. There is also **no human-only ultimate
+goal** — no terminal objective that each plan's goal is scored against, so
+"closer" has no referent; and goals are not protected: `register_project`
+rebuilds a goal wholly from its payload (`normalize.py:215`), so an agent can
+loosen a `target`, silently drop the `metric_name` that made it measurable, or
+set `met: true` with no evidence, none of it recorded with before/after values.
+The one directory such an objective would live in is waved through by the
+gate's `always_allowed` default (`results.py:113`). Contract fields are not
+hashed at first set, so "was this range fixed before the data existed?" is narrated
 rather than checkable. Commitment is binary (approved or not) with no probe
 rung, so `alternative_hypothesis_ids` is counted as a penalty and never carried
 as a live candidate. And the harness configuration that shapes what the agent

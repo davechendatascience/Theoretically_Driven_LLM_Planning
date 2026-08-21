@@ -335,6 +335,88 @@ nothing checks is worse than no field, because it looks like the project has a
 model when it has a paragraph. Every element above is proposed as something a
 plan can be **compared against**, not something an author must fill in.
 
+## 3c. The ultimate goal has no protected home (raised 2026-08-21, not built)
+
+Raised by David: driving the Gelman loop *toward* something requires each
+plan's goal to be measured against an **ultimate goal** — a terminal objective
+for the project that lives in `.damped-plan/` and that **only a human may
+edit**. §3b is the missing parent *model* (what the project believes the system
+is). This is the missing parent *objective* (what the project is trying to
+reach). They are different axes and both are absent: without the first, a
+mismatch cannot escalate past "this intervention was wrong"; without the
+second, "closer" has no referent, and a plan's local goal is scored against
+nothing above it.
+
+The "only human may edit" half is not a nicety. It is the same principle the
+gate already enforces for approval — `approve_plan` refuses AI self-approval —
+applied one level up. An agent that can edit the objective it is measured
+against does not need to reach the objective; it can move it. Approval is
+protected today. The objective is not.
+
+### What the current code actually permits
+
+`register_project` is an ordinary agent-callable MCP tool, and
+`_normalize_goal` (`normalize.py:215-233`) rebuilds each goal **entirely from
+the incoming payload** — unlike `_normalize_constraint`, which is passed
+`existing_by_id` and merges. Re-stating a goal id therefore replaces it
+wholesale. Measured against a scratch data dir:
+
+```text
+original:             {'id': 'G-0001', 'metric_name': 'p99_ms', 'target': '<= 120', 'met': False}
+after target rewrite: {'id': 'G-0001', 'metric_name': 'p99_ms', 'target': '<= 400', 'met': False}
+after bare re-state:  {'id': 'G-0001', 'metric_name': '',       'target': '',       'met': False}
+after met=True:       {'id': 'G-0001', 'metric_name': '',       'target': '',       'met': True}
+```
+
+Three distinct ways to satisfy a goal without moving the system:
+
+- **Loosen the target.** `<= 120` becomes `<= 400` for the asking. The
+  `project_updated` event carries `warnings: []` and no before/after values, so
+  the loosening is not reconstructable from `events.jsonl`.
+- **Erase the measure.** Re-stating a goal with only a statement silently drops
+  `metric_name` and `target`. The goal survives as an unmeasurable sentence,
+  and `normalize.py:170-173` only warns.
+- **Declare victory.** `met: True` is accepted straight from the payload, with
+  no evidence id and no validation record — in a system whose stated rule is
+  that `validated` outcomes require recorded evidence.
+
+There is also nowhere safe to put such a document today. The gate's
+`always_allowed` defaults to `[".damped-plan/**", "docs/**", "*.md"]`
+(`results.py:113-115`), so the directory where the objective would naturally
+live is precisely the one the enforcement hook never guards.
+
+### What it would have to do to be worth adding
+
+The `commands.json` precedent is the right shape: a file the human writes and
+the server only ever **reads**. Applied here:
+
+- **Server-read-only.** No MCP tool writes the objective. `register_project`
+  gains goals; it does not get to redefine the terminal target.
+- **Out of `always_allowed`.** Carve the objective path out of the default, so
+  the PreToolUse hook denies agent edits to it rather than waving them through
+  with the rest of `.damped-plan/**`.
+- **Goal-to-objective linkage, checkable.** Each goal names which objective
+  criterion it advances, and by how much. A goal advancing nothing is the
+  planning-level analogue of a plan linked to every goal — and note §3b's
+  auto-link defect (`normalize.py:369`) sits directly underneath this.
+- **Movement measured against it, not against the last plan.** "Closer" should
+  be a distance to the objective that a posterior check can compute, so
+  successive plans that each improve a local metric while the objective stays
+  put are visible as such.
+- **Goal edits become events with before/after.** Whatever stays mutable should
+  at minimum record what it was and what it became, so a loosened target is
+  reviewable rather than silent.
+
+### The caution that applies here as everywhere
+
+Identical to §3b, and worth restating because an "ultimate goal" invites prose
+more than most fields: *require an objective document and you will get a filler
+objective document.* An aspirational paragraph that nothing computes against is
+worse than nothing, because the project then looks like it has a direction when
+it has a mission statement. Every element above is proposed as something a plan
+or goal can be **compared against**. If the objective cannot be used to compute
+whether the last ten plans moved the project closer, it is decoration.
+
 ## 4. What none of this fixes
 
 - **Mode generation.** Tempering explores a given space better; it does not
