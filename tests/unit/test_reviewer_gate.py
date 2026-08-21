@@ -181,3 +181,47 @@ def test_empty_agent_list_makes_hook_inert():
         bash_event("uv run pytest -q"), DAMPED_PLAN_REVIEWER_AGENTS=""
     )
     assert code == 0 and output is None
+
+
+# --- cross-platform payload handling ---------------------------------------
+
+
+def run_hook_bytes(payload: bytes) -> tuple[int, dict | None]:
+    proc = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=payload,
+        capture_output=True,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=10,
+    )
+    output = None
+    if proc.stdout.strip():
+        output = json.loads(proc.stdout)
+    return proc.returncode, output
+
+
+def test_utf8_bom_payload_still_denies():
+    """PowerShell prepends a BOM when piping to a native exe.
+
+    Parsed as plain utf-8 the BOM raises JSONDecodeError, which this hook
+    treats as fail-open -- so the gate would silently stop denying anything
+    on Windows while still looking installed.
+    """
+    payload = b"\xef\xbb\xbf" + json.dumps(bash_event("uv run pytest -q")).encode()
+    code, output = run_hook_bytes(payload)
+    assert permission(output) == "deny"
+
+
+def test_powershell_tool_is_gated_too():
+    event = {
+        "tool_name": "PowerShell",
+        "tool_input": {"command": "Invoke-Pester"},
+        "agent_type": "plan-reviewer",
+    }
+    code, output = run_hook(event)
+    assert permission(output) == "deny"
+
+
+def test_unparsable_payload_still_fails_open():
+    code, output = run_hook_bytes(b"not json at all")
+    assert code == 0 and output is None

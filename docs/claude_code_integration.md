@@ -7,6 +7,22 @@ Three pieces, each opt-in per target project:
 3. **PreToolUse hooks** — hard enforcement, on the implementer and on the
    reviewer (optional).
 
+## 0. The scripted route
+
+Every step below is host-specific in two ways — absolute paths, and an
+interpreter name that is not the same on Windows as on Linux. To have both
+derived for you:
+
+```bash
+uv run python scripts/install_integration.py --target /path/to/project
+```
+
+It merges into existing `.mcp.json` / `.claude/settings.local.json` rather
+than overwriting (unrelated servers, permissions, and hooks survive), is
+idempotent, and supports `--dry-run`, `--data-dir`, `--shared-settings`, and
+`--no-hooks` / `--no-skill` / `--no-reviewer`. The manual equivalents follow,
+for when you want to see or adjust what it writes.
+
 ## 1. Register the MCP server
 
 In the *target* project (the repo whose changes you want gated), add
@@ -118,14 +134,19 @@ each opt-in:
   **implementer**. Without it the gate is advisory (the model is instructed to
   respect it); with it, uncovered edits are denied with the server's
   explanation of what to do instead.
-- `damped_plan_reviewer_gate.py` (matcher `Bash`) gates the **reviewer**,
-  denying execution for the `plan-reviewer` agent while leaving read-only
-  inspection (`git diff`, `cat`, `grep`, ...) open. Every other agent,
-  including the main session, passes through untouched.
+- `damped_plan_reviewer_gate.py` (matcher `Bash|PowerShell`) gates the
+  **reviewer**, denying execution for the `plan-reviewer` agent while leaving
+  read-only inspection (`git diff`, `cat`, `grep`, ...) open. Every other
+  agent, including the main session, passes through untouched.
 
 Together they express the same rule from both sides: the implementer may not
 change what no approved plan covers, and the reviewer may not manufacture
 evidence outside the ledger.
+
+The interpreter name in the hook command is host-specific, and a misconfigured
+hook fails *open* rather than erroring — see
+[Interpreter and shells](../hooks/README.md#interpreter-and-shells) before
+hand-writing these entries.
 
 ## 4. Verify
 

@@ -4,13 +4,10 @@
       "command": "uv",
       "args": [
         "--directory",
-        "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        ".",
         "run",
         "damped-plan-mcp"
-      ],
-      "env": {
-        "DAMPED_PLAN_DATA_DIR": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.damped-plan"
-      }
+      ]
     }
   }
 }

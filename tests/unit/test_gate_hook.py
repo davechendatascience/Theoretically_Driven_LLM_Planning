@@ -125,3 +125,38 @@ def test_relative_path_resolved_against_cwd(tmp_path):
     }
     code, output = run_hook(event)
     assert code == 0 and output is None
+
+
+# --- cross-platform payload handling ---------------------------------------
+
+
+def run_hook_bytes(payload: bytes) -> tuple[int, dict | None]:
+    proc = subprocess.run(
+        [sys.executable, str(HOOK)],
+        input=payload,
+        capture_output=True,
+        env={"PATH": "/usr/bin:/bin"},
+        timeout=10,
+    )
+    output = None
+    if proc.stdout.strip():
+        output = json.loads(proc.stdout)
+    return proc.returncode, output
+
+
+def test_utf8_bom_payload_still_denies(tmp_path):
+    """PowerShell prepends a BOM when piping to a native exe.
+
+    Parsed as plain utf-8 the BOM raises JSONDecodeError, which this hook
+    treats as fail-open -- so the gate would silently allow every edit on
+    Windows while still looking installed.
+    """
+    write_gate(tmp_path, [])
+    payload = b"\xef\xbb\xbf" + json.dumps(edit_event(tmp_path, "src/x.py")).encode()
+    code, output = run_hook_bytes(payload)
+    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_unparsable_payload_still_fails_open():
+    code, output = run_hook_bytes(b"not json at all")
+    assert code == 0 and output is None

@@ -54,6 +54,25 @@ def matches(rel_path: str, patterns: list[str]) -> bool:
     return False
 
 
+def read_event() -> dict | None:
+    """Parse the PreToolUse payload from stdin, or None if it is unusable.
+
+    Decoded as utf-8-sig, not utf-8: PowerShell prepends a UTF-8 BOM when it
+    pipes to a native executable, and a leading BOM raises JSONDecodeError.
+    Because an unparsable payload exits 0 (fail-open), that would silently
+    disable the gate on Windows rather than announce itself.
+    """
+    try:
+        raw = sys.stdin.buffer.read()
+    except AttributeError:  # stdin replaced by a text-only object
+        raw = sys.stdin.read().encode("utf-8", "replace")
+    try:
+        event = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return event if isinstance(event, dict) else None
+
+
 def decision(permission: str, reason: str) -> None:
     print(
         json.dumps(
@@ -71,9 +90,8 @@ def decision(permission: str, reason: str) -> None:
 
 def main() -> None:
     mode = os.environ.get("DAMPED_PLAN_HOOK_MODE", "enforce").strip().lower()
-    try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    event = read_event()
+    if event is None:
         sys.exit(0)
 
     if event.get("tool_name") not in EDIT_TOOLS:

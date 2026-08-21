@@ -7,3 +7,6 @@ dist/
 .hypothesis/
 # dogfooding state for this repo itself
 .damped-plan/
+# written by scripts/install_integration.py: absolute paths and an interpreter
+# name valid only on the machine that generated it
+.claude/settings.local.json

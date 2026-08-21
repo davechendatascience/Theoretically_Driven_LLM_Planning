@@ -68,6 +68,18 @@ Four pieces, each opt-in, all configured in the *target* project (the repo
 whose changes you want gated). Full details in
 [docs/claude_code_integration.md](docs/claude_code_integration.md).
 
+The quickest route is the installer, which derives the absolute paths and a
+working interpreter name for the current host (Linux, macOS, or Windows) and
+merges into any config already there:
+
+```bash
+uv run python scripts/install_integration.py --target /path/to/project
+uv run python scripts/install_integration.py --target /path/to/project --dry-run
+```
+
+It is idempotent, and `--no-hooks` / `--no-skill` / `--no-reviewer` skip
+individual pieces. The manual steps it automates are below.
+
 **1. Register the MCP server** — add `.mcp.json` at the target repo's root
 (or use `claude mcp add`, see the integration doc):
 
@@ -104,9 +116,11 @@ into actual denials): add the PreToolUse entries from
 [hooks/README.md](hooks/README.md) to the target project's
 `.claude/settings.json`. `damped_plan_gate.py` (matcher
 `Edit|Write|NotebookEdit`) denies edits no approved plan covers;
-`damped_plan_reviewer_gate.py` (matcher `Bash`) denies *execution* to the
-reviewer agent while leaving read-only inspection open. Every other agent,
-including the main session, passes through untouched.
+`damped_plan_reviewer_gate.py` (matcher `Bash|PowerShell`) denies *execution*
+to the reviewer agent while leaving read-only inspection open. Every other
+agent, including the main session, passes through untouched. Note the
+interpreter name is host-specific — see
+[Interpreter and shells](hooks/README.md#interpreter-and-shells).
 
 **4. Install the adversarial reviewer** (optional): copy
 `agents/plan-reviewer.md` into the target project's `.claude/agents/`. It

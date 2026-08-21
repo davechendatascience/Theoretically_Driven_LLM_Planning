@@ -10,8 +10,17 @@ milliseconds per edit.
 
 ## Enable for a target project
 
-Add to the target project's `.claude/settings.json` (or
-`settings.local.json`):
+The reliable way is `scripts/install_integration.py`, which fills in the
+absolute paths and picks an interpreter name that exists on this host (see
+[Interpreter and shells](#interpreter-and-shells) — Windows has no `python3`,
+many Linux distributions have no `python`):
+
+```bash
+uv run python scripts/install_integration.py --target /path/to/project
+```
+
+To write it by hand instead, add to the target project's
+`.claude/settings.json` (or `settings.local.json`):
 
 ```json
 {
@@ -81,7 +90,7 @@ to compare `context_fixed` against the actual diff.
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
@@ -93,6 +102,11 @@ to compare `context_fixed` against the actual diff.
   }
 }
 ```
+
+The matcher includes `PowerShell` because Windows hosts expose it as a second
+execution tool. Today the reviewer's own frontmatter grants only `Bash`, so
+the extra name changes nothing — but it means widening that allowlist later
+cannot silently open an ungated execution path.
 
 Both hooks can be registered side by side — they match different tools.
 
@@ -123,3 +137,36 @@ discipline boundary with reviewable provenance, not a security sandbox. It
 also cannot stop a reviewer from asking the parent session to run a command
 and narrate the result back; that failure mode belongs to the evidence layer,
 not the capability layer.
+
+---
+
+# Interpreter and shells
+
+Both hooks are stdlib-only and run on any Python 3. Getting them *invoked* is
+the part that differs per host.
+
+**Interpreter name.** There is no name that works everywhere: Windows ships no
+`python3`, and many Linux distributions ship no `python`. Prefer a bare name
+over an absolute path — a bare name needs no quoting, so the same command
+string parses identically under `sh`, Git Bash, `cmd.exe`, and PowerShell,
+whereas a *quoted* absolute path in command position is a string literal to
+PowerShell unless prefixed with `&`. `scripts/install_integration.py` probes
+for a working bare name and only falls back to an absolute path (warning when
+it does).
+
+**Encoding.** Hook payloads arrive on stdin as UTF-8, except that PowerShell
+prepends a UTF-8 BOM when piping to a native executable. Both hooks decode with
+`utf-8-sig` for that reason. This matters more than it looks: an unparsable
+payload exits 0 (fail-open by design, so unrelated projects are never
+bricked), so a BOM the hook could not skip would *silently* disable
+enforcement while the hook still appeared installed. Regression tests cover
+the BOM case in `tests/unit/test_gate_hook.py` and `test_reviewer_gate.py`.
+
+**Latency.** The claim above that the gate hook adds "only a few milliseconds"
+is about the hook's own work, which is a `gate.json` read. Process startup
+dominates and is not always small: on a Windows host with real-time antivirus
+scanning, bare CPython startup measured ~0.8 s, so each `Edit`/`Write` pays
+that. It is the interpreter, not the hook — an empty `python -c pass` costs
+the same. Do not route hooks through `uv run` to avoid the interpreter
+question: that adds project resolution on top and measured 1.5–3.6 s per call
+on the same host.

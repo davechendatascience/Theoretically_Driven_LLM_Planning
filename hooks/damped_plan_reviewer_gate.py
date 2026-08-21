@@ -36,6 +36,12 @@ import sys
 
 DEFAULT_REVIEWER_AGENTS = ("plan-reviewer",)
 
+# Windows hosts expose a second execution tool alongside Bash. Gating only
+# "Bash" there would leave an unguarded execution path open the moment anyone
+# widens the reviewer's tool allowlist, so both names are matched. Register the
+# hook with matcher "Bash|PowerShell" to match.
+GATED_TOOLS = frozenset({"Bash", "PowerShell"})
+
 # Anything that could chain, substitute, or redirect past the argv check.
 CHAINING_CHARS = frozenset(";|&`$><\n")
 
@@ -63,6 +69,25 @@ DENY_REASON = (
     "your finding. Read-only inspection (git diff/status/log/show, cat, grep, "
     "ls, wc, jq, find) is still available."
 )
+
+
+def read_event() -> dict | None:
+    """Parse the PreToolUse payload from stdin, or None if it is unusable.
+
+    Decoded as utf-8-sig, not utf-8: PowerShell prepends a UTF-8 BOM when it
+    pipes to a native executable, and a leading BOM raises JSONDecodeError.
+    Because an unparsable payload exits 0 (fail-open), that would silently
+    disable the hook on Windows rather than announce itself.
+    """
+    try:
+        raw = sys.stdin.buffer.read()
+    except AttributeError:  # stdin replaced by a text-only object
+        raw = sys.stdin.read().encode("utf-8", "replace")
+    try:
+        event = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    return event if isinstance(event, dict) else None
 
 
 def gated_agents() -> frozenset[str]:
@@ -114,12 +139,11 @@ def decision(permission: str, reason: str) -> None:
 
 
 def main() -> None:
-    try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError:
+    event = read_event()
+    if event is None:
         sys.exit(0)
 
-    if event.get("tool_name") != "Bash":
+    if event.get("tool_name") not in GATED_TOOLS:
         sys.exit(0)
 
     if event.get("agent_type") not in gated_agents():
