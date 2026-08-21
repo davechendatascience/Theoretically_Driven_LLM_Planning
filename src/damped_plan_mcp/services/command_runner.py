@@ -1,7 +1,8 @@
 """Allowlisted command runner (blueprint §17).
 
-Plans reference registered command ids, never shell strings. The registry
-lives in the target project's `.damped-plan/commands.json`:
+Plans reference registered command ids, never shell strings. The registry is
+**human-maintained** and lives in the target project's
+`.damped-plan/commands.json`:
 
     {
       "unit_tests": {
@@ -57,10 +58,14 @@ def load_registry(data_dir: Path) -> dict[str, dict[str, Any]]:
     path = registry_path(data_dir)
     if not path.exists():
         raise CommandRunnerError(
-            f"No command registry at {path}. Create it with entries like "
+            f"No command registry at {path}. The registry is human-maintained: "
+            f"ask for the command to be registered, e.g. "
             f'{{"unit_tests": {{"allowed": true, "argv": ["uv", "run", "pytest", '
-            f'"-q"]}}}} — only registered argv commands can run; shell strings are '
-            f"never accepted."
+            f'"-q"]}}}}. Until a human adds it, this validation cannot run '
+            f"mechanically — perform the step yourself and use record_evidence, "
+            f"which records the result as narrated rather than artifact-backed. "
+            f"Only registered argv commands can run; shell strings are never "
+            f"accepted."
         )
     try:
         registry = json.loads(path.read_text(encoding="utf-8"))
@@ -82,8 +87,9 @@ def resolve_command(data_dir: Path, command_id: str) -> dict[str, Any]:
     if entry is None:
         raise CommandRunnerError(
             f"Command {command_id!r} is not registered. Registered commands: "
-            f"{sorted(registry)}. Add it to {registry_path(data_dir)} with "
-            f'"allowed": true and an argv array.'
+            f"{sorted(registry)}. A human must add it to "
+            f'{registry_path(data_dir)} with an argv array and "allowed": true; '
+            f"until then, perform the step yourself and use record_evidence."
         )
     if not entry.get("allowed", False):
         raise CommandRunnerError(
