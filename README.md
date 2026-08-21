@@ -168,9 +168,12 @@ mechanism the project believes it is operating on, so each plan's
 `predictive_contract` is a local model with no parent to be consistent with and
 drift is undetectable; relatedly, `create_plan` auto-links a plan to *all*
 unmet goals when `goal_ids` is omitted (`normalize.py:369`), so closure passes
-without the author ever choosing a goal. There is also **no human-only ultimate
-goal** — no terminal objective that each plan's goal is scored against, so
-"closer" has no referent; and goals are not protected: `register_project`
+without the author ever choosing a goal. Upstream of that sits **no human-only
+ultimate goal** — no terminal objective that each plan's goal is scored
+against. The data generating process the loop observes *is* the solution space
+that objective carves out, so without it there is no well-posed DGP for a parent
+model to model, no space in which "drift" is a movement, and no referent for
+"closer". Goals are also unprotected: `register_project`
 rebuilds a goal wholly from its payload (`normalize.py:215`), so an agent can
 loosen a `target`, silently drop the `metric_name` that made it measurable, or
 set `met: true` with no evidence, none of it recorded with before/after values.

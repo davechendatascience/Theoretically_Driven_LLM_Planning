@@ -335,23 +335,63 @@ nothing checks is worse than no field, because it looks like the project has a
 model when it has a paragraph. Every element above is proposed as something a
 plan can be **compared against**, not something an author must fill in.
 
+### Amended by §3c (2026-08-21)
+
+This section calls the missing parent model "the real omission". §3c revises
+that: the model is missing because the **objective** is, and the objective is
+what defines the space this model would be a model of. The defect and the
+requirements above stand; their ordering does not. Read §3c first.
+
 ## 3c. The ultimate goal has no protected home (raised 2026-08-21, not built)
 
 Raised by David: driving the Gelman loop *toward* something requires each
 plan's goal to be measured against an **ultimate goal** — a terminal objective
 for the project that lives in `.damped-plan/` and that **only a human may
-edit**. §3b is the missing parent *model* (what the project believes the system
-is). This is the missing parent *objective* (what the project is trying to
-reach). They are different axes and both are absent: without the first, a
-mismatch cannot escalate past "this intervention was wrong"; without the
-second, "closer" has no referent, and a plan's local goal is scored against
-nothing above it.
+edit**.
+
+### Why this is upstream of §3b, not beside it
+
+The tempting reading is that §3b is the missing parent *model* and this is the
+missing parent *objective* — two gaps on two axes. That reading is wrong, and
+the correction matters for what gets built.
+
+The data generating process the Gelman loop is observing **is the solution
+space that completes the ultimate goal.** A plan is a probe of that space; the
+metrics a validation records are the draws; the posterior predictive check asks
+whether the project's model of that space survived contact with them. So the
+objective is not a second artifact sitting alongside the mechanism statement —
+it is what *carves out the space the mechanism statement is a model of*.
+
+That makes the dependency one-directional. Without the ultimate goal there is
+no well-posed DGP, so §3b's parent model has nothing to be a model of, and
+§3b's symptom follows immediately: each plan samples from its own implicit,
+private solution space, the samples are not commensurable across plans, and
+drift is undetectable not merely because no parent model is written down but
+because there is no shared space in which "drift" would be a movement. "Closer"
+is incoherent for the same reason — a distance needs the space before it needs
+a metric.
+
+Read that way, §3b is not a separate item to schedule but the thing that
+becomes buildable once this exists. It also sets the acceptance bar here: an
+ultimate goal that does not constrain what counts as a candidate solution has
+not specified a space, and is therefore not an objective in the sense this
+section means, whatever it says.
+
+### Why human-only
 
 The "only human may edit" half is not a nicety. It is the same principle the
 gate already enforces for approval — `approve_plan` refuses AI self-approval —
 applied one level up. An agent that can edit the objective it is measured
 against does not need to reach the objective; it can move it. Approval is
 protected today. The objective is not.
+
+Under the framing above the stake is larger than goalpost-moving. If the
+objective defines the solution space, then an agent that can rewrite the
+objective can redefine **the data generating process it is being checked
+against** — and a posterior predictive check against a DGP the checked party
+chose is not a check. Every guarantee downstream of the Gelman loop inherits
+that, which is why this belongs with `approve_plan`'s refusal rather than with
+ordinary state the agent maintains.
 
 ### What the current code actually permits
 
@@ -395,14 +435,21 @@ the server only ever **reads**. Applied here:
 - **Out of `always_allowed`.** Carve the objective path out of the default, so
   the PreToolUse hook denies agent edits to it rather than waving them through
   with the rest of `.damped-plan/**`.
+- **A stated solution space, not a stated aspiration.** The objective has to say
+  what counts as a candidate solution — which metrics are the coordinates, what
+  admissibility conditions a solution must satisfy, what is out of bounds. This
+  is the load-bearing requirement: it is what turns the objective into a DGP the
+  loop can observe, and everything below assumes it.
 - **Goal-to-objective linkage, checkable.** Each goal names which objective
-  criterion it advances, and by how much. A goal advancing nothing is the
-  planning-level analogue of a plan linked to every goal — and note §3b's
-  auto-link defect (`normalize.py:369`) sits directly underneath this.
+  criterion it advances, and by how much — that is, which region of the space it
+  probes. A goal advancing nothing is the planning-level analogue of a plan
+  linked to every goal, and §3b's auto-link defect (`normalize.py:369`) sits
+  directly underneath this.
 - **Movement measured against it, not against the last plan.** "Closer" should
-  be a distance to the objective that a posterior check can compute, so
-  successive plans that each improve a local metric while the objective stays
-  put are visible as such.
+  be a distance in that space, computable by a posterior check, so successive
+  plans that each improve a local metric while the objective stays put are
+  visible as such. Plans probing outside the space are drift, and should be
+  surfaced as drift rather than scored as progress.
 - **Goal edits become events with before/after.** Whatever stays mutable should
   at minimum record what it was and what it became, so a loosened target is
   reviewable rather than silent.
@@ -416,6 +463,12 @@ worse than nothing, because the project then looks like it has a direction when
 it has a mission statement. Every element above is proposed as something a plan
 or goal can be **compared against**. If the objective cannot be used to compute
 whether the last ten plans moved the project closer, it is decoration.
+
+The framing above gives that caution a sharper test than "is it checkable?".
+The objective's job is to specify a solution space. So: *can two plans be told
+apart by where they sit in it?* A statement that admits every candidate has
+carved out nothing, defines no DGP, and leaves the loop observing exactly what
+it observes today — one plan at a time, against itself.
 
 ## 4. What none of this fixes
 
