@@ -470,6 +470,89 @@ apart by where they sit in it?* A statement that admits every candidate has
 carved out nothing, defines no DGP, and leaves the loop observing exactly what
 it observes today — one plan at a time, against itself.
 
+## 3d. The command registry has no sanctioned author (raised 2026-08-21, not built)
+
+Raised by David: the workflow tells agents to prefer `run_validation`, but
+gives them no sanctioned way to register a command — so the only route to
+compliance is to reach into the store and write the allowlist themselves.
+
+Confirmed, and the mechanism is worse than "a missing tool". The system's own
+error messages instruct the agent to author the allowlist, and the enforcement
+hook permits the write.
+
+### The squeeze
+
+`evidence_discipline.md` and `SKILL.md` both rank the channels: `run_validation`
+is **mechanical** (argv, exit code, immutable artifact, polarity from the exit
+code), while `record_evidence` is the narrated path the reviewer is told to
+distrust. `workspace.py:509` and `:521` then offer the fallback explicitly —
+"run the command yourself and record_evidence manually". So an agent on a fresh
+project faces exactly two options: produce the evidence the reviewer distrusts,
+or create `commands.json` itself. There is no third door, because none of the
+11 MCP tools writes the registry.
+
+### Three messages, three different answers to "who may write this"
+
+| Branch | Message | Who it addresses |
+|---|---|---|
+| `load_registry`, no file (`command_runner.py:59`) | "**Create it** with entries like `{"unit_tests": {"allowed": true, ...}}`" | the caller — and it supplies `allowed: true` in the template |
+| `resolve_command`, unknown id (`:84`) | "**Add it** to `<path>` with `"allowed": true` and an argv array." | the caller |
+| `resolve_command`, `allowed: false` (`:90`) | "**A human must** set `"allowed": true`" | a human |
+
+Only the third names a human, and it is the only branch an agent never has to
+enter. `allowed` functions as a human gate solely when the entry *already
+exists* in a not-allowed state — which requires someone else to have authored
+it first. An agent following the first two messages literally writes
+`allowed: true` from the start and never trips the third. The discipline is
+stated in the branch you reach second and undercut in the branch you reach
+first.
+
+### The gate permits the write
+
+`always_allowed` defaults to `[".damped-plan/**", "docs/**", "*.md"]`
+(`results.py:113-115`), so `.damped-plan/commands.json` is waved through by the
+PreToolUse hook — the same defect §3c found for the objective document, on the
+file that decides what may execute.
+
+`command_runner.py`'s docstring already concedes the registry is
+"allowlist-by-convention, not a security boundary against an actor who can
+write files." The unstated premise is that the file-writing actor is the human.
+By default it is also the agent.
+
+### What the human actually approved
+
+`run_validation` requires an approved plan (`workspace.py:504`), so the sequence
+reads as gated. It is not: the human approved a **plan**, and the agent then
+authors the **command** that plan's step names. Approval covers which files may
+change and what the decision rule is; nothing in it covers the argv that will
+run. `shell=False`, the timeout, and the pinned cwd all still hold — this is not
+arbitrary shell — but "what may run" stops being the reviewable artifact the
+module says it is.
+
+### What a fix would have to do
+
+- **A registration tool that cannot self-approve.** `propose_command` writes the
+  entry with `allowed: false` and records an event; enabling it stays a human
+  edit. That makes the third message the real path instead of the unreachable
+  one, and turns proposals into something reviewable.
+- **Align the first two messages with the third.** They should point at the
+  proposal route, not hand over a template containing `allowed: true`.
+- **Carve `commands.json` out of `always_allowed`,** so the hook denies direct
+  agent edits rather than permitting them by default.
+- **Make the fallback honest.** If registration is genuinely unavailable,
+  `record_evidence` is the correct channel and should not read as the
+  second-class option; the reviewer's distrust of narrated numbers is calibrated
+  for a world where the mechanical path is actually reachable.
+
+### The caution that applies here as everywhere
+
+The failure mode this section describes is not an agent behaving badly — it is
+an agent following the instructions it was given, in the order it encounters
+them. A rule that only appears in the branch a compliant agent never reaches is
+not a rule, and adding a strongly-worded sentence to `SKILL.md` will not change
+that. Either registration has a sanctioned route with a human in it, or the
+allowlist is documentation of what ran rather than a decision about what may.
+
 ## 4. What none of this fixes
 
 - **Mode generation.** Tempering explores a given space better; it does not

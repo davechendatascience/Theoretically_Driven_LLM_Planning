@@ -178,8 +178,14 @@ rebuilds a goal wholly from its payload (`normalize.py:215`), so an agent can
 loosen a `target`, silently drop the `metric_name` that made it measurable, or
 set `met: true` with no evidence, none of it recorded with before/after values.
 The one directory such an objective would live in is waved through by the
-gate's `always_allowed` default (`results.py:113`). Contract fields are not
-hashed at first set, so "was this range fixed before the data existed?" is narrated
+gate's `always_allowed` default (`results.py:113`). The command registry has
+**no sanctioned author**: no MCP tool writes
+`.damped-plan/commands.json`, so an agent told to prefer `run_validation` can
+only comply by writing the allowlist itself — which the gate permits and which
+two of the three registry error messages explicitly instruct, template
+including `"allowed": true`. Only the third names a human, and it is the one
+branch a compliant agent never reaches. Contract fields are not hashed at
+first set, so "was this range fixed before the data existed?" is narrated
 rather than checkable. Commitment is binary (approved or not) with no probe
 rung, so `alternative_hypothesis_ids` is counted as a penalty and never carried
 as a live candidate. And the harness configuration that shapes what the agent
