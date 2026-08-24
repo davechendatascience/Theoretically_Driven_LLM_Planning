@@ -50,6 +50,8 @@ class ResidualReport(BaseModel):
     dependency_gap: int = 0
     oscillation_risk: int = 0
     scope_risk: int = 0
+    residual_variance: float = 0.0
+    aggregate_credibility: float = 1.0
     blockers: list[str] = Field(default_factory=list)
     recommended_next_action: NextAction = NextAction.STOP
     rationale: list[str] = Field(default_factory=list)

@@ -14,6 +14,15 @@ EVIDENCE_PREFIX = "EV"
 HYPOTHESIS_PREFIX = "H"
 INTERVENTION_PREFIX = "I"
 VALIDATION_PREFIX = "V"
+CLAIM_PREFIX = "CLM"
+SUBTASK_PREFIX = "SUB"
+
+
+def generate_id(prefix: str = CLAIM_PREFIX) -> str:
+    """Generate a unique ID with prefix."""
+    import uuid
+
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 def next_id(prefix: str, existing: Iterable[str]) -> str:
@@ -34,3 +43,4 @@ def next_id(prefix: str, existing: Iterable[str]) -> str:
         highest += 1
         candidate_id = f"{prefix}-{highest + 1:04d}"
     return candidate_id
+
