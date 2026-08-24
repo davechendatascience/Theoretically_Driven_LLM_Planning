@@ -71,6 +71,34 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
     def get_project_snapshot() -> dict[str, Any]:
         return workspace.snapshot().model_dump(mode="json")
 
+    @server.tool(
+        description=(
+            "Read the human-filled corpus at <data_dir>/corpus/<domain>/. Read-only: "
+            "it never writes. Omit domain to list domains. Pass provenances to "
+            "classify 'corpus:<domain>/<entry>' strings as resolved / unresolvable / "
+            "not_corpus_scoped. Pass required_attributes and covered_attributes to get "
+            "a coverage report NAMING the attributes the corpus did not answer — that "
+            "gap list is the signal telling a human which documents to add. Gaps are "
+            "reported, never requested; nothing blocks on anyone."
+        )
+    )
+    def survey_corpus(
+        domain: str | None = None,
+        required_attributes: list[str] | None = None,
+        covered_attributes: list[str] | None = None,
+        provenances: list[str] | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        # Forwarded BY KEYWORD: the previous positional call is exactly where a
+        # newly added parameter gets misordered, and no test covers this path.
+        return workspace.survey_corpus(
+            domain=domain,
+            required_attributes=required_attributes,
+            covered_attributes=covered_attributes,
+            provenances=provenances,
+            plan_id=plan_id,
+        )
+
     @server.tool(description="Fetch a stored plan plus its current evaluation.")
     def get_plan(plan_id: str) -> dict[str, Any]:
         return workspace.get_plan(plan_id)

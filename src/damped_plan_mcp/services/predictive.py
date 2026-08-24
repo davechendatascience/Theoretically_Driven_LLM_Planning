@@ -16,6 +16,7 @@ from ..models import (
     PredictiveCheck,
     PredictiveContract,
 )
+from ..models.predictive import PriorCheck, RelationFinding
 
 
 def contract_structural_gaps(contract: PredictiveContract | None) -> list[str]:
@@ -131,4 +132,126 @@ def posterior_check(plan: Plan, evidence: list[EvidenceRecord]) -> PredictiveChe
         inconclusive_prediction_ids=inconclusive,
         discrepancy_summary="; ".join(notes),
         recommended_expansion=recommended,
+    )
+
+
+def _parse_relation(text: str) -> tuple[str, list[str]] | None:
+    """Parse `X = Y + Z` or `X = Y`. Anything else is unparseable, never guessed."""
+    if text.count("=") != 1:
+        return None
+    lhs, rhs = text.split("=")
+    target = lhs.strip()
+    operands = [part.strip() for part in rhs.split("+")]
+    if not target or len(operands) > 2 or not all(operands):
+        return None
+    return target, operands
+
+
+def prior_contract_check(contract: PredictiveContract | None) -> PriorCheck:
+    """Decide whether a contract's own bands admit any solution, before data exists.
+
+    P-0001 measured that a jointly unsatisfiable contract returns `consistent`
+    posteriorly: once data exists every value sits inside its own band, so no
+    posterior check can catch it. This decides it beforehand, by interval
+    arithmetic over declared metric_relations.
+
+    Per relation, for `X = Y + Z` with Y in [ylo,yhi] and Z in [zlo,zhi], the
+    induced interval for X is [ylo+zlo, yhi+zhi]. Disjoint from X's declared
+    band means no solution exists. Any metric lacking an expected_range makes
+    the relation undecidable and it is reported inconclusive rather than
+    guessed — UNKNOWN stays first-class here as it does posteriorly.
+
+    Aggregation precedence: UNSATISFIABLE > INCONCLUSIVE > SATISFIABLE. One
+    impossible constraint suffices. A contract with no relations is satisfiable
+    by vacuity. An unparseable relation aggregates as inconclusive and is also
+    reported in `unparseable_relations`, never silently dropped: dropping one
+    would make an impossible contract look satisfiable.
+
+    KNOWN INCOMPLETE (preregistered in P-0003): per-relation propagation misses
+    contradictions that only appear when relations share a variable, and a
+    marginal overlap returns satisfiable while still permitting the posterior
+    pathology. This is sound but not complete.
+
+    Pure: reads only the contract, wired into no caller.
+    """
+    if contract is None:
+        return PriorCheck(status="inconclusive", summary="no contract to check")
+
+    bands = {p.metric_id: p.expected_range for p in contract.predictions}
+    unenforceable = [
+        p.id
+        for p in contract.predictions
+        if p.direction == "no_change" and p.expected_range is None
+    ]
+
+    findings: list[RelationFinding] = []
+    unparseable: list[str] = []
+
+    for raw in contract.metric_relations:
+        parsed = _parse_relation(raw)
+        if parsed is None:
+            unparseable.append(raw)
+            findings.append(
+                RelationFinding(
+                    relation=raw,
+                    status="unparseable",
+                    detail="grammar is 'X = Y + Z' or 'X = Y'",
+                )
+            )
+            continue
+
+        target, operands = parsed
+        involved = [target, *operands]
+        missing = [m for m in involved if bands.get(m) is None]
+        if missing:
+            findings.append(
+                RelationFinding(
+                    relation=raw,
+                    status="inconclusive",
+                    detail=f"no expected_range for {', '.join(sorted(set(missing)))}",
+                )
+            )
+            continue
+
+        induced_lo = sum(bands[m][0] for m in operands)
+        induced_hi = sum(bands[m][1] for m in operands)
+        declared_lo, declared_hi = bands[target]
+        overlaps = induced_lo <= declared_hi and declared_lo <= induced_hi
+        findings.append(
+            RelationFinding(
+                relation=raw,
+                status="satisfiable" if overlaps else "unsatisfiable",
+                induced_range=(induced_lo, induced_hi),
+                declared_range=(declared_lo, declared_hi),
+                detail=(
+                    f"induced [{induced_lo}, {induced_hi}] "
+                    f"{'overlaps' if overlaps else 'is disjoint from'} "
+                    f"declared [{declared_lo}, {declared_hi}]"
+                ),
+            )
+        )
+
+    statuses = {f.status for f in findings}
+    if "unsatisfiable" in statuses:
+        status = "unsatisfiable"
+    elif "inconclusive" in statuses or "unparseable" in statuses:
+        status = "inconclusive"
+    else:
+        status = "satisfiable"
+
+    notes = [f.detail for f in findings if f.detail]
+    if unenforceable:
+        notes.append(
+            f"unenforceable invariances (no_change with no expected_range): "
+            f"{', '.join(unenforceable)}"
+        )
+    if not contract.metric_relations:
+        notes.append("no metric_relations declared: satisfiable by vacuity")
+
+    return PriorCheck(
+        status=status,
+        relation_findings=findings,
+        unenforceable_invariances=unenforceable,
+        unparseable_relations=unparseable,
+        summary="; ".join(notes),
     )

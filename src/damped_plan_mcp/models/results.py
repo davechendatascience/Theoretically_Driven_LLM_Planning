@@ -115,6 +115,22 @@ class GateSnapshot(BaseModel):
     always_allowed: list[str] = Field(
         default_factory=lambda: [".damped-plan/**", "docs/**", "*.md"]
     )
+    # Paths the AGENT must not write, checked BEFORE always_allowed (which
+    # contains ".damped-plan/**" and would otherwise permit all of them).
+    #
+    # "not agent-writable", NOT "human-authored": commands.json and objective.md
+    # are the human's, corpus/ is human-filled, and artifacts/ is MACHINE-captured
+    # by run_validation. What unites them is that an agent writing there destroys
+    # the signal the path carries. artifacts/ is safe to deny because
+    # command_runner writes it from the server process, never through a tool.
+    human_supervised: list[str] = Field(
+        default_factory=lambda: [
+            ".damped-plan/corpus/**",
+            ".damped-plan/commands.json",
+            ".damped-plan/objective.md",
+            ".damped-plan/artifacts/**",
+        ]
+    )
     unresolved_hard_constraints: list[str] = Field(default_factory=list)
     recommended_next_action: NextAction = NextAction.STOP
     deny_message: str = ""
@@ -132,4 +148,7 @@ class ProjectSnapshot(BaseModel):
     recommended_next_action: NextAction = NextAction.STOP
     gate_open: bool = False
     current_baseline: str | None = None
+    # Terminal-plan outcome counts and the validated rate (P-0007). Reported,
+    # never gated on: nothing reads this to make a decision.
+    outcome_profile: dict | None = None
     human_summary: str = ""

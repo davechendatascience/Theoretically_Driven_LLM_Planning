@@ -31,6 +31,10 @@ class Prediction(BaseModel):
     expected_pattern: str = ""
     confidence: Literal["low", "medium", "high"] = "medium"
     rationale: str = ""
+    # Provenance for where this prediction came from, e.g.
+    # "corpus:<domain>/<entry>". Read by corpus.research_targets; a field with
+    # no basis that resolves is a research target.
+    basis: list[str] = Field(default_factory=list)
 
 
 class DisconfirmingPattern(BaseModel):
@@ -38,6 +42,8 @@ class DisconfirmingPattern(BaseModel):
     description: str
     implication: str = ""
     suggested_model_expansion: str | None = None
+    # As Prediction.basis: where this failure signature came from.
+    basis: list[str] = Field(default_factory=list)
 
 
 class PredictiveContract(BaseModel):
@@ -46,6 +52,9 @@ class PredictiveContract(BaseModel):
     predictions: list[Prediction] = Field(default_factory=list)
     disconfirming_patterns: list[DisconfirmingPattern] = Field(default_factory=list)
     next_expansions: list[str] = Field(default_factory=list)
+    # Identities between metric_ids, e.g. "total_ms = parse_ms + emit_ms".
+    # Read only by prior_contract_check; the posterior check ignores them.
+    metric_relations: list[str] = Field(default_factory=list)
 
 
 class MetricObservation(BaseModel):
@@ -65,3 +74,33 @@ class PredictiveCheck(BaseModel):
     inconclusive_prediction_ids: list[str] = Field(default_factory=list)
     discrepancy_summary: str = ""
     recommended_expansion: str | None = None
+
+
+PriorStatus = Literal["satisfiable", "unsatisfiable", "inconclusive"]
+
+
+class RelationFinding(BaseModel):
+    """Per-relation result of the prior contract check (P-0003)."""
+
+    relation: str
+    status: PriorStatus | Literal["unparseable"]
+    induced_range: tuple[float, float] | None = None
+    declared_range: tuple[float, float] | None = None
+    detail: str = ""
+
+
+class PriorCheck(BaseModel):
+    """Whether a contract's own bands admit any solution, decided before data.
+
+    Distinct from PredictiveCheck: that one scores observations against a
+    contract, this one asks whether the contract could ever have been
+    satisfied. A contract can be internally impossible and still return
+    `consistent` posteriorly, because each value sits inside its own band —
+    which is exactly what P-0001 measured.
+    """
+
+    status: PriorStatus
+    relation_findings: list[RelationFinding] = Field(default_factory=list)
+    unenforceable_invariances: list[str] = Field(default_factory=list)
+    unparseable_relations: list[str] = Field(default_factory=list)
+    summary: str = ""

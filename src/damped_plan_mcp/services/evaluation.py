@@ -29,6 +29,24 @@ def evaluate_plan(
         blockers.extend(plan_validation.hard_constraint_blockers(plan, project))
 
     warnings: list[str] = []
+
+    # Research trigger (P-0006). evaluate_plan has no data_dir, so this detects
+    # ABSENCE of a basis only — it cannot tell a real citation from a fabricated
+    # one. survey_corpus(plan_id=...) resolves them against the corpus.
+    contract = plan.predictive_contract
+    if contract is not None:
+        unsourced = [p.id for p in contract.predictions if not p.basis]
+        unsourced += [d.id for d in contract.disconfirming_patterns if not d.basis]
+        if unsourced:
+            shown = ", ".join(unsourced[:4])
+            more = f" (+{len(unsourced) - 4} more)" if len(unsourced) > 4 else ""
+            warnings.append(
+                f"{len(unsourced)} contract field(s) carry no basis: {shown}{more}. "
+                f"Call survey_corpus(plan_id=\"{plan.id}\") for the research targets "
+                f"and whether the list is complete; a basis is a provenance string "
+                f"such as corpus:<domain>/<entry>."
+            )
+
     linked, via_failure = plan_validation.failure_linked(plan, project)
     if linked and not via_failure:
         warnings.append(

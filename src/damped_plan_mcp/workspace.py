@@ -27,10 +27,12 @@ from .render import reports
 from .services import (
     command_runner,
     constraint_service,
+    corpus,
     evaluation,
     micro_damping,
     narration,
     normalize,
+    outcomes,
 )
 from .store import JsonStore
 from .store import events as event_log
@@ -152,6 +154,7 @@ class Workspace:
         if not any(p.status not in TERMINAL_PLAN_STATUSES for p in plans):
             recommended = gate_snapshot.recommended_next_action
         return ProjectSnapshot(
+            outcome_profile=outcomes.outcome_profile(plans).model_dump(mode="json"),
             project_id=project.project_id,
             name=project.name,
             goals=[g.model_dump(mode="json") for g in project.goals],
@@ -766,3 +769,73 @@ class Workspace:
                     f"Gate is now {'open' if gate_snapshot.gate_open else 'closed'}."
                 ),
             }
+
+    # -- corpus channel (P-0004) --------------------------------------------
+
+    def survey_corpus(
+        self,
+        domain: str | None = None,
+        required_attributes: list[str] | None = None,
+        covered_attributes: list[str] | None = None,
+        provenances: list[str] | None = None,
+        plan_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Read-only view of the human-filled corpus, plus optional gap reporting.
+
+        Writes nothing, anywhere. With no domain it lists what domains exist. With
+        a domain it lists that domain's entries. `provenances` are classified
+        against the directory's actual contents; `required_attributes` plus
+        `covered_attributes` produce a gap report naming what the corpus did not
+        answer. Gaps are reported, never requested — nothing here blocks on anyone.
+        """
+        data_dir = self.store.data_dir
+        domains = corpus.list_domains(data_dir)
+        result: dict[str, Any] = {
+            "corpus_root": str(corpus.corpus_root(data_dir)),
+            "domains": domains,
+        }
+
+        # Research trigger (P-0006). Evaluated BEFORE the domain-is-None return
+        # below: the natural research call supplies plan_id and NO domain, so a
+        # branch placed after that return would silently yield zero targets
+        # while appearing to work.
+        if plan_id is not None:
+            targets = corpus.research_targets(
+                self._require_plan(plan_id), data_dir, domain
+            )
+            result["research"] = targets.model_dump(mode="json")
+            result["human_summary"] = targets.detail
+            return result
+
+        if domain is None:
+            result["human_summary"] = (
+                f"Corpus has {len(domains)} domain(s): {', '.join(domains) or 'none'}. "
+                f"Add documents under {corpus.corpus_root(data_dir)}/<domain>/ — "
+                f"the loop reads whatever is there and never writes to it."
+            )
+            return result
+
+        entries = corpus.list_entries(data_dir, domain)
+        result["domain"] = domain
+        result["entries"] = entries
+
+        if provenances:
+            classified = [
+                corpus.classify_provenance(data_dir, p).model_dump(mode="json")
+                for p in provenances
+            ]
+            result["provenance"] = classified
+            result["unresolvable_count"] = sum(
+                1 for c in classified if c["status"] == "unresolvable"
+            )
+
+        summary = [f"corpus/{domain}/ holds {len(entries)} entr(y/ies)"]
+        if required_attributes is not None:
+            report = corpus.coverage_report(
+                domain, required_attributes, covered_attributes or []
+            )
+            result["coverage"] = report.model_dump(mode="json")
+            summary.append(report.detail)
+
+        result["human_summary"] = ". ".join(summary) + "."
+        return result

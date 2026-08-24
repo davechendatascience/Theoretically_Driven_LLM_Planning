@@ -39,6 +39,7 @@ async def test_list_tools(server):
             "record_run_metrics",
             "update_constraint_status",
             "record_plan_outcome",
+            "survey_corpus",
         }
 
 

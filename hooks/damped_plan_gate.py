@@ -132,6 +132,21 @@ def main() -> None:
     except ValueError:
         sys.exit(0)  # outside the gated project: not our concern
 
+    # Human-supervised paths are denied FIRST, before always_allowed. Order is
+    # load-bearing: always_allowed contains ".damped-plan/**", which matches every
+    # protected path, so a check placed after it would be dead code.
+    # Read defensively so a gate.json written before this existed behaves as before.
+    if matches(rel_path, gate.get("human_supervised") or []):
+        decision(
+            "deny",
+            f"damped-plan gate: '{rel_path}' is HUMAN-SUPERVISED and an agent may "
+            f"not write it - not even under an approved plan. The corpus is filled "
+            f"by a human, commands.json and objective.md are authored by one, and "
+            f".damped-plan/artifacts/ is captured by run_validation; an agent "
+            f"writing there destroys the signal the path carries. Ask the human to "
+            f"make this change.",
+        )
+
     if matches(rel_path, gate.get("always_allowed") or []):
         sys.exit(0)
 

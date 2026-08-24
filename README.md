@@ -20,6 +20,9 @@ use, and why the gate warns instead of refusing:
 [docs/evidence_discipline.md](docs/evidence_discipline.md). Open design work —
 pre-registration, a commitment ladder, the harness as model structure:
 [docs/tempering_and_preregistration.md](docs/tempering_and_preregistration.md).
+Candidate ideas carrying their evidence and the observation that would refute
+each one — the output of an out-of-band research loop, none of it approved:
+[docs/research_trails.md](docs/research_trails.md).
 
 ## What it enforces
 
@@ -58,7 +61,7 @@ pre-registration, a commitment ladder, the harness as model structure:
 
 ```bash
 uv sync
-uv run pytest -q                          # 153 tests
+uv run pytest -q                          # 260 tests
 uv run python scripts/demo_end_to_end.py  # full blocked->measure->unblock flow
 ```
 
@@ -150,7 +153,7 @@ JSON — human-diffable, git-friendly:
 
 v0 implements the blueprint's Phases 1–4 plus the enforcement hooks:
 pure-Python kernel (models, closure validator, residuals, decision policy),
-JSON store with event log, MCP server (11 tools, 7 resources, 4 prompts), both
+JSON store with event log, MCP server (12 tools, 7 resources, 4 prompts), both
 PreToolUse hooks, the allowlisted command runner (`run_validation` +
 `.damped-plan/commands.json`) that converts captured command results into
 evidence automatically, and the structured-observation channel

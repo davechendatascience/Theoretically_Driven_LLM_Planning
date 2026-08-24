@@ -1,0 +1,152 @@
+{
+  "preregistration": {
+    "plan_id": "P-0001",
+    "note": "Every band, baseline, observation and prediction id below is fixed by P-0001's intervention.description and must be diffable against it. Changing a value here without changing the plan is a preregistration violation.",
+    "baseline": {"total_ms": 100, "parse_ms": 60, "emit_ms": 40},
+    "context_fixed": [
+      "total_ms = parse_ms + emit_ms by definition",
+      "corpus, hardware and build fixed",
+      "no stage other than parse and emit contributes to total_ms"
+    ]
+  },
+  "fixtures": [
+    {
+      "id": "F1",
+      "title": "arithmetic-contradiction, all bands present",
+      "rationale": "Every value is in band, but 60+40=100 does not equal 75, so no mechanism could have produced this set.",
+      "caught_rule": "any_mismatch",
+      "caught_prediction_id": null,
+      "contract": {
+        "context_fixed": [
+          "total_ms = parse_ms + emit_ms by definition",
+          "corpus, hardware and build fixed",
+          "no stage other than parse and emit contributes to total_ms"
+        ],
+        "predictions": [
+          {"id": "P-total", "metric_id": "total_ms", "direction": "decrease", "expected_range": [70, 80]},
+          {"id": "P-parse", "metric_id": "parse_ms", "direction": "no_change", "expected_range": [59, 61]},
+          {"id": "P-emit", "metric_id": "emit_ms", "direction": "no_change", "expected_range": [39, 41]}
+        ],
+        "disconfirming_patterns": [
+          {"id": "D-001", "description": "total_ms moves while both components are held fixed", "suggested_model_expansion": "add a cross-metric consistency term relating total to its components"}
+        ]
+      },
+      "observations": {"total_ms": 75, "parse_ms": 60, "emit_ms": 40},
+      "expected_status": "consistent",
+      "expected_violated": [],
+      "expected_caught": false
+    },
+    {
+      "id": "F2a",
+      "title": "invariance-violation WITH band",
+      "rationale": "Arithmetic is honest (35+40=75) but parse_ms leaves its declared no_change band.",
+      "caught_rule": "violated_contains",
+      "caught_prediction_id": "P-parse",
+      "contract": {
+        "context_fixed": [
+          "total_ms = parse_ms + emit_ms by definition",
+          "corpus, hardware and build fixed",
+          "no stage other than parse and emit contributes to total_ms"
+        ],
+        "predictions": [
+          {"id": "P-total", "metric_id": "total_ms", "direction": "decrease", "expected_range": [70, 80]},
+          {"id": "P-parse", "metric_id": "parse_ms", "direction": "no_change", "expected_range": [59, 61]},
+          {"id": "P-emit", "metric_id": "emit_ms", "direction": "no_change", "expected_range": [39, 41]}
+        ],
+        "disconfirming_patterns": [
+          {"id": "D-001", "description": "a component declared invariant moves", "suggested_model_expansion": "require expected_range whenever direction is no_change"}
+        ]
+      },
+      "observations": {"total_ms": 75, "parse_ms": 35, "emit_ms": 40},
+      "expected_status": "mismatch",
+      "expected_violated": ["P-parse"],
+      "expected_caught": true
+    },
+    {
+      "id": "F2b",
+      "title": "invariance-violation DIRECTION-ONLY (the codebase's own idiom)",
+      "rationale": "Identical observations to F2a; only the encoding differs. P-parse and P-emit carry no expected_range, so predictive.py:89-90 files them inconclusive before any comparison. Its caught-criterion is unsatisfiable by construction under this encoding - F2b scores as caught only if the source read is wrong.",
+      "caught_rule": "violated_contains",
+      "caught_prediction_id": "P-parse",
+      "wiring_exempt_prediction_ids": ["P-parse", "P-emit"],
+      "contract": {
+        "context_fixed": [
+          "total_ms = parse_ms + emit_ms by definition",
+          "corpus, hardware and build fixed",
+          "no stage other than parse and emit contributes to total_ms"
+        ],
+        "predictions": [
+          {"id": "P-total", "metric_id": "total_ms", "direction": "decrease", "expected_range": [70, 80]},
+          {"id": "P-parse", "metric_id": "parse_ms", "direction": "no_change"},
+          {"id": "P-emit", "metric_id": "emit_ms", "direction": "no_change"}
+        ],
+        "disconfirming_patterns": [
+          {"id": "D-001", "description": "a component declared invariant moves", "suggested_model_expansion": "require expected_range whenever direction is no_change"}
+        ]
+      },
+      "observations": {"total_ms": 75, "parse_ms": 35, "emit_ms": 40},
+      "expected_status": "consistent",
+      "expected_violated": [],
+      "expected_caught": false
+    },
+    {
+      "id": "F3",
+      "title": "honest-impossible, all bands present (range-comparator anchor)",
+      "rationale": "Arithmetic honest; total_ms simply did not move and is out of band. If this is missed, the range comparator itself is broken and no other reading is interpretable.",
+      "caught_rule": "violated_contains",
+      "caught_prediction_id": "P-total",
+      "contract": {
+        "context_fixed": [
+          "total_ms = parse_ms + emit_ms by definition",
+          "corpus, hardware and build fixed",
+          "no stage other than parse and emit contributes to total_ms"
+        ],
+        "predictions": [
+          {"id": "P-total", "metric_id": "total_ms", "direction": "decrease", "expected_range": [70, 80]},
+          {"id": "P-parse", "metric_id": "parse_ms", "direction": "no_change", "expected_range": [59, 61]},
+          {"id": "P-emit", "metric_id": "emit_ms", "direction": "no_change", "expected_range": [39, 41]}
+        ],
+        "disconfirming_patterns": [
+          {"id": "D-001", "description": "the targeted metric does not move at all", "suggested_model_expansion": "revisit whether the intervention reaches the targeted stage"}
+        ]
+      },
+      "observations": {"total_ms": 100, "parse_ms": 60, "emit_ms": 40},
+      "expected_status": "mismatch",
+      "expected_violated": ["P-total"],
+      "expected_caught": true
+    },
+    {
+      "id": "F4",
+      "title": "control, genuinely satisfiable (not-everything-fails anchor)",
+      "rationale": "Observations are IDENTICAL to F2a (75/35/40); only the declared contract differs, so F2a's expected mismatch cannot be attributed to the data.",
+      "caught_rule": "control",
+      "caught_prediction_id": null,
+      "contract": {
+        "context_fixed": [
+          "total_ms = parse_ms + emit_ms by definition",
+          "corpus, hardware and build fixed",
+          "no stage other than parse and emit contributes to total_ms"
+        ],
+        "predictions": [
+          {"id": "P-total", "metric_id": "total_ms", "direction": "decrease", "expected_range": [70, 80]},
+          {"id": "P-parse", "metric_id": "parse_ms", "direction": "decrease", "expected_range": [34, 36]},
+          {"id": "P-emit", "metric_id": "emit_ms", "direction": "no_change", "expected_range": [39, 41]}
+        ],
+        "disconfirming_patterns": [
+          {"id": "D-001", "description": "a component declared invariant moves", "suggested_model_expansion": "require expected_range whenever direction is no_change"}
+        ]
+      },
+      "observations": {"total_ms": 75, "parse_ms": 35, "emit_ms": 40},
+      "expected_status": "consistent",
+      "expected_violated": [],
+      "expected_caught": null
+    }
+  ],
+  "expected_metrics": {
+    "fixture_wiring_errors": 0,
+    "f3_anchor_held": 1,
+    "impossible_fixtures_caught": 2,
+    "control_fixture_passed": 1,
+    "f2a_f2b_divergence": 1
+  }
+}

@@ -534,6 +534,7 @@ def _normalize_contract(raw: Any) -> PredictiveContract | None:
                 expected_pattern=str(p.get("expected_pattern") or p.get("prediction") or ""),
                 confidence=confidence,
                 rationale=str(p.get("rationale") or ""),
+                basis=_str_list(p.get("basis")),
             )
         )
 
@@ -555,6 +556,7 @@ def _normalize_contract(raw: Any) -> PredictiveContract | None:
                 implication=str(d.get("implication") or ""),
                 suggested_model_expansion=d.get("suggested_model_expansion")
                 or d.get("expansion"),
+                basis=_str_list(d.get("basis")),
             )
         )
 
@@ -566,7 +568,11 @@ def _normalize_contract(raw: Any) -> PredictiveContract | None:
         next_expansions=_str_list(
             data.get("next_expansions") or data.get("next_model_expansion_if_failed")
         ),
+        metric_relations=_str_list(data.get("metric_relations")),
     )
+    # metric_relations is deliberately NOT part of this emptiness test: a
+    # contract carrying only relations is still empty in the sense the gate
+    # means, and adding it here would change which contracts normalize to None.
     if (
         not contract.predictions
         and not contract.disconfirming_patterns

@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 HOOK = Path(__file__).resolve().parents[2] / "hooks" / "damped_plan_gate.py"
 
 
@@ -28,7 +30,12 @@ def run_hook(event: dict, env_mode: str | None = None) -> tuple[int, dict | None
     return proc.returncode, output
 
 
-def write_gate(tmp_path: Path, open_plans: list[dict], always: list[str] | None = None):
+def write_gate(
+    tmp_path: Path,
+    open_plans: list[dict],
+    always: list[str] | None = None,
+    human: list[str] | None = None,
+):
     gate_dir = tmp_path / ".damped-plan"
     gate_dir.mkdir(parents=True, exist_ok=True)
     (gate_dir / "gate.json").write_text(
@@ -39,9 +46,18 @@ def write_gate(tmp_path: Path, open_plans: list[dict], always: list[str] | None 
                 "open_plans": open_plans,
                 "always_allowed": always if always is not None else [".damped-plan/**", "docs/**", "*.md"],
                 "deny_message": "No approved plan covers this file.",
+                **({} if human is None else {"human_supervised": human}),
             }
         )
     )
+
+
+HUMAN_SUPERVISED = [
+    ".damped-plan/corpus/**",
+    ".damped-plan/commands.json",
+    ".damped-plan/objective.md",
+    ".damped-plan/artifacts/**",
+]
 
 
 def edit_event(tmp_path: Path, rel_path: str, tool: str = "Edit") -> dict:
@@ -160,3 +176,81 @@ def test_utf8_bom_payload_still_denies(tmp_path):
 def test_unparsable_payload_still_fails_open():
     code, output = run_hook_bytes(b"not json at all")
     assert code == 0 and output is None
+
+
+# --- human-supervised paths (P-0011) ----------------------------------------
+#
+# always_allowed contains ".damped-plan/**", which matches every protected path.
+# So these deny only if the check runs BEFORE it. A deny list placed after the
+# always_allowed exit is dead code and every test below would fail.
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".damped-plan/corpus/x.pdf",
+        ".damped-plan/corpus/reflexive-eval/deep/nested.url",
+        ".damped-plan/commands.json",
+        ".damped-plan/objective.md",
+        ".damped-plan/artifacts/x.json",
+        ".damped-plan/artifacts/run/out.txt",
+    ],
+)
+def test_human_supervised_denied_despite_always_allowed(tmp_path, rel):
+    write_gate(tmp_path, [], human=HUMAN_SUPERVISED)
+    code, out = run_hook(edit_event(tmp_path, rel))
+    assert code == 0
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert "HUMAN-SUPERVISED" in out["hookSpecificOutput"]["permissionDecisionReason"]
+
+
+def test_human_supervised_denied_even_under_a_covering_plan(tmp_path):
+    """Not even an approved plan may authorise it — this is the point."""
+    write_gate(
+        tmp_path,
+        [{"plan_id": "P-x", "allowed_files": [".damped-plan/corpus/**"]}],
+        human=HUMAN_SUPERVISED,
+    )
+    code, out = run_hook(edit_event(tmp_path, ".damped-plan/corpus/x.pdf"))
+    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".damped-plan/plans/P-1.json",
+        ".damped-plan/evidence/EV-1.json",
+        ".damped-plan/events.jsonl",
+        ".damped-plan/gate.json",
+        ".damped-plan/project.json",
+        ".damped-plan/corpus-notes.md",
+    ],
+)
+def test_ordinary_ledger_writes_still_allowed(tmp_path, rel):
+    """Over-denial control. A pattern that swallowed the store would block every
+    agent edit to the ledger — note the server itself writes in-process and never
+    passes through this hook, so the hazard is agent-side, not server-side."""
+    write_gate(tmp_path, [], human=HUMAN_SUPERVISED)
+    code, out = run_hook(edit_event(tmp_path, rel))
+    assert code == 0 and out is None, f"{rel} should be permitted, got {out}"
+
+
+def test_gate_without_the_key_behaves_as_before(tmp_path):
+    """Backward compatibility for every gate.json written before this existed."""
+    write_gate(tmp_path, [], human=None)
+    code, out = run_hook(edit_event(tmp_path, ".damped-plan/corpus/x.pdf"))
+    assert code == 0 and out is None
+
+
+def test_bash_still_bypasses_the_boundary(tmp_path):
+    """DOCUMENTS A HOLE rather than asserting a guarantee.
+
+    The hook gates Edit/Write/NotebookEdit only. An agent with shell access can
+    still author every protected path. If this test ever starts failing, the Bash
+    surface has been gated and the ledger conclusion in P-0011 can be widened.
+    """
+    write_gate(tmp_path, [], human=HUMAN_SUPERVISED)
+    code, out = run_hook(
+        edit_event(tmp_path, ".damped-plan/commands.json", tool="Bash")
+    )
+    assert code == 0 and out is None
