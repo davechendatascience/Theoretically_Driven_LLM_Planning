@@ -1,12 +1,12 @@
-.venv/
 __pycache__/
-*.pyc
+*.py[cod]
 *.egg-info/
+build/
 dist/
 .pytest_cache/
-.hypothesis/
-# dogfooding state for this repo itself
-.damped-plan/
-# written by scripts/install_integration.py: absolute paths and an interpreter
-# name valid only on the machine that generated it
-.claude/settings.local.json
+.venv/
+venv/
+
+# Derived belief cache — regenerable from evidence + declarations, never the
+# source of truth. The evidence ledger itself IS committed on purpose.
+.belief/cache/

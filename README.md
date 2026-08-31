@@ -1,195 +1,140 @@
-# damped-plan-mcp
+# Component Belief-Update MCP
 
-A local MCP server that acts as a **constraint-closure gate for LLM planning**.
-An LLM may retrieve knowledge and propose candidate actions freely, but it may
-not declare a nontrivial plan executable until the plan has an explicit goal
-with a metric, a hard-constraint audit, a causal hypothesis, a scoped
-intervention, a validation path, adopt/reject criteria, and a rollback story —
-and every hard constraint is evidence-backed `SAT`.
+Evidence-grounded belief state for a system modelled as components and
+interfaces. Design rules in [`docs/component_belief_mcp_design_rules.md`](docs/component_belief_mcp_design_rules.md),
+design in [`docs/component_belief_mcp_design.md`](docs/component_belief_mcp_design.md).
 
-Design blueprints: [docs/blueprint.md](docs/blueprint.md) (constraint
-closure) and [docs/damped-plan-mcp-bayesian-scope.md](docs/damped-plan-mcp-bayesian-scope.md)
-(predictive layer). Tool reference: [docs/tool_contracts.md](docs/tool_contracts.md).
-Claude Code setup: [docs/claude_code_integration.md](docs/claude_code_integration.md).
-Why this works on qualitative measures:
-[docs/damping_translation.md](docs/damping_translation.md). The predictive
-contract and posterior checks — the model-checking discipline borrowed from
-Gelman et al., *Bayesian Data Analysis* (3rd ed., CRC Press, 2013):
-[docs/predictive_layer.md](docs/predictive_layer.md). Which evidence channel to
-use, and why the gate warns instead of refusing:
-[docs/evidence_discipline.md](docs/evidence_discipline.md). Open design work —
-pre-registration, a commitment ladder, the harness as model structure:
-[docs/tempering_and_preregistration.md](docs/tempering_and_preregistration.md).
-Candidate ideas carrying their evidence and the observation that would refute
-each one — the output of an out-of-band research loop, none of it approved:
-[docs/research_trails.md](docs/research_trails.md).
+## The commitment
 
-## What it enforces
+An LLM agent is the primary caller, and an agent is a fluent producer of
+*plausible* numbers. So **the agent has no write path to a belief.** There is no
+`set_belief`, no free-text field a belief model reads. Beliefs are a pure
+function of `(belief-eligible evidence, declared priors, model version)`.
 
-- **`UNKNOWN` is never treated as `SAT`.** Implementation plans are `BLOCKED`
-  while any hard constraint is unresolved; marking one `SAT` requires recorded
-  evidence with provenance.
-- **Measurement before commitment.** A safe, reversible measurement plan that
-  directly targets the unknown is the one thing allowed through a closed gate.
-- **Plan drafting is separate from approval.** A plan becomes `EXECUTABLE`
-  only when a human approves it; AI self-approval is refused.
-- **Scoped execution.** An approved plan authorizes only its
-  `intervention.allowed_files` — enforced for real by an opt-in Claude Code
-  PreToolUse hook that reads the precomputed `.damped-plan/gate.json`.
-- **Review that cannot manufacture evidence.** The optional fresh-context
-  `plan-reviewer` agent attacks a plan before approval and holds no mutating
-  tools; a second PreToolUse hook denies it execution, so it cites recorded
-  artifacts instead of producing unrecorded numbers of its own.
-- **No silent "fixed".** `validated` outcomes require recorded evidence; every
-  state transition lands in an append-only `events.jsonl`.
-- **Numbers are recorded, not narrated.** `record_run_metrics` puts measured
-  values where the posterior check can actually read them and returns the
-  verdict in the same call; a plan-linked summary that states numerals while
-  the contract's metrics go unobserved comes back with a warning naming them.
-  It warns and never refuses — a mandatory field is satisfiable by fabricating
-  a value, which trades a visible problem for an invisible one.
-- **Escalation over repair loops.** After two failed sibling plans with no new
-  evidence, the recommendation is `escalate` (change the causal framing), not
-  another local patch.
-- **Predictive contracts.** New implementation/repair plans must state what
-  should move, what must stay invariant, under what fixed context, and which
-  observed patterns would refute the causal story — and a posterior predictive
-  check compares recorded observations against those predictions, turning
-  mismatch into a named model expansion instead of a generic failure.
+This is enforced by a missing tool, not by a prompt instruction.
 
-## Quick start
+| Channel | Tool | Belief-eligible |
+|---|---|---|
+| Server ran a declared test | `run_test` | yes — artifact + hash captured |
+| External import | `ingest` | yes — requires source + artifact |
+| Agent or human statement | `note` | **no** — it is testimony |
+
+## Install
 
 ```bash
-uv sync
-uv run pytest -q                          # 260 tests
-uv run python scripts/demo_end_to_end.py  # full blocked->measure->unblock flow
+pip install -e .
 ```
 
-## Set up for your project
-
-Four pieces, each opt-in, all configured in the *target* project (the repo
-whose changes you want gated). Full details in
-[docs/claude_code_integration.md](docs/claude_code_integration.md).
-
-The quickest route is the installer, which derives the absolute paths and a
-working interpreter name for the current host (Linux, macOS, or Windows) and
-merges into any config already there:
+Register with Claude Code via the included `.mcp.json`, or run directly:
 
 ```bash
-uv run python scripts/install_integration.py --target /path/to/project
-uv run python scripts/install_integration.py --target /path/to/project --dry-run
+PYTHONPATH=src python -m component_belief.server
 ```
 
-It is idempotent, and `--no-hooks` / `--no-skill` / `--no-reviewer` skip
-individual pieces. The manual steps it automates are below.
+## Declarations live in git, not in tools
 
-**1. Register the MCP server** — add `.mcp.json` at the target repo's root
-(or use `claude mcp add`, see the integration doc):
+Components, interfaces, contracts, tests, priors, and policies are declared in
+`belief.yaml`. The server reads it from **git HEAD, not the working tree** — so
+editing the file changes nothing until a human commits it.
+
+That is the entire approval gate for rule 10.5, and it costs zero tools and
+zero roundtrips. Uncommitted edits show as `PENDING` in `status`; a threshold
+lowered in the working tree cannot flip a verdict.
+
+> Caveat: this is exactly as strong as your commit discipline. If agents can
+> commit unattended, add CODEOWNERS on `belief.yaml` or require signed commits.
+
+## The loop
+
+```
+status(view="diagnose")  →  run_test(...)  →  status(view="belief")
+```
+
+Six tools total — `status`, `run_test`, `ingest`, `note`, `amend`, `decide` —
+because tool schemas are standing context in every session, paid whether or not
+the server is used.
+
+```
+CTR-grasp-reachable [normal, model_revision=v3] supported 0.91 [0.84,0.96] n=34
+CTR-grasp-reachable [low, model_revision=v3] insufficient n=3 (need 5 more)
+basis: evidence×37 set=a3f9c1 · model bb-1 · prior none
+next: run_test TST-grasp-ik conditions={low}  # closes the thin slice
+```
+
+`set=` is a hash of the exact evidence set, expandable with
+`status(view="trace", set=a3f9c1)`. An id *range* would be cheaper and would
+occasionally lie — slices use a non-contiguous subset once invalid trials and
+other buckets are dropped.
+
+## What it refuses to do
+
+- **Score an annotation.** `note()` is inert by construction.
+- **Issue a verdict from sparse data.** `insufficient_evidence` is checked
+  first, so n=2 can never present as a result.
+- **Pool incompatible evidence.** Trials differing on a declared
+  `compatibility_key` land in separate slices; a hardware swap reports
+  `not_comparable`, never "no regression detected".
+- **Recommend optimising what it cannot see.** If the leading suspect has no
+  test targeting it, `coverage_limited: true` and *no* optimisation
+  recommendation is produced. The answer is instrumentation.
+- **Score a declared metric off an exit code.** A test that declares
+  `ik_success` but emits nothing gets its trial excluded with
+  `missing_metrics`, not silently passed.
+- **Self-approve.** `adopt` and `rollback` will not record without `approver=`.
+
+## Writing tests
+
+A declared test writes trials to `$OUT` (expanded on every platform):
+
+```yaml
+tests:
+  - id: TST-grasp-ik
+    layer: component          # component | interface | e2e
+    targets: [CMP-grasp]
+    run: python tools/pytest_trials.py $OUT -- tests/test_grasp.py -q
+    metrics: [passed]
+    capture: [lighting, model_revision]
+```
 
 ```json
-{
-  "mcpServers": {
-    "damped-plan": {
-      "command": "uv",
-      "args": [
-        "--directory", "/absolute/path/to/damped-plan-mcp",
-        "run", "damped-plan-mcp"
-      ],
-      "env": {
-        "DAMPED_PLAN_DATA_DIR": "/absolute/path/to/your-project/.damped-plan"
-      }
-    }
-  }
-}
+{"trials": [{"metrics": {"ik_success": true}, "conditions": {"lighting": "low"}}]}
 ```
 
-Add `.damped-plan/` to the target project's `.gitignore` (or commit it if you
-want plans and evidence reviewed alongside code).
+`tools/pytest_trials.py` adapts any pytest suite, emitting one trial per test
+case — trial-level granularity is rule 3.1, and "the suite passed" throws away
+the evidence every later question needs.
 
-**2. Install the `/damped-plan` skill** (recommended — teaches Claude the
-workflow and auto-triggers on nontrivial changes):
+A test's version is the hash of its `run` line and metric spec, so editing a
+test mints a new version and beliefs stop pooling across the boundary. That is
+what stops "we improved the test and the number went up" from reading as
+progress.
+
+## Layout
+
+```
+belief.yaml                     declarations — human-owned, git-approved
+src/component_belief/
+  declarations.py               load from git HEAD, validate
+  model.py                      belief slices; no writer exists
+  diagnose.py                   four status classes, decision-relevance ranking
+  decide.py                     policies; the endpoint-disagreement estimator
+  planning.py                   round selection, every skip with a reason
+  runner.py                     test execution and artifact capture
+  views.py / render.py          the seven status views, compact output
+  stats.py                      Beta-Binomial (no SciPy dependency)
+  expr.py                       whitelisted AST rule evaluator, never eval()
+  store.py                      append-only JSONL ledger
+tools/pytest_trials.py          pytest -> trials adapter
+.belief/                        evidence, artifacts, events, decisions
+```
+
+## Tests
 
 ```bash
-mkdir -p .claude/skills
-cp -r /absolute/path/to/damped-plan-mcp/skills/damped-plan .claude/skills/
+PYTHONPATH=src python -m pytest tests -q
 ```
 
-**3. Enable the enforcement hooks** (optional — turn the gate from advisory
-into actual denials): add the PreToolUse entries from
-[hooks/README.md](hooks/README.md) to the target project's
-`.claude/settings.json`. `damped_plan_gate.py` (matcher
-`Edit|Write|NotebookEdit`) denies edits no approved plan covers;
-`damped_plan_reviewer_gate.py` (matcher `Bash|PowerShell`) denies *execution*
-to the reviewer agent while leaving read-only inspection open. Every other
-agent, including the main session, passes through untouched. Note the
-interpreter name is host-specific — see
-[Interpreter and shells](hooks/README.md#interpreter-and-shells).
-
-**4. Install the adversarial reviewer** (optional): copy
-`agents/plan-reviewer.md` into the target project's `.claude/agents/`. It
-reviews `ready_for_review` plans with fresh context and returns a verdict; it
-never approves anything.
-
-Then restart Claude Code in the target project (MCP servers connect at
-session start), approve the server when prompted, and verify with `/mcp`.
-First use: ask Claude to register the project's goals, hard constraints, and
-failure modes, then propose a change and watch it get gated.
-
-## How state is stored
-
-Everything lives in the target project's `.damped-plan/` directory as plain
-JSON — human-diffable, git-friendly:
-
-```text
-.damped-plan/
-├── project.json      goals, constraints (+statuses), failure modes, facts
-├── plans/P-0001.json one file per plan
-├── evidence/EV-0001.json
-├── events.jsonl      append-only audit log of every transition
-└── gate.json         derived snapshot the PreToolUse hook reads
-```
-
-## Status
-
-v0 implements the blueprint's Phases 1–4 plus the enforcement hooks:
-pure-Python kernel (models, closure validator, residuals, decision policy),
-JSON store with event log, MCP server (12 tools, 7 resources, 4 prompts), both
-PreToolUse hooks, the allowlisted command runner (`run_validation` +
-`.damped-plan/commands.json`) that converts captured command results into
-evidence automatically, and the structured-observation channel
-(`record_run_metrics` + the narrated-number warning) that feeds the posterior
-check.
-
-Deferred: dependency graph and drift analysis (Phase 5, which owns the
-still-stubbed `oscillation_risk`), robotics adapters (Phase 6).
-
-Known gaps, with the reasoning recorded in
-[docs/tempering_and_preregistration.md](docs/tempering_and_preregistration.md):
-there is **no project-level model document** — `ProjectState` records goals,
-constraints and failure modes (targets and limits) but no statement of the
-mechanism the project believes it is operating on, so each plan's
-`predictive_contract` is a local model with no parent to be consistent with and
-drift is undetectable; relatedly, `create_plan` auto-links a plan to *all*
-unmet goals when `goal_ids` is omitted (`normalize.py:369`), so closure passes
-without the author ever choosing a goal. Upstream of that sits **no human-only
-ultimate goal** — no terminal objective that each plan's goal is scored
-against. The data generating process the loop observes *is* the solution space
-that objective carves out, so without it there is no well-posed DGP for a parent
-model to model, no space in which "drift" is a movement, and no referent for
-"closer". Goals are also unprotected: `register_project`
-rebuilds a goal wholly from its payload (`normalize.py:215`), so an agent can
-loosen a `target`, silently drop the `metric_name` that made it measurable, or
-set `met: true` with no evidence, none of it recorded with before/after values.
-The one directory such an objective would live in is waved through by the
-gate's `always_allowed` default (`results.py:113`). The command registry has
-**no sanctioned author**: no MCP tool writes
-`.damped-plan/commands.json`, so an agent told to prefer `run_validation` can
-only comply by writing the allowlist itself — which the gate permits and which
-two of the three registry error messages explicitly instruct, template
-including `"allowed": true`. Only the third names a human, and it is the one
-branch a compliant agent never reaches. Contract fields are not hashed at
-first set, so "was this range fixed before the data existed?" is narrated
-rather than checkable. Commitment is binary (approved or not) with no probe
-rung, so `alternative_hypothesis_ids` is counted as a penalty and never carried
-as a live candidate. And the harness configuration that shapes what the agent
-may do appears in no ledger.
+73 tests. They assert the invariants above, not the implementation: that
+asserted evidence cannot move a posterior, that an uncommitted threshold cannot
+flip a verdict, that a hardware swap reports `not_comparable`, and that the
+rule language rejects `__import__`.

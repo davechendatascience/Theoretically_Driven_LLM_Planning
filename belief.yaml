@@ -1,0 +1,145 @@
+# Declarations for the component-belief MCP, applied to itself.
+#
+# This file is the approval gate. The server reads it from git HEAD, not the
+# working tree — editing it changes nothing until a human commits. Uncommitted
+# edits show up in `status` as PENDING and score no evidence.
+
+components:
+  - id: CMP-declarations
+    purpose: Load and validate belief.yaml from git HEAD
+    outputs: [IFC-declarations__model]
+    testable_capability: >-
+      Rejects unmeasurable contracts and non-node components, and refuses to
+      let uncommitted edits take effect
+    failure_modes:
+      - {id: FM-worktree-leak, observable: an uncommitted threshold change alters a verdict}
+      - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
+    remediation: Tighten validate(); the fatal-code set in Declarations.is_scorable
+
+  - id: CMP-belief-model
+    purpose: Compute belief slices from evidence, priors, and declarations
+    inputs: [IFC-declarations__model]
+    outputs: [IFC-model__diagnose]
+    testable_capability: >-
+      Produces a conditioned posterior per (contract, bucket, compat_group)
+      that no asserted evidence can influence
+    failure_modes:
+      - {id: FM-pollution, observable: an annotation changes a posterior}
+      - {id: FM-silent-pooling, observable: incompatible trials land in one slice}
+      - {id: FM-premature-verdict, observable: a verdict is issued below n_min}
+    remediation: model.eligible() and the slice key in compute_slices()
+
+  - id: CMP-diagnosis
+    purpose: Rank bottlenecks by decision relevance
+    inputs: [IFC-model__diagnose]
+    testable_capability: >-
+      Returns coverage_limited instead of an optimisation recommendation when
+      no test targets the leading candidate
+    failure_modes:
+      - {id: FM-optimise-the-unseen, observable: an optimisation is recommended for an uninstrumented component}
+      - {id: FM-e2e-attribution, observable: a component is blamed with no local observation}
+    remediation: diagnose() status assignment and the coverage_limited branch
+
+  - id: CMP-runner
+    purpose: Execute declared tests and capture artifacts
+    testable_capability: Records measured evidence with an artifact and hash, never transcribed
+    failure_modes:
+      - {id: FM-fabricated-metric, observable: a declared metric is synthesised from an exit code}
+    remediation: runner.run_test() synthesis branch
+
+interfaces:
+  - id: IFC-declarations__model
+    producer: CMP-declarations
+    consumer: CMP-belief-model
+    semantics: Validated contracts, priors, and condition buckets
+    producer_guarantees:
+      - contracts reaching the model are scorable
+      - condition predicates parse under the whitelist
+    consumer_assumptions:
+      - contracts reaching the model are scorable
+      - condition predicates parse under the whitelist
+
+  - id: IFC-model__diagnose
+    producer: CMP-belief-model
+    consumer: CMP-diagnosis
+    semantics: Belief slices with state, interval, and evidence ids
+    producer_guarantees:
+      - every slice carries its applicable conditions
+      - insufficient slices carry no verdict
+    consumer_assumptions:
+      - every slice carries its applicable conditions
+      - insufficient slices carry no verdict
+
+contracts:
+  - id: CTR-declarations-gate
+    subject: CMP-declarations
+    claim_type: capability
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true", target_rate: 0.95}
+    evaluable_by: [TST-declarations]
+    sufficiency: {n_min: 8, max_ci_width: 0.35}
+
+  - id: CTR-model-honest
+    subject: CMP-belief-model
+    claim_type: capability
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true", target_rate: 0.95}
+    evaluable_by: [TST-beliefs]
+    sufficiency: {n_min: 8, max_ci_width: 0.35}
+
+  - id: CTR-diagnosis-refuses-blind-optimisation
+    subject: CMP-diagnosis
+    claim_type: capability
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true", target_rate: 0.95}
+    evaluable_by: [TST-diagnose]
+    sufficiency: {n_min: 8, max_ci_width: 0.35}
+
+  - id: CTR-surface-intact
+    subject: CMP-runner
+    claim_type: capability
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true", target_rate: 0.95}
+    evaluable_by: [TST-server]
+    sufficiency: {n_min: 8, max_ci_width: 0.35}
+
+tests:
+  - id: TST-declarations
+    layer: component
+    targets: [CMP-declarations]
+    run: python tools/pytest_trials.py $OUT -- tests/test_declarations.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+
+  - id: TST-beliefs
+    layer: component
+    targets: [CMP-belief-model]
+    run: python tools/pytest_trials.py $OUT -- tests/test_beliefs.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+
+  - id: TST-diagnose
+    layer: component
+    targets: [CMP-diagnosis]
+    run: python tools/pytest_trials.py $OUT -- tests/test_diagnose_decide.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+
+  - id: TST-server
+    layer: e2e
+    targets: [CMP-runner]
+    run: python tools/pytest_trials.py $OUT -- tests/test_server.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    mandatory: true
+
+priors: []
+
+policies:
+  - id: POL-release
+    criteria:
+      - {slice: CTR-declarations-gate, require: supported}
+      - {slice: CTR-model-honest, require: supported}
+      - {slice: CTR-diagnosis-refuses-blind-optimisation, require: supported}
+      - {safety_gates: all_passed}
+    weights: null

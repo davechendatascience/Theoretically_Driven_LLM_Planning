@@ -1,13 +1,11 @@
 {
   "mcpServers": {
-    "damped-plan": {
-      "command": "uv",
-      "args": [
-        "--directory",
-        ".",
-        "run",
-        "damped-plan-mcp"
-      ]
+    "component-belief": {
+      "command": "python",
+      "args": ["-m", "component_belief.server"],
+      "env": {
+        "PYTHONPATH": "src"
+      }
     }
   }
 }
