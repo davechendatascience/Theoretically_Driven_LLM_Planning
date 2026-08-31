@@ -169,7 +169,8 @@ def test_goal_distance_is_arithmetic():
 # --- migration ------------------------------------------------------------
 
 def test_migrates_a_real_v1_store(tmp_path: Path):
-    src = Path("/home/edge-host/Documents/GitHub/robot-navigation-planning/.damped-plan")
+    from plan_auto.config import resolve_data_dir
+    src = resolve_data_dir(Path("/home/edge-host/Documents/GitHub/robot-navigation-planning"))
     if not src.exists():
         pytest.skip("live store not present")
     data, rep = migrate(src)

@@ -1,6 +1,6 @@
 # Evidence discipline: which channel, and why the gate warns instead of refusing
 
-Evidence enters a damped-plan store through three doors. Choosing the wrong one
+Evidence enters a plan-auto store through three doors. Choosing the wrong one
 is the most common way a project ends up with a ledger full of claims that
 nothing can check.
 

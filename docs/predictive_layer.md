@@ -1,6 +1,6 @@
 # The predictive layer
 
-Blueprint: [damped-plan-mcp-bayesian-scope.md](damped-plan-mcp-bayesian-scope.md).
+Blueprint: [plan-auto-bayesian-scope.md](plan-auto-bayesian-scope.md).
 This doc describes what is implemented (Phases B–D, deterministic; Phase E —
 numeric inference — deliberately deferred until repeated structured
 measurements exist).

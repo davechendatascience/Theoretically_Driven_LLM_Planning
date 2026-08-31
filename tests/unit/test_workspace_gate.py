@@ -11,12 +11,12 @@ import json
 
 from conftest import make_project
 
-from damped_plan_mcp.models import ConstraintStatus, PlanStatus
-from damped_plan_mcp.server import build_server
-from damped_plan_mcp.store import JsonStore
-from damped_plan_mcp.store import events as event_log
-from damped_plan_mcp.store.gate import write_gate
-from damped_plan_mcp.workspace import Workspace
+from plan_auto.models import ConstraintStatus, PlanStatus
+from plan_auto.server import build_server
+from plan_auto.store import JsonStore
+from plan_auto.store import events as event_log
+from plan_auto.store.gate import write_gate
+from plan_auto.workspace import Workspace
 
 
 def test_constraint_update_refreshes_gate_with_zero_plans(tmp_path):

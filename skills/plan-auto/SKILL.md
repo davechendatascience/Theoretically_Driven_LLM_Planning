@@ -1,11 +1,11 @@
 ---
-name: damped-plan
-description: Gate nontrivial changes through the damped-plan MCP — structured plans, constraint closure, measurement before commitment. Use before implementing any multi-file change, new algorithm/model/dependency, data or evaluation change, or after repeated failed fix attempts.
+name: plan-auto
+description: Gate nontrivial changes through the plan-auto MCP — structured plans, constraint closure, measurement before commitment. Use before implementing any multi-file change, new algorithm/model/dependency, data or evaluation change, or after repeated failed fix attempts.
 ---
 
 # Damped-plan workflow
 
-You are working in a project gated by the damped-plan MCP server. For any
+You are working in a project gated by the plan-auto MCP server. For any
 nontrivial change — multi-file edits, a new algorithm/model/loss/planner, a
 new dependency or module, a data/evaluation/simulator change — follow this
 loop instead of editing immediately:

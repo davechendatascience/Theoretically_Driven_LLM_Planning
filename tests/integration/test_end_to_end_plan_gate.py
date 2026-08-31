@@ -12,7 +12,7 @@ import json
 import pytest
 from mcp import Client
 
-from damped_plan_mcp.server import build_server
+from plan_auto.server import build_server
 
 PROJECT = {
     "name": "lehome",
@@ -123,11 +123,11 @@ def payload(result):
 
 @pytest.fixture
 def server(tmp_path):
-    return build_server(tmp_path / ".damped-plan")
+    return build_server(tmp_path / ".plan-auto")
 
 
 async def test_full_gate_flow(server, tmp_path):
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     async with Client(server) as client:
         # C-safety is registered UNSAT-free but UNKNOWN; mark it SAT via evidence
         # so only C-compute stays unknown.

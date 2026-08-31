@@ -1,7 +1,7 @@
 """MCP prompts (blueprint §16.2): reusable planning-discipline instructions."""
 
 COMPILE_PROJECT_STATE = """\
-Compile the current project into structured state for the damped-plan MCP.
+Compile the current project into structured state for the plan-auto MCP.
 Do NOT propose a method or solution yet.
 
 Extract and register via register_project:

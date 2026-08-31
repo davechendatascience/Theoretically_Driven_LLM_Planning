@@ -8,10 +8,10 @@ import sys
 
 import pytest
 
-from damped_plan_mcp.models import PlanStatus
-from damped_plan_mcp.services import command_runner
-from damped_plan_mcp.services.command_runner import CommandRunnerError
-from damped_plan_mcp.workspace import Workspace, WorkspaceError
+from plan_auto.models import PlanStatus
+from plan_auto.services import command_runner
+from plan_auto.services.command_runner import CommandRunnerError
+from plan_auto.workspace import Workspace, WorkspaceError
 
 
 def write_registry(data_dir, entries):
@@ -49,7 +49,7 @@ def test_shell_string_argv_refused(tmp_path):
 
 
 def test_run_captures_output_and_artifact(tmp_path):
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     write_registry(
         data_dir,
         {"hello": {"allowed": True,
@@ -67,7 +67,7 @@ def test_run_captures_output_and_artifact(tmp_path):
 
 
 def test_run_executes_in_project_root(tmp_path):
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     write_registry(
         data_dir,
         {"pwd": {"allowed": True,
@@ -78,7 +78,7 @@ def test_run_executes_in_project_root(tmp_path):
 
 
 def test_timeout_enforced(tmp_path):
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     write_registry(
         data_dir,
         {"sleepy": {"allowed": True, "timeout_s": 1,
@@ -91,7 +91,7 @@ def test_timeout_enforced(tmp_path):
 
 
 def test_missing_executable_instructs(tmp_path):
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     write_registry(data_dir, {"ghost": {"allowed": True, "argv": ["no-such-bin-xyz"]}})
     with pytest.raises(CommandRunnerError, match="failed to start"):
         command_runner.run_command(data_dir, "ghost")

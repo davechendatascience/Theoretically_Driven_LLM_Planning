@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from conftest import make_evidence, make_plan, make_project
 
-from damped_plan_mcp.models import (
+from plan_auto.models import (
     MetricObservation,
     NextAction,
     PlanKind,
@@ -13,9 +13,9 @@ from damped_plan_mcp.models import (
     Prediction,
     DisconfirmingPattern,
 )
-from damped_plan_mcp.services import predictive
-from damped_plan_mcp.services.evaluation import evaluate_plan
-from damped_plan_mcp.services.normalize import normalize_plan
+from plan_auto.services import predictive
+from plan_auto.services.evaluation import evaluate_plan
+from plan_auto.services.normalize import normalize_plan
 
 
 CONTRACT = PredictiveContract(

@@ -1,7 +1,7 @@
 # Tool contracts
 
-The server is bound to one target project via `DAMPED_PLAN_DATA_DIR` (its
-`.damped-plan/` directory), so no tool takes a `project_id`. All entity
+The server is bound to one target project via `PLAN_AUTO_DATA_DIR` (its
+`.plan-auto/` directory), so no tool takes a `project_id`. All entity
 payloads are forgiving: missing optional structure degrades a plan to
 `draft`/`under_specified` with repair instructions instead of erroring; IDs
 and timestamps are auto-generated; enums are coerced case-insensitively.
@@ -96,7 +96,7 @@ command registry and converts the captured result into evidence
 automatically — the mechanical alternative to narrating command output into
 `record_evidence`.
 
-The registry is `.damped-plan/commands.json` in the target project:
+The registry is `.plan-auto/commands.json` in the target project:
 
 ```json
 {
@@ -113,7 +113,7 @@ The registry is `.damped-plan/commands.json` in the target project:
 Rules: argv arrays only (`shell=False`, no interpolation or templating);
 timeout enforced (default 600 s, cap 3600 s); working directory pinned to the
 project root; full stdout/stderr written to an immutable artifact under
-`.damped-plan/artifacts/`. The validation step's `command` field must name a
+`.plan-auto/artifacts/`. The validation step's `command` field must name a
 registered id (set it before approval — approved plans cannot be edited), and
 the plan must be `approved`/`executable`/`executing`; the first run promotes
 `executable` → `executing`.

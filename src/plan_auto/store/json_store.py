@@ -1,6 +1,6 @@
 """JSON file store: atomic writes, advisory lock, internal version bumps.
 
-Layout inside the data dir (the target project's `.damped-plan/`):
+Layout inside the data dir (the target project's `.plan-auto/`):
 
     project.json        ProjectState
     plans/P-0001.json   one file per Plan

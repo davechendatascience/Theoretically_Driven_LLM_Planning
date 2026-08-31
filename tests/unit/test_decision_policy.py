@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 from conftest import make_evidence, make_plan, make_project
 
-from damped_plan_mcp.models import EvidencePolarity, NextAction, PlanStatus
-from damped_plan_mcp.services.evaluation import evaluate_plan
+from plan_auto.models import EvidencePolarity, NextAction, PlanStatus
+from plan_auto.services.evaluation import evaluate_plan
 
 
 def test_refuting_evidence_recommends_repair():

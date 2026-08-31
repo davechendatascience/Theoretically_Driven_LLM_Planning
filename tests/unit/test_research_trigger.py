@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from damped_plan_mcp.models import Plan, PlanKind
-from damped_plan_mcp.services import corpus
-from damped_plan_mcp.services.normalize import normalize_plan
+from plan_auto.models import Plan, PlanKind
+from plan_auto.services import corpus
+from plan_auto.services.normalize import normalize_plan
 
 RESOLVES = "corpus:reflexive-eval/bda3-ch6.pdf"
 ABSENT = "corpus:reflexive-eval/never-added.pdf"
@@ -133,7 +133,7 @@ def test_no_contract_is_vacuously_complete(data_dir: Path) -> None:
 
 
 def _evaluate(plan: Plan):
-    from damped_plan_mcp.services.evaluation import evaluate_plan
+    from plan_auto.services.evaluation import evaluate_plan
     from tests.conftest import make_project
     return evaluate_plan(plan, make_project(), [plan], [])
 
@@ -185,10 +185,10 @@ def test_warning_does_not_gate(data_dir: Path) -> None:
 async def test_research_targets_reachable_through_the_mcp_tool(tmp_path) -> None:
     from mcp import Client
 
-    from damped_plan_mcp.server import build_server
+    from plan_auto.server import build_server
     from tests.integration.test_mcp_tools import payload
 
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     dom = data_dir / "corpus" / "reflexive-eval"
     dom.mkdir(parents=True)
     (dom / "bda3-ch6.pdf").write_text("stub", encoding="utf-8")

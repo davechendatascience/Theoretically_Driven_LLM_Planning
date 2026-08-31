@@ -4,10 +4,10 @@ import json
 
 from conftest import make_evidence, make_plan, make_project
 
-from damped_plan_mcp.models import ConstraintStatus, PlanStatus
-from damped_plan_mcp.store import JsonStore
-from damped_plan_mcp.store import events as event_log
-from damped_plan_mcp.store.gate import write_gate
+from plan_auto.models import ConstraintStatus, PlanStatus
+from plan_auto.store import JsonStore
+from plan_auto.store import events as event_log
+from plan_auto.store.gate import write_gate
 
 
 def test_project_round_trip_and_version_bump(tmp_path):
@@ -56,7 +56,7 @@ def test_gate_closed_without_approved_plans(tmp_path):
     assert snapshot.unresolved_hard_constraints == ["C-compute"]
     on_disk = json.loads((tmp_path / "gate.json").read_text())
     assert on_disk["gate_open"] is False
-    assert "damped-plan" in on_disk["deny_message"]
+    assert "plan-auto" in on_disk["deny_message"]
 
 
 def test_gate_open_lists_allowed_files(tmp_path):

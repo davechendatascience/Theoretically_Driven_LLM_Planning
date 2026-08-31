@@ -2,7 +2,7 @@
 
 Plans reference registered command ids, never shell strings. The registry is
 **human-maintained** and lives in the target project's
-`.damped-plan/commands.json`:
+`.plan-auto/commands.json`:
 
     {
       "unit_tests": {
@@ -18,7 +18,7 @@ Safety properties:
 - argv arrays executed with shell=False; no interpolation, no templating in v0
 - timeout enforced (per-command, capped)
 - working directory pinned to the project root (parent of the data dir)
-- full output captured to an immutable artifact under .damped-plan/artifacts/
+- full output captured to an immutable artifact under .plan-auto/artifacts/
 
 Honest limit: the registry file is plain JSON in the data dir, so it is
 allowlist-by-convention, not a security boundary against an actor who can

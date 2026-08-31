@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from damped_plan_mcp.services import corpus
+from plan_auto.services import corpus
 
 # Fixed in P-0004's plan text. Each contains the substring "corpus"; none is
 # corpus-scoped under a structural, case-sensitive prefix parse. A substring

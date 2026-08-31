@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from conftest import make_project
 
-from damped_plan_mcp.models import ConstraintStatus
-from damped_plan_mcp.services.constraint_service import (
+from plan_auto.models import ConstraintStatus
+from plan_auto.services.constraint_service import (
     ConstraintUpdateError,
     apply_constraint_update,
 )

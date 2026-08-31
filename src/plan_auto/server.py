@@ -1,7 +1,7 @@
 """MCP server: thin decorator layer over Workspace.
 
-Single-project server — bound to one target project's `.damped-plan/`
-directory via DAMPED_PLAN_DATA_DIR, so no tool takes a project_id.
+Single-project server — bound to one target project's `.plan-auto/`
+directory via PLAN_AUTO_DATA_DIR, so no tool takes a project_id.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from .store import gate as gate_store
 from .workspace import Workspace
 
 INSTRUCTIONS = """\
-damped-plan is a constraint-closure gate for nontrivial changes. Workflow:
+plan-auto is a constraint-closure gate for nontrivial changes. Workflow:
 1. register_project once (goals with metrics, hard constraints, failure modes).
 2. Before implementing anything nontrivial, create_plan; the returned
    evaluation says exactly what is missing or blocking.
@@ -48,7 +48,7 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
                 workspace.store, existing_project, workspace.store.list_plans()
             )
 
-    server = MCPServer("damped-plan", instructions=INSTRUCTIONS)
+    server = MCPServer("plan-auto", instructions=INSTRUCTIONS)
 
     # -- tools ---------------------------------------------------------------
 
@@ -141,7 +141,7 @@ def build_server(data_dir: Path | None = None) -> MCPServer:
     @server.tool(
         description=(
             "Execute an approved plan's validation step through the allowlisted "
-            "command registry (.damped-plan/commands.json: argv arrays only, no "
+            "command registry (.plan-auto/commands.json: argv arrays only, no "
             "shell). Captures stdout/stderr/exit code to an artifact and "
             "auto-records evidence linked to the plan (exit 0 = supports, else "
             "refutes). The plan must be approved; the step's 'command' field must "

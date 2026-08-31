@@ -1,7 +1,7 @@
 {
   "plan_id": "P-0001",
   "generated_at": "2026-08-24T10:14:27.072803+00:00",
-  "provenance": "agent-authored script, not run_validation; no exit code and no event back this file. Kept outside .damped-plan/artifacts/ deliberately.",
+  "provenance": "agent-authored script, not run_validation; no exit code and no event back this file. Kept outside .plan-auto/artifacts/ deliberately.",
   "fixture_source": "tests/probe/fixtures/impossible_contracts.json",
   "results": [
     {

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from conftest import make_plan, make_project
 
-from damped_plan_mcp.models import (
+from plan_auto.models import (
     ConstraintStatus,
     NextAction,
     PlanConstraintAudit,
     PlanKind,
     PlanStatus,
 )
-from damped_plan_mcp.services import plan_validation
-from damped_plan_mcp.services.evaluation import evaluate_plan
+from plan_auto.services import plan_validation
+from plan_auto.services.evaluation import evaluate_plan
 
 
 def test_valid_implementation_plan_is_executable():

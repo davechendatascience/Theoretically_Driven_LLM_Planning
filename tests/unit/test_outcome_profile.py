@@ -12,7 +12,8 @@ import glob
 import json
 from pathlib import Path
 
-from damped_plan_mcp.services.outcomes import outcome_profile
+from plan_auto.services.outcomes import outcome_profile
+from plan_auto.config import resolve_data_dir
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -20,7 +21,7 @@ REPO = Path(__file__).resolve().parents[2]
 def live_plans() -> list[dict]:
     return [
         json.loads(Path(f).read_text(encoding="utf-8"))
-        for f in sorted(glob.glob(str(REPO / ".damped-plan" / "plans" / "*.json")))
+        for f in sorted(glob.glob(str(resolve_data_dir(REPO) / "plans" / "*.json")))
     ]
 
 

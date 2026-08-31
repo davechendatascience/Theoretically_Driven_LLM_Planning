@@ -6,7 +6,7 @@
 Build **one MCP server** and **one canonical project-state store**:
 
 ```text
-damped-plan-mcp
+plan-auto
 ```
 
 Do not build a separate Bayesian MCP in the first version.
@@ -681,7 +681,7 @@ Keep a single MCP unless one or more of these conditions holds:
 If a split occurs later, preserve shared IDs and schemas:
 
 ```text
-damped-plan-mcp
+plan-auto
     → PlanContext + EvidenceRef
 
 bayesian-workflow-mcp

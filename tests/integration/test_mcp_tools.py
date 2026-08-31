@@ -7,12 +7,12 @@ import json
 import pytest
 from mcp import Client
 
-from damped_plan_mcp.server import build_server
+from plan_auto.server import build_server
 
 
 @pytest.fixture
 def server(tmp_path):
-    return build_server(tmp_path / ".damped-plan")
+    return build_server(tmp_path / ".plan-auto")
 
 
 def payload(result):
@@ -123,7 +123,7 @@ async def test_resources_readable(server):
 async def test_run_validation_end_to_end(server, tmp_path):
     import sys
 
-    data_dir = tmp_path / ".damped-plan"
+    data_dir = tmp_path / ".plan-auto"
     data_dir.mkdir(parents=True, exist_ok=True)
     (data_dir / "commands.json").write_text(
         json.dumps(

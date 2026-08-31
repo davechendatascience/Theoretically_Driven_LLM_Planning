@@ -1,10 +1,10 @@
-# damped-plan gate hook (opt-in)
+# plan-auto gate hook (opt-in)
 
-`damped_plan_gate.py` is a stdlib-only Claude Code **PreToolUse** hook that
-gives the damped-plan gate real teeth: it denies `Edit`/`Write`/`NotebookEdit`
+`plan_auto_gate.py` is a stdlib-only Claude Code **PreToolUse** hook that
+gives the plan-auto gate real teeth: it denies `Edit`/`Write`/`NotebookEdit`
 calls for files not covered by an approved plan's `allowed_files`.
 
-It reads the precomputed `.damped-plan/gate.json` (rewritten by the MCP server
+It reads the precomputed `.plan-auto/gate.json` (rewritten by the MCP server
 on every mutation) — it never starts the server, so it adds only a few
 milliseconds per edit.
 
@@ -31,7 +31,7 @@ To write it by hand instead, add to the target project's
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /absolute/path/to/damped-plan-mcp/hooks/damped_plan_gate.py"
+            "command": "python3 /absolute/path/to/plan-auto/hooks/plan_auto_gate.py"
           }
         ]
       }
@@ -44,8 +44,8 @@ To write it by hand instead, add to the target project's
 
 - Finds `gate.json` by walking up from the edited file (falls back to `cwd`).
   **No gate file → silent allow** — the hook never interferes with projects
-  that don't use damped-plan.
-- Paths matching `always_allowed` (default: `.damped-plan/**`, `docs/**`,
+  that don't use plan-auto.
+- Paths matching `always_allowed` (default: `.plan-auto/**`, `docs/**`,
   `*.md`) are always editable, so notes and the plan store itself stay
   friction-free.
 - Otherwise the file must match some approved plan's `allowed_files` globs
@@ -53,7 +53,7 @@ To write it by hand instead, add to the target project's
 - Deny messages carry the server's precomputed explanation of what to do
   next (create a measurement plan, extend allowed_files and re-evaluate, ...).
 
-## Modes (`DAMPED_PLAN_HOOK_MODE` env var)
+## Modes (`PLAN_AUTO_HOOK_MODE` env var)
 
 | Mode | Uncovered file | Corrupt/unreadable gate.json |
 |---|---|---|
@@ -62,14 +62,14 @@ To write it by hand instead, add to the target project's
 | `strict` | deny | deny (fail-closed) |
 
 Set the mode in the same settings entry, e.g.
-`"command": "DAMPED_PLAN_HOOK_MODE=warn python3 /path/to/damped_plan_gate.py"`.
+`"command": "PLAN_AUTO_HOOK_MODE=warn python3 /path/to/plan_auto_gate.py"`.
 
 ---
 
-# damped-plan reviewer gate hook (opt-in)
+# plan-auto reviewer gate hook (opt-in)
 
-`damped_plan_reviewer_gate.py` is the second stdlib-only **PreToolUse** hook.
-Where `damped_plan_gate.py` stops the *implementer* from editing files no
+`plan_auto_reviewer_gate.py` is the second stdlib-only **PreToolUse** hook.
+Where `plan_auto_gate.py` stops the *implementer* from editing files no
 approved plan covers, this one stops the *reviewer* from executing anything.
 
 The reviewer is an evidence **consumer**: evidence enters the ledger through
@@ -94,7 +94,7 @@ to compare `context_fixed` against the actual diff.
         "hooks": [
           {
             "type": "command",
-            "command": "python3 /absolute/path/to/damped-plan-mcp/hooks/damped_plan_reviewer_gate.py"
+            "command": "python3 /absolute/path/to/plan-auto/hooks/plan_auto_reviewer_gate.py"
           }
         ]
       }
@@ -120,19 +120,19 @@ Both hooks can be registered side by side — they match different tools.
   `wc`, `grep`, `rg`, `jq`, and `find` without `-exec`/`-delete`-style options.
 - Denies everything else, including any command containing `;`, `|`, `&`,
   backticks, `$`, or redirection — those could chain past the argv check.
-- The deny reason restates the rule and points at `.damped-plan/artifacts/`,
+- The deny reason restates the rule and points at `.plan-auto/artifacts/`,
   so the reviewer learns the ground rule at the moment it tries to break it.
 
 ## Configuration
 
 | Env var | Effect |
 |---|---|
-| `DAMPED_PLAN_REVIEWER_AGENTS` | Comma-separated agent types to gate (default `plan-reviewer`). Empty string makes the hook inert. |
-| `DAMPED_PLAN_REVIEWER_HOOK_MODE` | `enforce` (default) denies; `warn` escalates to the human instead. |
+| `PLAN_AUTO_REVIEWER_AGENTS` | Comma-separated agent types to gate (default `plan-reviewer`). Empty string makes the hook inert. |
+| `PLAN_AUTO_REVIEWER_HOOK_MODE` | `enforce` (default) denies; `warn` escalates to the human instead. |
 
 ## Honest limit
 
-Like `.damped-plan/commands.json`, this is an allowlist by convention — a
+Like `.plan-auto/commands.json`, this is an allowlist by convention — a
 discipline boundary with reviewable provenance, not a security sandbox. It
 also cannot stop a reviewer from asking the parent session to run a command
 and narrate the result back; that failure mode belongs to the evidence layer,

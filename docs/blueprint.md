@@ -3,7 +3,7 @@
 
 ## 1. Purpose
 
-`damped-plan-mcp` is a local Model Context Protocol (MCP) server that converts an LLM's free-form plan into a structured, auditable project state. It evaluates whether a plan is sufficiently closed to execute, identifies blockers, and recommends the next permissible action.
+`plan-auto` is a local Model Context Protocol (MCP) server that converts an LLM's free-form plan into a structured, auditable project state. It evaluates whether a plan is sufficiently closed to execute, identifies blockers, and recommends the next permissible action.
 
 The system is not intended to be a universal planner, a general autonomous researcher, or a learned policy. Its first purpose is narrower and high leverage:
 
@@ -184,13 +184,13 @@ For v0, use explainable categorical/count-based residuals rather than pretending
 - Use local project storage first.
 - Use SQLite as the canonical mutable store.
 - Use YAML or JSON as import/export and human-review formats.
-- Keep all project state in a repository-local `.damped-plan/` directory.
+- Keep all project state in a repository-local `.plan-auto/` directory.
 
 Example:
 
 ```text
 your-robotics-project/
-├── .damped-plan/
+├── .plan-auto/
 │   ├── project.sqlite
 │   ├── artifacts/
 │   ├── exports/
@@ -203,12 +203,12 @@ your-robotics-project/
 ## 7. Repository Layout
 
 ```text
-damped-plan-mcp/
+plan-auto/
 ├── README.md
 ├── pyproject.toml
 ├── uv.lock
 ├── src/
-│   └── damped_plan_mcp/
+│   └── plan_auto/
 │       ├── __init__.py
 │       ├── server.py
 │       ├── config.py
@@ -1549,16 +1549,16 @@ Conceptual local MCP configuration:
 ```json
 {
   "mcpServers": {
-    "damped-plan": {
+    "plan-auto": {
       "command": "uv",
       "args": [
         "--directory",
-        "/absolute/path/to/damped-plan-mcp",
+        "/absolute/path/to/plan-auto",
         "run",
-        "damped-plan-mcp"
+        "plan-auto"
       ],
       "env": {
-        "DAMPED_PLAN_DATA_DIR": "/absolute/path/to/your-project/.damped-plan"
+        "PLAN_AUTO_DATA_DIR": "/absolute/path/to/your-project/.plan-auto"
       }
     }
   }
@@ -1574,7 +1574,7 @@ For any nontrivial change—multi-file edits, a new algorithm/model/loss/planner
 data/evaluation change, simulator change, or robotics behavior change:
 
 1. Read `damped://project/current/state`.
-2. Draft or update a structured plan through the `damped-plan` MCP.
+2. Draft or update a structured plan through the `plan-auto` MCP.
 3. Call `evaluate_plan`.
 4. Do not edit source files until the plan is EXECUTABLE or the user explicitly
    approves a safe MEASUREMENT plan.
@@ -1622,7 +1622,7 @@ The server does not need to find the best research direction. It succeeds if it 
 ## 26. Initial Claude Implementation Prompt
 
 ```text
-Build a local Python MCP server named `damped-plan-mcp`.
+Build a local Python MCP server named `plan-auto`.
 
 The server is a constraint-closure substrate for LLM plans. It must not act as
 a generic autonomous planner. Its purpose is to store explicit project state,

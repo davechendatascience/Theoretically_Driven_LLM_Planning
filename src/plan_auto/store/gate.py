@@ -47,16 +47,16 @@ def compute_gate(project: ProjectState, plans: list[Plan]) -> GateSnapshot:
             "No approved plan covers this file. Approved plan(s) "
             f"{[p.plan_id for p in open_plans]} only cover their allowed_files. "
             "Either add this file to a plan's intervention.allowed_files and "
-            "re-evaluate, or create a new plan via the damped-plan MCP."
+            "re-evaluate, or create a new plan via the plan-auto MCP."
         )
     else:
         recommended = NextAction.MEASURE if unresolved else NextAction.STOP
         reason = (
             f"Hard constraint(s) {unresolved} are unresolved; create a measurement "
-            f"plan via the damped-plan MCP to resolve them, or record evidence and "
+            f"plan via the plan-auto MCP to resolve them, or record evidence and "
             f"update their status."
             if unresolved
-            else "Create a plan via the damped-plan MCP (create_plan), get it to "
+            else "Create a plan via the plan-auto MCP (create_plan), get it to "
             "READY_FOR_REVIEW, and have the human approve it."
         )
         deny = f"No plan is approved for execution. {reason}"

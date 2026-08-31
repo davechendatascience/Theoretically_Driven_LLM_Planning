@@ -8,9 +8,9 @@ keep that compatibility path from rotting, not to exercise any live scoring.
 
 import pytest
 
-from damped_plan_mcp.models.evidence import EvidenceClaim
-from damped_plan_mcp.models.project import ProjectState
-from damped_plan_mcp.services import normalize
+from plan_auto.models.evidence import EvidenceClaim
+from plan_auto.models.project import ProjectState
+from plan_auto.services import normalize
 
 
 def test_evidence_claim_validation():

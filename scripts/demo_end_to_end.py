@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end demo of the damped-plan gate (blueprint §19.1).
+"""End-to-end demo of the plan-auto gate (blueprint §19.1).
 
 Drives the MCP server through an in-memory client session against a scratch
 data dir, then pipes synthetic PreToolUse payloads into the hook. Exits
@@ -20,10 +20,10 @@ from pathlib import Path
 from mcp import Client
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from damped_plan_mcp.server import build_server  # noqa: E402
+from plan_auto.server import build_server  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
-HOOK = REPO / "hooks" / "damped_plan_gate.py"
+HOOK = REPO / "hooks" / "plan_auto_gate.py"
 EXAMPLES = REPO / "examples" / "robotics_project"
 
 STEP = 0
@@ -69,8 +69,8 @@ def run_hook(project_root: Path, rel_path: str) -> dict | None:
 
 
 async def main() -> None:
-    scratch = Path(tempfile.mkdtemp(prefix="damped-plan-demo-"))
-    data_dir = scratch / ".damped-plan"
+    scratch = Path(tempfile.mkdtemp(prefix="plan-auto-demo-"))
+    data_dir = scratch / ".plan-auto"
     print(f"Scratch project: {scratch}")
 
     project = json.loads((EXAMPLES / "project.json").read_text())

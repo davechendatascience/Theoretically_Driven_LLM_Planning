@@ -1,4 +1,4 @@
-"""Subprocess tests for hooks/damped_plan_gate.py (stdlib-only hook)."""
+"""Subprocess tests for hooks/plan_auto_gate.py (stdlib-only hook)."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-HOOK = Path(__file__).resolve().parents[2] / "hooks" / "damped_plan_gate.py"
+HOOK = Path(__file__).resolve().parents[2] / "hooks" / "plan_auto_gate.py"
 
 
 def run_hook(event: dict, env_mode: str | None = None) -> tuple[int, dict | None]:
     env = {"PATH": "/usr/bin:/bin"}
     if env_mode:
-        env["DAMPED_PLAN_HOOK_MODE"] = env_mode
+        env["PLAN_AUTO_HOOK_MODE"] = env_mode
     proc = subprocess.run(
         [sys.executable, str(HOOK)],
         input=json.dumps(event),
@@ -36,7 +36,7 @@ def write_gate(
     always: list[str] | None = None,
     human: list[str] | None = None,
 ):
-    gate_dir = tmp_path / ".damped-plan"
+    gate_dir = tmp_path / ".plan-auto"
     gate_dir.mkdir(parents=True, exist_ok=True)
     (gate_dir / "gate.json").write_text(
         json.dumps(
@@ -44,7 +44,7 @@ def write_gate(
                 "schema_version": 1,
                 "gate_open": bool(open_plans),
                 "open_plans": open_plans,
-                "always_allowed": always if always is not None else [".damped-plan/**", "docs/**", "*.md"],
+                "always_allowed": always if always is not None else [".plan-auto/**", "docs/**", "*.md"],
                 "deny_message": "No approved plan covers this file.",
                 **({} if human is None else {"human_supervised": human}),
             }
@@ -53,10 +53,10 @@ def write_gate(
 
 
 HUMAN_SUPERVISED = [
-    ".damped-plan/corpus/**",
-    ".damped-plan/commands.json",
-    ".damped-plan/objective.md",
-    ".damped-plan/artifacts/**",
+    ".plan-auto/corpus/**",
+    ".plan-auto/commands.json",
+    ".plan-auto/objective.md",
+    ".plan-auto/artifacts/**",
 ]
 
 
@@ -122,7 +122,7 @@ def test_warn_mode_escalates_to_human(tmp_path):
 
 
 def test_corrupt_gate_strict_denies(tmp_path):
-    gate_dir = tmp_path / ".damped-plan"
+    gate_dir = tmp_path / ".plan-auto"
     gate_dir.mkdir(parents=True)
     (gate_dir / "gate.json").write_text("{not json")
     code, output = run_hook(edit_event(tmp_path, "src/x.py"), env_mode="strict")
@@ -180,7 +180,7 @@ def test_unparsable_payload_still_fails_open():
 
 # --- human-supervised paths (P-0011) ----------------------------------------
 #
-# always_allowed contains ".damped-plan/**", which matches every protected path.
+# always_allowed contains ".plan-auto/**", which matches every protected path.
 # So these deny only if the check runs BEFORE it. A deny list placed after the
 # always_allowed exit is dead code and every test below would fail.
 
@@ -188,12 +188,12 @@ def test_unparsable_payload_still_fails_open():
 @pytest.mark.parametrize(
     "rel",
     [
-        ".damped-plan/corpus/x.pdf",
-        ".damped-plan/corpus/reflexive-eval/deep/nested.url",
-        ".damped-plan/commands.json",
-        ".damped-plan/objective.md",
-        ".damped-plan/artifacts/x.json",
-        ".damped-plan/artifacts/run/out.txt",
+        ".plan-auto/corpus/x.pdf",
+        ".plan-auto/corpus/reflexive-eval/deep/nested.url",
+        ".plan-auto/commands.json",
+        ".plan-auto/objective.md",
+        ".plan-auto/artifacts/x.json",
+        ".plan-auto/artifacts/run/out.txt",
     ],
 )
 def test_human_supervised_denied_despite_always_allowed(tmp_path, rel):
@@ -208,22 +208,22 @@ def test_human_supervised_denied_even_under_a_covering_plan(tmp_path):
     """Not even an approved plan may authorise it — this is the point."""
     write_gate(
         tmp_path,
-        [{"plan_id": "P-x", "allowed_files": [".damped-plan/corpus/**"]}],
+        [{"plan_id": "P-x", "allowed_files": [".plan-auto/corpus/**"]}],
         human=HUMAN_SUPERVISED,
     )
-    code, out = run_hook(edit_event(tmp_path, ".damped-plan/corpus/x.pdf"))
+    code, out = run_hook(edit_event(tmp_path, ".plan-auto/corpus/x.pdf"))
     assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize(
     "rel",
     [
-        ".damped-plan/plans/P-1.json",
-        ".damped-plan/evidence/EV-1.json",
-        ".damped-plan/events.jsonl",
-        ".damped-plan/gate.json",
-        ".damped-plan/project.json",
-        ".damped-plan/corpus-notes.md",
+        ".plan-auto/plans/P-1.json",
+        ".plan-auto/evidence/EV-1.json",
+        ".plan-auto/events.jsonl",
+        ".plan-auto/gate.json",
+        ".plan-auto/project.json",
+        ".plan-auto/corpus-notes.md",
     ],
 )
 def test_ordinary_ledger_writes_still_allowed(tmp_path, rel):
@@ -238,7 +238,7 @@ def test_ordinary_ledger_writes_still_allowed(tmp_path, rel):
 def test_gate_without_the_key_behaves_as_before(tmp_path):
     """Backward compatibility for every gate.json written before this existed."""
     write_gate(tmp_path, [], human=None)
-    code, out = run_hook(edit_event(tmp_path, ".damped-plan/corpus/x.pdf"))
+    code, out = run_hook(edit_event(tmp_path, ".plan-auto/corpus/x.pdf"))
     assert code == 0 and out is None
 
 
@@ -251,6 +251,6 @@ def test_bash_still_bypasses_the_boundary(tmp_path):
     """
     write_gate(tmp_path, [], human=HUMAN_SUPERVISED)
     code, out = run_hook(
-        edit_event(tmp_path, ".damped-plan/commands.json", tool="Bash")
+        edit_event(tmp_path, ".plan-auto/commands.json", tool="Bash")
     )
     assert code == 0 and out is None

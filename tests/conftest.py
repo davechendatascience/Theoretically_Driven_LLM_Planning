@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from damped_plan_mcp.models import (
+from plan_auto.models import (
     CausalHypothesis,
     Constraint,
     ConstraintKind,

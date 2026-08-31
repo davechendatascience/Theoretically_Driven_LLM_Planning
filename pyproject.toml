@@ -1,5 +1,5 @@
 [project]
-name = "damped-plan-mcp"
+name = "plan-auto"
 version = "0.1.0"
 description = "A constraint-closure substrate for LLM planning, served over MCP"
 requires-python = ">=3.12"
@@ -9,7 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-damped-plan-mcp = "damped_plan_mcp.server:main"
+plan-auto = "plan_auto.server:main"
 
 [dependency-groups]
 dev = [
@@ -24,7 +24,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/damped_plan_mcp", "src/kernel"]
+packages = ["src/plan_auto", "src/kernel"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

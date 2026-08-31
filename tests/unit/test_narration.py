@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from damped_plan_mcp.models import EvidenceRecord, Plan
-from damped_plan_mcp.models.enums import EvidencePolarity, PlanKind
-from damped_plan_mcp.models.predictive import Prediction, PredictiveContract
-from damped_plan_mcp.services import narration
+from plan_auto.models import EvidenceRecord, Plan
+from plan_auto.models.enums import EvidencePolarity, PlanKind
+from plan_auto.models.predictive import Prediction, PredictiveContract
+from plan_auto.services import narration
 
 NOW = datetime(2026, 8, 20, tzinfo=timezone.utc)
 

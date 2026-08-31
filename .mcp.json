@@ -1,12 +1,12 @@
 {
   "mcpServers": {
-    "damped-plan": {
+    "plan-auto": {
       "command": "uv",
       "args": [
         "--directory",
         ".",
         "run",
-        "damped-plan-mcp"
+        "plan-auto"
       ]
     }
   }

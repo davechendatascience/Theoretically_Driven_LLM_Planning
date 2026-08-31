@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """Claude Code PreToolUse hook: deny Edit/Write when no approved plan covers
-the file. Stdlib-only; reads the precomputed .damped-plan/gate.json and never
+the file. Stdlib-only; reads the precomputed .plan-auto/gate.json and never
 starts the MCP server.
 
 Opt-in per project via .claude/settings.json (see hooks/README.md).
 
-Modes via DAMPED_PLAN_HOOK_MODE:
+Modes via PLAN_AUTO_HOOK_MODE:
   enforce (default)  uncovered file -> permissionDecision "deny"
   warn               uncovered file -> permissionDecision "escalate"
                      (surfaces the gate verdict to the human instead of denying)
   strict             like enforce, but a corrupt/unreadable gate.json also denies
 
-Fail-open by design: no gate.json found (project doesn't use damped-plan)
+Fail-open by design: no gate.json found (project doesn't use plan-auto)
 -> silent allow, so the hook never bricks unrelated projects.
 """
 
@@ -28,9 +28,10 @@ EDIT_TOOLS = {"Edit", "Write", "NotebookEdit"}
 
 def find_gate(start: Path) -> Path | None:
     for directory in [start, *start.parents]:
-        candidate = directory / ".damped-plan" / "gate.json"
-        if candidate.is_file():
-            return candidate
+        for name in (".plan-auto", ".damped-plan"):   # legacy name still honoured
+            candidate = directory / name / "gate.json"
+            if candidate.is_file():
+                return candidate
     return None
 
 
@@ -89,7 +90,7 @@ def decision(permission: str, reason: str) -> None:
 
 
 def main() -> None:
-    mode = os.environ.get("DAMPED_PLAN_HOOK_MODE", "enforce").strip().lower()
+    mode = os.environ.get("PLAN_AUTO_HOOK_MODE", "enforce").strip().lower()
     event = read_event()
     if event is None:
         sys.exit(0)
@@ -112,7 +113,7 @@ def main() -> None:
     if gate_path is None:
         gate_path_from_cwd = find_gate(cwd)
         if gate_path_from_cwd is None:
-            sys.exit(0)  # project does not use damped-plan: fail open
+            sys.exit(0)  # project does not use plan-auto: fail open
         gate_path = gate_path_from_cwd
 
     try:
@@ -121,8 +122,8 @@ def main() -> None:
         if mode == "strict":
             decision(
                 "deny",
-                f"damped-plan gate file {gate_path} is unreadable and "
-                f"DAMPED_PLAN_HOOK_MODE=strict; refusing to edit.",
+                f"plan-auto gate file {gate_path} is unreadable and "
+                f"PLAN_AUTO_HOOK_MODE=strict; refusing to edit.",
             )
         sys.exit(0)
 
@@ -133,16 +134,16 @@ def main() -> None:
         sys.exit(0)  # outside the gated project: not our concern
 
     # Human-supervised paths are denied FIRST, before always_allowed. Order is
-    # load-bearing: always_allowed contains ".damped-plan/**", which matches every
+    # load-bearing: always_allowed contains ".plan-auto/**", which matches every
     # protected path, so a check placed after it would be dead code.
     # Read defensively so a gate.json written before this existed behaves as before.
     if matches(rel_path, gate.get("human_supervised") or []):
         decision(
             "deny",
-            f"damped-plan gate: '{rel_path}' is HUMAN-SUPERVISED and an agent may "
+            f"plan-auto gate: '{rel_path}' is HUMAN-SUPERVISED and an agent may "
             f"not write it - not even under an approved plan. The corpus is filled "
             f"by a human, commands.json and objective.md are authored by one, and "
-            f".damped-plan/artifacts/ is captured by run_validation; an agent "
+            f".plan-auto/artifacts/ is captured by run_validation; an agent "
             f"writing there destroys the signal the path carries. Ask the human to "
             f"make this change.",
         )
@@ -161,7 +162,7 @@ def main() -> None:
     permission = "escalate" if mode == "warn" else "deny"
     open_ids = [p.get("plan_id") for p in gate.get("open_plans") or []]
     reason = (
-        f"damped-plan gate: '{rel_path}' is not covered. "
+        f"plan-auto gate: '{rel_path}' is not covered. "
         f"{gate.get('deny_message', '')} "
         f"(open plans: {open_ids or 'none'})"
     )

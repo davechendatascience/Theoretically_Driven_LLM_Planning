@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wire damped-plan into a target project, on Linux, macOS, or Windows.
+"""Wire plan-auto into a target project, on Linux, macOS, or Windows.
 
 The four integration pieces (MCP server, skill, reviewer agent, PreToolUse
 hooks) are all configured with host-specific absolute paths and an interpreter
@@ -15,7 +15,7 @@ interpreter the host happens to have, before the project venv exists.
 
 What it writes into the target project:
   .mcp.json                    MCP server registration
-  .claude/skills/damped-plan/  the /damped-plan skill
+  .claude/skills/plan-auto/  the /plan-auto skill
   .claude/agents/plan-reviewer.md
   .claude/settings.local.json  the two PreToolUse hook registrations
 
@@ -35,9 +35,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-GATE_HOOK = REPO_ROOT / "hooks" / "damped_plan_gate.py"
-REVIEWER_HOOK = REPO_ROOT / "hooks" / "damped_plan_reviewer_gate.py"
-SKILL_SRC = REPO_ROOT / "skills" / "damped-plan"
+GATE_HOOK = REPO_ROOT / "hooks" / "plan_auto_gate.py"
+REVIEWER_HOOK = REPO_ROOT / "hooks" / "plan_auto_reviewer_gate.py"
+SKILL_SRC = REPO_ROOT / "skills" / "plan-auto"
 AGENT_SRC = REPO_ROOT / "agents" / "plan-reviewer.md"
 
 # The implementer gate matches the edit tools; the reviewer gate matches the
@@ -157,16 +157,16 @@ def install_mcp(target: Path, data_dir: Path | None, dry_run: bool) -> None:
         env = {}
     else:
         directory = str(REPO_ROOT)
-        resolved = data_dir if data_dir is not None else target / ".damped-plan"
-        env = {"DAMPED_PLAN_DATA_DIR": str(resolved)}
+        resolved = data_dir if data_dir is not None else target / ".plan-auto"
+        env = {"PLAN_AUTO_DATA_DIR": str(resolved)}
 
     server = {
         "command": "uv",
-        "args": ["--directory", directory, "run", "damped-plan-mcp"],
+        "args": ["--directory", directory, "run", "plan-auto"],
     }
     if env:
         server["env"] = env
-    servers["damped-plan"] = server
+    servers["plan-auto"] = server
     write_json(target / ".mcp.json", config, dry_run)
 
 
@@ -211,10 +211,10 @@ def main() -> int:
     parser.add_argument(
         "--data-dir",
         default=None,
-        help="where plans/evidence live (default: <target>/.damped-plan)",
+        help="where plans/evidence live (default: <target>/.plan-auto)",
     )
     parser.add_argument("--no-hooks", action="store_true", help="skip the PreToolUse hooks")
-    parser.add_argument("--no-skill", action="store_true", help="skip the /damped-plan skill")
+    parser.add_argument("--no-skill", action="store_true", help="skip the /plan-auto skill")
     parser.add_argument(
         "--no-reviewer", action="store_true", help="skip the plan-reviewer agent"
     )
@@ -245,7 +245,7 @@ def main() -> int:
 
     install_mcp(target, data_dir, args.dry_run)
     if not args.no_skill:
-        install_tree(SKILL_SRC, target / ".claude" / "skills" / "damped-plan", args.dry_run)
+        install_tree(SKILL_SRC, target / ".claude" / "skills" / "plan-auto", args.dry_run)
     if not args.no_reviewer:
         install_tree(AGENT_SRC, target / ".claude" / "agents" / "plan-reviewer.md", args.dry_run)
     if not args.no_hooks:

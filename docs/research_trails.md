@@ -102,7 +102,7 @@ ceremony: nobody puts a content farm in their references directory.
 So the mechanism is a directory, and that is the whole of it:
 
 ```
-.damped-plan/corpus/<domain>/     human drops documents in; the loop reads them
+.plan-auto/corpus/<domain>/     human drops documents in; the loop reads them
 ```
 
 - **The directory is the domain.** No manifest, no admission criterion file, no
@@ -235,7 +235,7 @@ Trials Has Increased Over Time* (PLOS ONE 10(8): e0132382): large NHLBI trials
 showing significant benefit on the primary outcome fell from **57%** (17/30, pre-2000,
 none prospectively registered) to **8%** (2/25, post-2000, all registered) (Tier B).
 
-**Predicts.** A damped-plan project whose plans validate at standard-literature
+**Predicts.** A plan-auto project whose plans validate at standard-literature
 rates is pre-registering in name only. The literature's own contrast puts the
 expected band for genuinely pre-committed work nearer 40–60% than 90%+.
 
@@ -472,7 +472,7 @@ could produce — **cannot be caught by a posterior check at all.** By the time 
 exists every value is in-band, which is exactly what F1 demonstrated. It is catchable
 only *before* data, by asking whether the contract's own bands imply a possible world.
 That step has a name in the framework and is already specified here: the **prior
-predictive check**, `damped-plan-mcp-bayesian-scope.md` §7.
+predictive check**, `plan-auto-bayesian-scope.md` §7.
 
 It is specified, claimed, and absent:
 
@@ -725,7 +725,7 @@ with an audit trail — a memory system, not a research add-on.
 
 **The legibility half, stated as the gap it closes:**
 
-> Everything in `.damped-plan/` is a **commitment**. Nothing records the **search**.
+> Everything in `.plan-auto/` is a **commitment**. Nothing records the **search**.
 
 Plans, evidence records, outcomes — all decisions. A reviewer given only commitments
 can check them for consistency but cannot see what was considered and discarded. This

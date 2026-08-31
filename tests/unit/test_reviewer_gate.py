@@ -1,4 +1,4 @@
-"""Subprocess tests for hooks/damped_plan_reviewer_gate.py (stdlib-only hook)."""
+"""Subprocess tests for hooks/plan_auto_reviewer_gate.py (stdlib-only hook)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 HOOK = (
-    Path(__file__).resolve().parents[2] / "hooks" / "damped_plan_reviewer_gate.py"
+    Path(__file__).resolve().parents[2] / "hooks" / "plan_auto_reviewer_gate.py"
 )
 
 
@@ -89,7 +89,7 @@ def test_reviewer_denied_test_run():
     assert code == 0
     assert permission(output) == "deny"
     reason = output["hookSpecificOutput"]["permissionDecisionReason"]
-    assert ".damped-plan/artifacts/" in reason
+    assert ".plan-auto/artifacts/" in reason
     assert "uv run pytest -q" in reason
 
 
@@ -148,13 +148,13 @@ def test_reviewer_allowed_git_with_value_option():
 
 def test_reviewer_allowed_reading_an_artifact():
     code, output = run_hook(
-        bash_event("cat .damped-plan/artifacts/20260817T080034-unit_tests.json")
+        bash_event("cat .plan-auto/artifacts/20260817T080034-unit_tests.json")
     )
     assert code == 0 and output is None
 
 
 def test_reviewer_allowed_plain_find():
-    code, output = run_hook(bash_event("find .damped-plan/evidence -name 'EV-*.json'"))
+    code, output = run_hook(bash_event("find .plan-auto/evidence -name 'EV-*.json'"))
     assert code == 0 and output is None
 
 
@@ -163,7 +163,7 @@ def test_reviewer_allowed_plain_find():
 
 def test_warn_mode_escalates_instead_of_denying():
     code, output = run_hook(
-        bash_event("uv run pytest -q"), DAMPED_PLAN_REVIEWER_HOOK_MODE="warn"
+        bash_event("uv run pytest -q"), PLAN_AUTO_REVIEWER_HOOK_MODE="warn"
     )
     assert permission(output) == "escalate"
 
@@ -171,14 +171,14 @@ def test_warn_mode_escalates_instead_of_denying():
 def test_gated_agents_configurable():
     code, output = run_hook(
         bash_event("uv run pytest -q", agent_type="my-reviewer"),
-        DAMPED_PLAN_REVIEWER_AGENTS="my-reviewer, another-reviewer",
+        PLAN_AUTO_REVIEWER_AGENTS="my-reviewer, another-reviewer",
     )
     assert permission(output) == "deny"
 
 
 def test_empty_agent_list_makes_hook_inert():
     code, output = run_hook(
-        bash_event("uv run pytest -q"), DAMPED_PLAN_REVIEWER_AGENTS=""
+        bash_event("uv run pytest -q"), PLAN_AUTO_REVIEWER_AGENTS=""
     )
     assert code == 0 and output is None
 

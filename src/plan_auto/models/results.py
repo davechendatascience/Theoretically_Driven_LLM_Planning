@@ -109,10 +109,10 @@ class GateSnapshot(BaseModel):
     gate_open: bool
     open_plans: list[GatePlanEntry] = Field(default_factory=list)
     always_allowed: list[str] = Field(
-        default_factory=lambda: [".damped-plan/**", "docs/**", "*.md"]
+        default_factory=lambda: [".plan-auto/**", ".damped-plan/**", "docs/**", "*.md"]
     )
     # Paths the AGENT must not write, checked BEFORE always_allowed (which
-    # contains ".damped-plan/**" and would otherwise permit all of them).
+    # contains ".plan-auto/**" and would otherwise permit all of them).
     #
     # "not agent-writable", NOT "human-authored": commands.json and objective.md
     # are the human's, corpus/ is human-filled, and artifacts/ is MACHINE-captured
@@ -121,6 +121,11 @@ class GateSnapshot(BaseModel):
     # command_runner writes it from the server process, never through a tool.
     human_supervised: list[str] = Field(
         default_factory=lambda: [
+            ".plan-auto/corpus/**",
+            ".plan-auto/commands.json",
+            ".plan-auto/objective.md",
+            ".plan-auto/artifacts/**",
+            # legacy store name, still live in five real projects
             ".damped-plan/corpus/**",
             ".damped-plan/commands.json",
             ".damped-plan/objective.md",

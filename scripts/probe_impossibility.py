@@ -12,7 +12,7 @@ normalize.py:517-521 is a live guard rather than a bypassed one. Constructing
 `Prediction` objects directly is explicitly out of scope.
 
 This script writes tests/probe/artifacts/P-0001-probe.json. That path is
-deliberately NOT under .damped-plan/artifacts/: this output is agent-produced,
+deliberately NOT under .plan-auto/artifacts/: this output is agent-produced,
 outside `run_validation`, with no exit code and no event, and placing it in the
 ledger's captured-evidence namespace would counterfeit the marker that lets a
 reviewer cite mechanical output without recomputing it.
@@ -28,10 +28,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from damped_plan_mcp.models import EvidencePolarity, EvidenceRecord, Plan, PlanKind
-from damped_plan_mcp.models.predictive import MetricObservation, PredictiveCheck
-from damped_plan_mcp.services.normalize import _normalize_contract
-from damped_plan_mcp.services.predictive import posterior_check
+from plan_auto.models import EvidencePolarity, EvidenceRecord, Plan, PlanKind
+from plan_auto.models.predictive import MetricObservation, PredictiveCheck
+from plan_auto.services.normalize import _normalize_contract
+from plan_auto.services.predictive import posterior_check
 
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES = REPO / "tests" / "probe" / "fixtures" / "impossible_contracts.json"
@@ -177,7 +177,7 @@ def main() -> int:
         "generated_at": datetime.now(UTC).isoformat(),
         "provenance": (
             "agent-authored script, not run_validation; no exit code and no event "
-            "back this file. Kept outside .damped-plan/artifacts/ deliberately."
+            "back this file. Kept outside .plan-auto/artifacts/ deliberately."
         ),
         "fixture_source": str(FIXTURES.relative_to(REPO)).replace("\\", "/"),
         "results": results,

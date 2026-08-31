@@ -1,4 +1,4 @@
-"""v1 (.damped-plan) -> v2, per docs/migration_map.md.
+"""v1 (.plan-auto) -> v2, per docs/migration_map.md.
 
 Two kinds exist so migration stays lossless without admitting an expectation
 that cannot fail:

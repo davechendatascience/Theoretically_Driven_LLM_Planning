@@ -1,4 +1,4 @@
-# damped-plan-mcp
+# plan-auto
 
 A local MCP server that acts as a **constraint-closure gate for LLM planning**.
 An LLM may retrieve knowledge and propose candidate actions freely, but it may
@@ -8,7 +8,7 @@ intervention, a validation path, adopt/reject criteria, and a rollback story —
 and every hard constraint is evidence-backed `SAT`.
 
 Design blueprints: [docs/blueprint.md](docs/blueprint.md) (constraint
-closure) and [docs/damped-plan-mcp-bayesian-scope.md](docs/damped-plan-mcp-bayesian-scope.md)
+closure) and [docs/plan-auto-bayesian-scope.md](docs/plan-auto-bayesian-scope.md)
 (predictive layer). Tool reference: [docs/tool_contracts.md](docs/tool_contracts.md).
 Claude Code setup: [docs/claude_code_integration.md](docs/claude_code_integration.md).
 Why this works on qualitative measures:
@@ -35,7 +35,7 @@ each one — the output of an out-of-band research loop, none of it approved:
   only when a human approves it; AI self-approval is refused.
 - **Scoped execution.** An approved plan authorizes only its
   `intervention.allowed_files` — enforced for real by an opt-in Claude Code
-  PreToolUse hook that reads the precomputed `.damped-plan/gate.json`.
+  PreToolUse hook that reads the precomputed `.plan-auto/gate.json`.
 - **Review that cannot manufacture evidence.** The optional fresh-context
   `plan-reviewer` agent attacks a plan before approval and holds no mutating
   tools; a second PreToolUse hook denies it execution, so it cites recorded
@@ -91,37 +91,37 @@ individual pieces. The manual steps it automates are below.
 ```json
 {
   "mcpServers": {
-    "damped-plan": {
+    "plan-auto": {
       "command": "uv",
       "args": [
-        "--directory", "/absolute/path/to/damped-plan-mcp",
-        "run", "damped-plan-mcp"
+        "--directory", "/absolute/path/to/plan-auto",
+        "run", "plan-auto"
       ],
       "env": {
-        "DAMPED_PLAN_DATA_DIR": "/absolute/path/to/your-project/.damped-plan"
+        "PLAN_AUTO_DATA_DIR": "/absolute/path/to/your-project/.plan-auto"
       }
     }
   }
 }
 ```
 
-Add `.damped-plan/` to the target project's `.gitignore` (or commit it if you
+Add `.plan-auto/` to the target project's `.gitignore` (or commit it if you
 want plans and evidence reviewed alongside code).
 
-**2. Install the `/damped-plan` skill** (recommended — teaches Claude the
+**2. Install the `/plan-auto` skill** (recommended — teaches Claude the
 workflow and auto-triggers on nontrivial changes):
 
 ```bash
 mkdir -p .claude/skills
-cp -r /absolute/path/to/damped-plan-mcp/skills/damped-plan .claude/skills/
+cp -r /absolute/path/to/plan-auto/skills/plan-auto .claude/skills/
 ```
 
 **3. Enable the enforcement hooks** (optional — turn the gate from advisory
 into actual denials): add the PreToolUse entries from
 [hooks/README.md](hooks/README.md) to the target project's
-`.claude/settings.json`. `damped_plan_gate.py` (matcher
+`.claude/settings.json`. `plan_auto_gate.py` (matcher
 `Edit|Write|NotebookEdit`) denies edits no approved plan covers;
-`damped_plan_reviewer_gate.py` (matcher `Bash|PowerShell`) denies *execution*
+`plan_auto_reviewer_gate.py` (matcher `Bash|PowerShell`) denies *execution*
 to the reviewer agent while leaving read-only inspection open. Every other
 agent, including the main session, passes through untouched. Note the
 interpreter name is host-specific — see
@@ -139,11 +139,11 @@ failure modes, then propose a change and watch it get gated.
 
 ## How state is stored
 
-Everything lives in the target project's `.damped-plan/` directory as plain
+Everything lives in the target project's `.plan-auto/` directory as plain
 JSON — human-diffable, git-friendly:
 
 ```text
-.damped-plan/
+.plan-auto/
 ├── project.json      goals, constraints (+statuses), failure modes, facts
 ├── plans/P-0001.json one file per plan
 ├── evidence/EV-0001.json
@@ -157,7 +157,7 @@ v0 implements the blueprint's Phases 1–4 plus the enforcement hooks:
 pure-Python kernel (models, closure validator, residuals, decision policy),
 JSON store with event log, MCP server (12 tools, 7 resources, 4 prompts), both
 PreToolUse hooks, the allowlisted command runner (`run_validation` +
-`.damped-plan/commands.json`) that converts captured command results into
+`.plan-auto/commands.json`) that converts captured command results into
 evidence automatically, and the structured-observation channel
 (`record_run_metrics` + the narrated-number warning) that feeds the posterior
 check.
@@ -185,7 +185,7 @@ set `met: true` with no evidence, none of it recorded with before/after values.
 The one directory such an objective would live in is waved through by the
 gate's `always_allowed` default (`results.py:113`). The command registry has
 **no sanctioned author**: no MCP tool writes
-`.damped-plan/commands.json`, so an agent told to prefer `run_validation` can
+`.plan-auto/commands.json`, so an agent told to prefer `run_validation` can
 only comply by writing the allowlist itself — which the gate permits and which
 two of the three registry error messages explicitly instruct, template
 including `"allowed": true`. Only the third names a human, and it is the one

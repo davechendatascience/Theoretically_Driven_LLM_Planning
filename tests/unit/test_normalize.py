@@ -5,13 +5,13 @@ from conftest import make_project
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from damped_plan_mcp.models import (
+from plan_auto.models import (
     ConstraintKind,
     ConstraintStatus,
     PlanKind,
     PlanStatus,
 )
-from damped_plan_mcp.services.normalize import (
+from plan_auto.services.normalize import (
     InputError,
     normalize_evidence,
     normalize_plan,

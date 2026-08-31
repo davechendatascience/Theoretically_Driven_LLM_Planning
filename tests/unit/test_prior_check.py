@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from damped_plan_mcp.services.normalize import _normalize_contract
-from damped_plan_mcp.services.predictive import prior_contract_check
+from plan_auto.services.normalize import _normalize_contract
+from plan_auto.services.predictive import prior_contract_check
 
 REPO = Path(__file__).resolve().parents[2]
 FIXTURES = REPO / "tests" / "probe" / "fixtures" / "impossible_contracts.json"

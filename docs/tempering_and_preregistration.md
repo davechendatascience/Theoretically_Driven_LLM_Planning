@@ -3,7 +3,7 @@
 Status: **design draft for discussion.** Not a plan. Nothing here is approved,
 and the three parts below should become three plans, in the order given.
 
-This document responds to one observation: damped-plan's generative process
+This document responds to one observation: plan-auto's generative process
 **reads its own model before producing data**. Gelman's workflow does not have
 this property — nature does not read your priors. Everything below follows from
 taking that seriously.
@@ -39,7 +39,7 @@ in an unprobed direction. Part 3 closes a hole the first two assume shut.
 
 On every `create_plan`, hash each **contract-critical field** and record
 `{field_path, sha256, first_set_at, plan_version}` to an append-only
-`.damped-plan/preregistrations/<plan_id>.jsonl`.
+`.plan-auto/preregistrations/<plan_id>.jsonl`.
 
 Contract-critical fields:
 
@@ -213,7 +213,7 @@ configuration appears nowhere in any ledger.
 ### Mechanism
 
 At approval time the server reads what it can from the project root
-(`data_dir.parent`) and writes `.damped-plan/harness.json`:
+(`data_dir.parent`) and writes `.plan-auto/harness.json`:
 
 - registered hook commands from `.claude/settings.json`
 - agent `tools:` frontmatter from `.claude/agents/*.md`
@@ -346,7 +346,7 @@ requirements above stand; their ordering does not. Read §3c first.
 
 Raised by David: driving the Gelman loop *toward* something requires each
 plan's goal to be measured against an **ultimate goal** — a terminal objective
-for the project that lives in `.damped-plan/` and that **only a human may
+for the project that lives in `.plan-auto/` and that **only a human may
 edit**.
 
 ### Why this is upstream of §3b, not beside it
@@ -421,7 +421,7 @@ Three distinct ways to satisfy a goal without moving the system:
   that `validated` outcomes require recorded evidence.
 
 There is also nowhere safe to put such a document today. The gate's
-`always_allowed` defaults to `[".damped-plan/**", "docs/**", "*.md"]`
+`always_allowed` defaults to `[".plan-auto/**", "docs/**", "*.md"]`
 (`results.py:113-115`), so the directory where the objective would naturally
 live is precisely the one the enforcement hook never guards.
 
@@ -434,7 +434,7 @@ the server only ever **reads**. Applied here:
   gains goals; it does not get to redefine the terminal target.
 - **Out of `always_allowed`.** Carve the objective path out of the default, so
   the PreToolUse hook denies agent edits to it rather than waving them through
-  with the rest of `.damped-plan/**`.
+  with the rest of `.plan-auto/**`.
 - **A stated solution space, not a stated aspiration.** The objective has to say
   what counts as a candidate solution — which metrics are the coordinates, what
   admissibility conditions a solution must satisfy, what is out of bounds. This
@@ -509,8 +509,8 @@ first.
 
 ### The gate permits the write
 
-`always_allowed` defaults to `[".damped-plan/**", "docs/**", "*.md"]`
-(`results.py:113-115`), so `.damped-plan/commands.json` is waved through by the
+`always_allowed` defaults to `[".plan-auto/**", "docs/**", "*.md"]`
+(`results.py:113-115`), so `.plan-auto/commands.json` is waved through by the
 PreToolUse hook — the same defect §3c found for the objective document, on the
 file that decides what may execute.
 

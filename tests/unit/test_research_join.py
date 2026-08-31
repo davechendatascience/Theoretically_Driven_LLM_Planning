@@ -16,11 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from damped_plan_mcp.services import corpus
-from damped_plan_mcp.services.normalize import normalize_plan
+from plan_auto.services import corpus
+from plan_auto.services.normalize import normalize_plan
 
 REPO = Path(__file__).resolve().parents[2]
-LIVE = REPO / ".damped-plan"
+from plan_auto.config import resolve_data_dir
+LIVE = resolve_data_dir(REPO)
 SEEDED = "corpus:reflexive-eval/scheel-2021-excess-of-positive-results.url"
 
 
@@ -109,7 +110,7 @@ def test_candidates_without_a_domain_list_every_domain(tmp_corpus: Path) -> None
 
 
 def test_contract_without_predictions_is_vacuously_covered(tmp_corpus: Path) -> None:
-    from damped_plan_mcp.models import Plan, PlanKind
+    from plan_auto.models import Plan, PlanKind
     from datetime import UTC, datetime
 
     stamp = datetime.now(UTC)

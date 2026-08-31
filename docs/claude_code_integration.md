@@ -3,7 +3,7 @@
 Three pieces, each opt-in per target project:
 
 1. **MCP server** — the tools/resources/prompts (required).
-2. **`/damped-plan` skill** — teaches Claude the workflow (recommended).
+2. **`/plan-auto` skill** — teaches Claude the workflow (recommended).
 3. **PreToolUse hooks** — hard enforcement, on the implementer and on the
    reviewer (optional).
 
@@ -31,16 +31,16 @@ In the *target* project (the repo whose changes you want gated), add
 ```json
 {
   "mcpServers": {
-    "damped-plan": {
+    "plan-auto": {
       "command": "uv",
       "args": [
         "--directory",
-        "/absolute/path/to/damped-plan-mcp",
+        "/absolute/path/to/plan-auto",
         "run",
-        "damped-plan-mcp"
+        "plan-auto"
       ],
       "env": {
-        "DAMPED_PLAN_DATA_DIR": "/absolute/path/to/your-project/.damped-plan"
+        "PLAN_AUTO_DATA_DIR": "/absolute/path/to/your-project/.plan-auto"
       }
     }
   }
@@ -50,13 +50,13 @@ In the *target* project (the repo whose changes you want gated), add
 Or via CLI from inside the target project:
 
 ```bash
-claude mcp add damped-plan \
-  --env DAMPED_PLAN_DATA_DIR="$(pwd)/.damped-plan" \
-  -- uv --directory /absolute/path/to/damped-plan-mcp run damped-plan-mcp
+claude mcp add plan-auto \
+  --env PLAN_AUTO_DATA_DIR="$(pwd)/.plan-auto" \
+  -- uv --directory /absolute/path/to/plan-auto run plan-auto
 ```
 
-The server is single-project: one `.damped-plan/` data dir per registration.
-Add `.damped-plan/` to the target project's `.gitignore` — or commit it, if
+The server is single-project: one `.plan-auto/` data dir per registration.
+Add `.plan-auto/` to the target project's `.gitignore` — or commit it, if
 you want plans and evidence reviewed alongside code (it is plain JSON and
 diffs well; `events.jsonl` is append-only).
 
@@ -66,12 +66,12 @@ Copy (or symlink) the packaged skill into the target project:
 
 ```bash
 mkdir -p .claude/skills
-cp -r /absolute/path/to/damped-plan-mcp/skills/damped-plan .claude/skills/
+cp -r /absolute/path/to/plan-auto/skills/plan-auto .claude/skills/
 ```
 
 Claude will auto-load it for nontrivial changes (its `description` covers
 multi-file edits, new modules/dependencies, evaluation changes, repeated
-failed fixes), and you can invoke it explicitly with `/damped-plan`.
+failed fixes), and you can invoke it explicitly with `/plan-auto`.
 
 Alternatively — or additionally — put the short policy in the target
 project's `CLAUDE.md`:
@@ -116,7 +116,7 @@ no `artifact_uri` and no event. Pair the agent with the reviewer gate hook
 
 ```bash
 mkdir -p .claude/agents
-cp /absolute/path/to/damped-plan-mcp/agents/plan-reviewer.md .claude/agents/
+cp /absolute/path/to/plan-auto/agents/plan-reviewer.md .claude/agents/
 ```
 
 Control: the reviewer runs when the session delegates to it (its
@@ -130,11 +130,11 @@ the human regardless of whether the reviewer ran.
 See [hooks/README.md](../hooks/README.md). Two independent PreToolUse hooks,
 each opt-in:
 
-- `damped_plan_gate.py` (matcher `Edit|Write|NotebookEdit`) gates the
+- `plan_auto_gate.py` (matcher `Edit|Write|NotebookEdit`) gates the
   **implementer**. Without it the gate is advisory (the model is instructed to
   respect it); with it, uncovered edits are denied with the server's
   explanation of what to do instead.
-- `damped_plan_reviewer_gate.py` (matcher `Bash|PowerShell`) gates the
+- `plan_auto_reviewer_gate.py` (matcher `Bash|PowerShell`) gates the
   **reviewer**, denying execution for the `plan-reviewer` agent while leaving
   read-only inspection (`git diff`, `cat`, `grep`, ...) open. Every other
   agent, including the main session, passes through untouched.
@@ -152,12 +152,12 @@ hand-writing these entries.
 
 Inside the target project, ask Claude:
 
-> Use /damped-plan and register this project: goal = <your goal + metric>,
+> Use /plan-auto and register this project: goal = <your goal + metric>,
 > hard constraints = <your constraints>, failures = <what's broken>.
 
 Then propose a change and watch the flow: plan → blockers → (measurement) →
 approval → scoped implementation → evidence → outcome. Inspect
-`.damped-plan/events.jsonl` for the audit trail, or the MCP resources
+`.plan-auto/events.jsonl` for the audit trail, or the MCP resources
 (`damped://project/current/state`, `.../gate`).
 
 For a scripted proof of the whole loop, run in this repo:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Claude Code PreToolUse hook: keep the advisory plan-reviewer from executing.
 
-The damped-plan reviewer is an *evidence consumer*. Evidence enters the ledger
+The plan-auto reviewer is an *evidence consumer*. Evidence enters the ledger
 through `run_validation` (mechanical: allowlisted argv, immutable artifact,
 polarity from the exit code) or `record_evidence` (narrated, by the
 implementing session) — never through a reviewer's own shell. A reviewer that
@@ -15,15 +15,15 @@ its predictive-contract review compares against `context_fixed`.
 Opt-in per project via .claude/settings.json (see hooks/README.md).
 
 Configuration:
-  DAMPED_PLAN_REVIEWER_AGENTS       comma-separated agent types to gate
+  PLAN_AUTO_REVIEWER_AGENTS       comma-separated agent types to gate
                                     (default: "plan-reviewer")
-  DAMPED_PLAN_REVIEWER_HOOK_MODE
+  PLAN_AUTO_REVIEWER_HOOK_MODE
       enforce (default)  disallowed command -> permissionDecision "deny"
       warn               disallowed command -> permissionDecision "escalate"
 
 Fail-open by design: any other agent_type — the main session included — passes
 through untouched, so the hook never interferes with ordinary work. Like
-.damped-plan/commands.json, this is an allowlist for reviewable provenance and
+.plan-auto/commands.json, this is an allowlist for reviewable provenance and
 a discipline boundary, not a security sandbox.
 """
 
@@ -59,9 +59,9 @@ FIND_EXECUTING_OPTIONS = frozenset(
 )
 
 DENY_REASON = (
-    "damped-plan: the plan-reviewer is advisory and does not execute — "
+    "plan-auto: the plan-reviewer is advisory and does not execute — "
     "`{command}` is denied. Evidence reaches the ledger through run_validation "
-    "(artifact under .damped-plan/artifacts/) or the implementing session's "
+    "(artifact under .plan-auto/artifacts/) or the implementing session's "
     "record_evidence, never through a reviewer's shell: a number you produce "
     "here has no artifact_uri and no event, and is exactly the hand-narrated "
     "evidence your depth policy tells you to distrust. Cite the recorded "
@@ -91,7 +91,7 @@ def read_event() -> dict | None:
 
 
 def gated_agents() -> frozenset[str]:
-    raw = os.environ.get("DAMPED_PLAN_REVIEWER_AGENTS")
+    raw = os.environ.get("PLAN_AUTO_REVIEWER_AGENTS")
     if raw is None:
         return frozenset(DEFAULT_REVIEWER_AGENTS)
     return frozenset(part.strip() for part in raw.split(",") if part.strip())
@@ -154,7 +154,7 @@ def main() -> None:
         sys.exit(0)
 
     mode = (
-        os.environ.get("DAMPED_PLAN_REVIEWER_HOOK_MODE", "enforce").strip().lower()
+        os.environ.get("PLAN_AUTO_REVIEWER_HOOK_MODE", "enforce").strip().lower()
     )
     permission = "escalate" if mode == "warn" else "deny"
     decision(permission, DENY_REASON.format(command=command.strip() or "(empty)"))
