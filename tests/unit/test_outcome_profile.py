@@ -12,6 +12,8 @@ import glob
 import json
 from pathlib import Path
 
+import pytest
+
 from plan_auto.services.outcomes import outcome_profile
 from plan_auto.config import resolve_data_dir
 
@@ -19,6 +21,12 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def live_plans() -> list[dict]:
+    """The live store is gitignored dogfooding state, so it may legitimately be
+    absent — a fresh clone, or a deliberate reset. A missing ledger must skip,
+    never fail: a red suite for "no data yet" trains people to ignore red."""
+    store = resolve_data_dir(REPO)
+    if not (store / "plans").is_dir():
+        pytest.skip(f"no live store at {store}")
     return [
         json.loads(Path(f).read_text(encoding="utf-8"))
         for f in sorted(glob.glob(str(resolve_data_dir(REPO) / "plans" / "*.json")))
