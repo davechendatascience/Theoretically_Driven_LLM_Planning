@@ -61,7 +61,9 @@ each one — the output of an out-of-band research loop, none of it approved:
 
 ```bash
 uv sync
-uv run pytest -q                          # 260 tests
+uv run pytest -q                          # 249 tests; 17 pre-existing
+                                          # failures in test_research_trigger.py
+                                          # and test_research_join.py (EV-0016)
 uv run python scripts/demo_end_to_end.py  # full blocked->measure->unblock flow
 ```
 

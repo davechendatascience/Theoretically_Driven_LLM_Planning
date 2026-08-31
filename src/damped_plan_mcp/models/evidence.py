@@ -23,32 +23,25 @@ EvidenceSourceType = Literal[
     "solver",
 ]
 
-DampingStatus = Literal["converged", "exhausted_budget", "diminishing_returns"]
-
 
 class EvidenceClaim(BaseModel):
-    """Claim-level evidence with provenance and credibility (v0.4.0 micro-damping)."""
+    """DEPRECATED read-path passthrough.
+
+    Retained solely so stored records written before the micro-damping engine
+    was removed stay loadable: three records in the robot-navigation-planning
+    store carry `claims` (EV-0014). `credibility_score` and `coverage_ratio`
+    are preserved on read and consumed by no decision path.
+    """
 
     claim_id: str = Field(default_factory=generate_id)
     target_subtask_id: str
     assertion_statement: str
     observed_payload: dict[str, Any] = Field(default_factory=dict)
-    source_provenance: str  # e.g., "tool:ast_parser", "search:github_api"
+    source_provenance: str
     credibility_score: float = Field(ge=0.0, le=1.0, default=1.0)
     coverage_ratio: float = Field(ge=0.0, le=1.0, default=1.0)
     step_index: int = 0
     is_terminal: bool = False
-
-
-class SubtaskEvidenceBundle(BaseModel):
-    """Aggregated evidence bundle across a micro-query subtask loop."""
-
-    subtask_id: str
-    claims: list[EvidenceClaim] = Field(default_factory=list)
-    aggregate_credibility: float = Field(ge=0.0, le=1.0, default=1.0)
-    total_coverage: float = Field(ge=0.0, le=1.0, default=0.0)
-    damping_status: DampingStatus = "converged"
-    residual_variance: float = 0.0
 
 
 class EvidenceRecord(BaseModel):
@@ -66,8 +59,6 @@ class EvidenceRecord(BaseModel):
     observations: list[MetricObservation] = Field(default_factory=list)
     # Declares that a contract's disconfirming pattern was observed.
     observed_pattern_ids: list[str] = Field(default_factory=list)
-    # Claim-level evidence contracts & micro-query damping bundles (v0.4.0)
+    # Deprecated passthrough; see EvidenceClaim.
     claims: list[EvidenceClaim] = Field(default_factory=list)
-    subtask_bundle: SubtaskEvidenceBundle | None = None
     created_at: datetime
-

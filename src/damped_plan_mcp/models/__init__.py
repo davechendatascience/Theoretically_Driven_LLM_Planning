@@ -12,11 +12,9 @@ from .enums import (
     ValidatorKind,
 )
 from .evidence import (
-    DampingStatus,
     EvidenceClaim,
     EvidenceRecord,
     EvidenceSourceType,
-    SubtaskEvidenceBundle,
 )
 from .plan import (
     PLAN_SCHEMA_VERSION,
@@ -66,7 +64,6 @@ __all__ = [
     "ConstraintKind",
     "ConstraintStatus",
     "ConstraintView",
-    "DampingStatus",
     "DecisionRule",
     "EvidenceClaim",
     "EvidencePolarity",
@@ -90,7 +87,6 @@ __all__ = [
     "ProjectSummary",
     "ResidualReport",
     "Severity",
-    "SubtaskEvidenceBundle",
     "TruthStatus",
     "ValidationStep",
     "ValidatorKind",

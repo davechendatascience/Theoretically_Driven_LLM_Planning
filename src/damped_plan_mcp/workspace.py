@@ -29,7 +29,6 @@ from .services import (
     constraint_service,
     corpus,
     evaluation,
-    micro_damping,
     narration,
     normalize,
     outcomes,
@@ -434,86 +433,6 @@ class Workspace:
                     f"{plan_id}. Predictive check: {result.predictive_status}. "
                     + " ".join(notes)
                 ).strip(),
-            }
-
-    def record_evidence_bundle(
-        self,
-        subtask_id: str,
-        claims: list[dict[str, Any]],
-        linked_plan_id: str | None = None,
-        summary: str = "",
-        required_attributes: list[str] | None = None,
-        max_steps: int = 10,
-        tau_evidence: float = 0.85,
-        epsilon_threshold: float = 0.05,
-    ) -> dict[str, Any]:
-        """Record an aggregated micro-query subtask evidence bundle with damping verification."""
-        with self.store.locked():
-            project = self._require_project()
-            parsed_claims = []
-            for c in claims:
-                norm = normalize.normalize_evidence(
-                    {"summary": c.get("assertion_statement", "claim"), "claims": [c]},
-                    project,
-                    set(),
-                )
-                if norm.claims:
-                    parsed_claims.append(norm.claims[0])
-
-            bundle = micro_damping.build_subtask_bundle(
-                subtask_id=subtask_id,
-                claims=parsed_claims,
-                required_attributes=required_attributes,
-                max_steps=max_steps,
-                tau_evidence=tau_evidence,
-                epsilon_threshold=epsilon_threshold,
-            )
-            evidence_payload = {
-                "summary": summary.strip()
-                or (
-                    f"Micro-damping bundle for {subtask_id}: {len(claims)} claim(s), "
-                    f"coverage={bundle.total_coverage:.2f}, "
-                    f"credibility={bundle.aggregate_credibility:.2f}, "
-                    f"status={bundle.damping_status}"
-                ),
-                "source_type": (
-                    "simulation"
-                    if any("sim" in c.source_provenance for c in bundle.claims)
-                    else "test"
-                ),
-                "polarity": (
-                    "supports" if bundle.damping_status == "converged" else "neutral"
-                ),
-                "linked_plan_id": linked_plan_id,
-                "claims": [c.model_dump(mode="json") for c in bundle.claims],
-                "subtask_bundle": bundle.model_dump(mode="json"),
-            }
-            record = normalize.normalize_evidence(
-                evidence_payload, project, {e.id for e in self.store.list_evidence()}
-            )
-            self.store.save_evidence(record)
-            event_log.append_event(
-                self.store.data_dir,
-                event="evidence_bundle_recorded",
-                actor="mcp:record_evidence_bundle",
-                entity_type="evidence",
-                entity_id=record.id,
-                data={
-                    "subtask_id": subtask_id,
-                    "damping_status": bundle.damping_status,
-                    "aggregate_credibility": bundle.aggregate_credibility,
-                    "total_coverage": bundle.total_coverage,
-                },
-                project_version=project.version,
-            )
-            return {
-                "evidence": record.model_dump(mode="json"),
-                "subtask_bundle": bundle.model_dump(mode="json"),
-                "human_summary": (
-                    f"Recorded micro-damping bundle {record.id} for {subtask_id}: "
-                    f"{bundle.damping_status} (coverage={bundle.total_coverage:.2f}, "
-                    f"credibility={bundle.aggregate_credibility:.2f})."
-                ),
             }
 
     def update_constraint_status(

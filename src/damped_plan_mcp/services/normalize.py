@@ -38,7 +38,6 @@ from ..models import (
     PlanStatus,
     ProjectState,
     Severity,
-    SubtaskEvidenceBundle,
     TruthStatus,
     ValidationStep,
     ValidatorKind,
@@ -740,53 +739,6 @@ def normalize_evidence(
             )
         )
 
-    bundle: SubtaskEvidenceBundle | None = None
-    if data.get("subtask_bundle"):
-        b_data = _as_dict(data.get("subtask_bundle"), "subtask_bundle")
-        b_claims: list[EvidenceClaim] = []
-        for entry in _as_list(b_data.get("claims")):
-            c = _as_dict(entry, "claim")
-            stmt = str(c.get("assertion_statement") or c.get("statement") or "").strip()
-            if not stmt:
-                continue
-            try:
-                cred_score = float(c.get("credibility_score", 1.0))
-            except (TypeError, ValueError):
-                cred_score = 1.0
-            try:
-                cov_ratio = float(c.get("coverage_ratio", 1.0))
-            except (TypeError, ValueError):
-                cov_ratio = 1.0
-            try:
-                step_idx = int(c.get("step_index", 0))
-            except (TypeError, ValueError):
-                step_idx = 0
-            b_claims.append(
-                EvidenceClaim(
-                    claim_id=str(c.get("claim_id") or ids.generate_id(ids.CLAIM_PREFIX)),
-                    target_subtask_id=str(c.get("target_subtask_id") or "subtask-0"),
-                    assertion_statement=stmt,
-                    observed_payload=_as_dict(c.get("observed_payload") or {}, "observed_payload"),
-                    source_provenance=str(c.get("source_provenance") or "tool:unknown"),
-                    credibility_score=max(0.0, min(1.0, cred_score)),
-                    coverage_ratio=max(0.0, min(1.0, cov_ratio)),
-                    step_index=step_idx,
-                    is_terminal=bool(c.get("is_terminal", False)),
-                )
-            )
-        d_status = str(b_data.get("damping_status") or "converged")
-        valid_statuses = {"converged", "exhausted_budget", "diminishing_returns"}
-        if d_status not in valid_statuses:
-            d_status = "converged"
-        bundle = SubtaskEvidenceBundle(
-            subtask_id=str(b_data.get("subtask_id") or "subtask-0"),
-            claims=b_claims or claims,
-            aggregate_credibility=max(0.0, min(1.0, float(b_data.get("aggregate_credibility", 1.0)))),
-            total_coverage=max(0.0, min(1.0, float(b_data.get("total_coverage", 0.0)))),
-            damping_status=d_status,  # type: ignore[arg-type]
-            residual_variance=float(b_data.get("residual_variance", 0.0)),
-        )
-
     return EvidenceRecord(
         id=str(data.get("id") or ids.next_id(ids.EVIDENCE_PREFIX, existing_evidence_ids)),
         project_id=project.project_id,
@@ -802,6 +754,5 @@ def normalize_evidence(
         observations=observations,
         observed_pattern_ids=_str_list(data.get("observed_pattern_ids")),
         claims=claims,
-        subtask_bundle=bundle,
         created_at=now(),
     )
