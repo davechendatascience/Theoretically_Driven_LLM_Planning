@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0002/result.json -- tests/test_diagnose_decide.py -q -p no:asyncio
+exit=0
+test=TST-diagnose@35d73ea9
+at=2026-09-02T09:28:20+00:00
