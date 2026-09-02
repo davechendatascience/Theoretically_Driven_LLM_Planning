@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Component belief-update MCP: evidence-grounded belief state for a system graph"
 requires-python = ">=3.11"
 dependencies = [
-    "mcp>=1.0",
+    "mcp>=1.0,<2",   # server.py targets the v1 FastMCP API; mcp 2.x renamed it to MCPServer
     "PyYAML>=6.0",
 ]
 

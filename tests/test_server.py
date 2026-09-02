@@ -228,6 +228,38 @@ class TestPendingGate:
         assert "PENDING" in server.status(view="graph")
 
 
+class TestNoDeclarationsInEffect:
+    """An uncommitted belief.yaml must not read as a clean bill of health."""
+
+    @pytest.fixture
+    def uncommitted(self, empty_repo, monkeypatch):
+        from conftest import BASE_YAML
+        (empty_repo / "belief.yaml").write_text(BASE_YAML, encoding="utf-8")
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(empty_repo))
+        return empty_repo
+
+    @pytest.mark.parametrize("view", ["belief", "diagnose", "plan", "cycle", "trace"])
+    def test_evidence_views_name_the_blocker(self, uncommitted, view):
+        out = server.status(view=view)
+        assert "NONE IN EFFECT" in out
+        assert "UNCOMMITTED" in out
+        assert "next: commit belief.yaml" in out
+        assert "every observed component is supported" not in out
+        assert "no belief-eligible evidence for that subject" not in out
+
+    def test_graph_and_coverage_keep_their_headers(self, uncommitted):
+        for view in ("graph", "coverage"):
+            assert "NONE IN EFFECT" in server.status(view=view)
+
+    def test_run_test_and_decide_point_at_the_commit(self, uncommitted):
+        assert "next: commit belief.yaml" in server.run_test(test_id="TST-grasp-ik")
+        assert "next: commit belief.yaml" in server.decide(change_id="CHG-1")
+
+    def test_missing_file_says_author_it(self, empty_repo, monkeypatch):
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(empty_repo))
+        assert "author belief.yaml" in server.status(view="diagnose")
+
+
 def test_multi_slice_basis_handle_resolves(project):
     """The handle printed on a multi-slice read is a union hash. If trace only
     matched per-slice hashes, the citation the agent is told to quote would be

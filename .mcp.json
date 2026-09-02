@@ -1,10 +1,14 @@
 {
   "mcpServers": {
     "component-belief": {
-      "command": "python",
-      "args": ["-m", "component_belief.server"],
+      "command": "uv",
+      "args": [
+        "--directory", "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "run", "component-belief-mcp"
+      ],
       "env": {
-        "PYTHONPATH": "src"
+        "BELIEF_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "BELIEF_ACTOR": "agent"
       }
     }
   }

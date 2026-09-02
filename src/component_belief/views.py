@@ -61,6 +61,35 @@ def _declaration_header(decl: Declarations) -> str:
     return line
 
 
+def no_declarations_next(decl: Declarations) -> str:
+    """The one action that unblocks everything when nothing is declared."""
+    if decl.raw_present:
+        return ("commit belief.yaml — it exists in the working tree but not at git HEAD, "
+                "so no component, contract, or test is in effect")
+    return "author belief.yaml and commit it; nothing is declared at git HEAD"
+
+
+def view_no_declarations(ctx: Context, view: str) -> str:
+    """Every evidence view with no declarations in effect.
+
+    Without this, a view built on an empty graph answers vacuously ("no
+    bottleneck", "no evidence for that subject") and reads as a clean bill of
+    health. An empty graph is not a healthy one; say so in the body, not only
+    in the graph view's header.
+    """
+    decl = ctx.decl
+    lines = [
+        _declaration_header(decl), "",
+        f"view {view!r} has nothing to report: no components, contracts, or tests are declared, "
+        "so no evidence can be scored and no bottleneck, plan, or belief exists.",
+    ]
+    if decl.issues:
+        lines += ["", "declaration issues:", bullet(i.render() for i in decl.issues)]
+    return envelope("\n".join(lines),
+                    f"basis: declarations · source none · model {MODEL_VERSION}",
+                    no_declarations_next(decl))
+
+
 def view_graph(ctx: Context, since: str | None = None) -> str:
     decl = ctx.decl
     active = decl.active_components()

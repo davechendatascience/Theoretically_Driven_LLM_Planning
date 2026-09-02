@@ -12,7 +12,7 @@ from component_belief.decide import (
     decision_relevant,
     evaluate_policy,
 )
-from component_belief.diagnose import CONFIRMED, UNOBSERVED, diagnose
+from component_belief.diagnose import CONFIRMED, SUSPECTED, UNOBSERVED, Candidate, _discriminating, diagnose
 from component_belief.model import compute_slices
 from component_belief.planning import plan_round
 from conftest import trial
@@ -66,6 +66,75 @@ def test_e2e_failure_alone_does_not_attribute_to_components(repo):
     decl, slices = prepare(repo, [])
     result = diagnose(decl, slices, [])
     assert all(c.status == UNOBSERVED for c in result.ranked)
+
+
+class TestSingleFailureIsNotAConfirmedFailure:
+    """A rate contract tolerates failures; one fail in a supported slice is
+    the tolerance being used, not a confirmed failure."""
+
+    def test_supported_slice_with_one_fail_is_ok_in_aggregate(self, repo):
+        trials = [trial(ik=True) for _ in range(30)] + [trial(ik=False)]
+        decl, slices = prepare(repo, trials)
+        result = diagnose(decl, slices, trials)
+        assert "CMP-grasp" not in {c.subject for c in result.ranked}
+
+    def test_diagnosing_a_specific_run_still_attributes_its_failure(self, repo):
+        trials = [trial(ik=True) for _ in range(30)] + [trial(ik=False, outcome="fail", run_id="RUN-0002")]
+        decl, slices = prepare(repo, trials)
+        result = diagnose(decl, slices, trials, run_id="RUN-0002")
+        grasp = next(c for c in result.ranked if c.subject == "CMP-grasp")
+        assert grasp.status == CONFIRMED
+        assert "RUN-0002" in grasp.reason
+
+    def test_zero_tolerance_contract_is_confirmed_by_one_fail(self, repo):
+        from conftest import git
+        yaml = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+            "target_rate: 0.8", "target_rate: 1.0")
+        (repo / "belief.yaml").write_text(yaml, encoding="utf-8")
+        git(repo, "add", "belief.yaml")
+        git(repo, "commit", "-q", "-m", "zero tolerance")
+        trials = [trial(ik=True) for _ in range(30)] + [trial(ik=False, outcome="fail")]
+        decl, slices = prepare(repo, trials)
+        result = diagnose(decl, slices, trials)
+        grasp = next(c for c in result.ranked if c.subject == "CMP-grasp")
+        assert grasp.status == CONFIRMED
+        assert "tolerates none" in grasp.reason
+
+
+class TestDiscriminatingTestDoesNotLoop:
+    @staticmethod
+    def tied(status):
+        return [Candidate(subject=s, status=status, suspicion=0.55, decision_relevant=False,
+                          confidence="low", reason="") for s in ("CMP-grasp", "CMP-perception")]
+
+    def test_an_unrun_test_that_splits_the_tie_is_recommended(self, repo):
+        decl = load(repo)
+        found = _discriminating(decl, self.tied(UNOBSERVED), set())
+        assert found["test_id"] == "TST-grasp-ik" and found["observes"] == ["CMP-grasp"]
+
+    def test_the_same_test_is_not_recommended_once_its_evidence_is_in(self, repo):
+        decl = load(repo)
+        assert _discriminating(decl, self.tied(UNOBSERVED), {"TST-grasp-ik"}) is None
+
+    def test_confirmed_leaders_are_not_ambiguous(self, repo):
+        decl = load(repo)
+        assert _discriminating(decl, self.tied(CONFIRMED), set()) is None
+
+    def test_a_test_already_run_is_not_recommended_again(self, repo):
+        trials = [trial(ik=True) for _ in range(3)] + [trial(ik=False)]   # still insufficient
+        decl, slices = prepare(repo, trials)
+        result = diagnose(decl, slices, trials)
+        assert result.discriminating_test is None
+        assert "run TST-grasp-ik" not in result.recommendation
+        assert result.recommendation.startswith("investigate")
+
+    def test_a_confirmed_leader_needs_investigation_not_separation(self, repo):
+        trials = [trial(ik=False) for _ in range(30)]
+        decl, slices = prepare(repo, trials)
+        result = diagnose(decl, slices, trials)
+        assert result.ranked[0].status == CONFIRMED
+        assert result.discriminating_test is None
+        assert "investigate CMP-grasp" in result.recommendation
 
 
 class TestDecisionRelevance:

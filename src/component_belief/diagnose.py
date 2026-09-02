@@ -14,6 +14,7 @@ from typing import Any
 from .declarations import Declarations
 from .decide import active_policy, decision_relevant
 from .model import (
+    BELIEF_ELIGIBLE,
     STATE_CONTESTED,
     STATE_INSUFFICIENT,
     STATE_REFUTED,
@@ -110,13 +111,24 @@ def diagnose(
     components = decl.active_components()
     policy = active_policy(decl, policy_id)
 
+    # A single failing trial confirms a failure in two cases only: the caller
+    # is diagnosing one specific run (attribution by run_id, 6.6), or the
+    # contract tolerates no failures at all. Against a rate contract in the
+    # aggregate, one fail in a supported slice is the tolerance being used,
+    # not a failure — the slice state decides.
     run_trials = [t for t in trials if run_id is None or t.get("run_id") == run_id]
     failing_in_run: set[str] = set()
+    zero_tolerance_failed: set[str] = set()
+    tests_already_run: set[str] = set()
     for trial in run_trials:
+        if trial.get("validity") == "valid" and trial.get("provenance") in BELIEF_ELIGIBLE:
+            tests_already_run.add(str(trial.get("test_id", "")))
         if trial.get("outcome") == "fail" and trial.get("validity") == "valid":
             contract = decl.contracts.get(trial.get("contract_id", ""))
             if contract:
                 failing_in_run.add(contract.subject)
+                if contract.target_rate >= 1.0:
+                    zero_tolerance_failed.add(contract.subject)
 
     by_subject: dict[str, list[Slice]] = {}
     for sl in slices:
@@ -132,8 +144,10 @@ def diagnose(
         component_slices = by_subject.get(cid, [])
         contracts = decl.contracts_for_subject(cid)
 
-        if cid in failing_in_run:
-            statuses[cid] = (CONFIRMED, "failing observation against its own contract in this run")
+        if run_id is not None and cid in failing_in_run:
+            statuses[cid] = (CONFIRMED, f"failing observation against its own contract in {run_id}")
+        elif cid in zero_tolerance_failed:
+            statuses[cid] = (CONFIRMED, "failing observation against a contract that tolerates none")
         elif any(s.state == STATE_REFUTED for s in component_slices):
             statuses[cid] = (CONFIRMED, "belief slice refuted against the contract target rate")
         elif not contracts:
@@ -199,7 +213,7 @@ def diagnose(
         and not _tests_targeting(decl, top.subject)
     )
 
-    discriminating = None if coverage_limited else _discriminating(decl, candidates)
+    discriminating = None if coverage_limited else _discriminating(decl, candidates, tests_already_run)
 
     if coverage_limited:
         # Rule 7.5 — do not recommend optimisation when instrumentation is the
@@ -239,25 +253,38 @@ def _confidence(status: str, slices: list[Slice]) -> str:
     return "high" if tightest < 0.2 else "medium"
 
 
-def _discriminating(decl: Declarations, candidates: list[Candidate]) -> dict[str, Any] | None:
+def _discriminating(
+    decl: Declarations, candidates: list[Candidate], already_run: set[str] | None = None,
+) -> dict[str, Any] | None:
     """A test that splits the ambiguous leaders (7.4).
 
     "Ambiguous" means the top candidates score closely enough that the ranking
     is not really telling you which to attack. A test targeting a strict,
     non-empty subset of them turns that ambiguity into an observation, which
     beats optimising any one of them on a guess.
+
+    Two things are not ambiguity. A leader that is `confirmed_failure` has
+    already been attributed by its own contract — the answer is to investigate
+    it, not to run another test around it. And a test whose evidence is
+    already in the slices has nothing left to separate; recommending it again
+    would send the loop in a circle.
     """
     if len(candidates) < 2:
+        return None
+    if candidates[0].status == CONFIRMED:
         return None
     top_score = candidates[0].score
     if top_score <= 0:
         return None
+    already_run = already_run or set()
     tied = [c.subject for c in candidates if top_score - c.score <= 0.25 * top_score]
     if len(tied) < 2:
         return None
     tied_set = set(tied)
     best: dict[str, Any] | None = None
     for test in decl.tests.values():
+        if test.id in already_run:
+            continue
         covered = tied_set & set(test.targets)
         if covered and covered != tied_set:
             candidate = {

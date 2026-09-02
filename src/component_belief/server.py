@@ -28,6 +28,8 @@ from .views import (
     view_cycle,
     view_diagnose,
     view_graph,
+    view_no_declarations,
+    no_declarations_next,
     view_plan,
     view_trace,
 )
@@ -85,6 +87,8 @@ def status(
     ctx = Context.build(root)
     if view not in VIEWS:
         return f"unknown view {view!r}; expected one of {', '.join(VIEWS)}"
+    if ctx.decl.source == "none" and view not in ("graph", "coverage"):
+        return view_no_declarations(ctx, view)
     if view == "graph":
         return view_graph(ctx, since)
     if view == "coverage":
@@ -120,6 +124,8 @@ def run_test(
     ctx = Context.build(root)
     test = ctx.decl.tests.get(test_id)
     if test is None:
+        if ctx.decl.source == "none":
+            return f"unknown test {test_id!r}: no tests are declared. next: {no_declarations_next(ctx.decl)}"
         known = ", ".join(sorted(ctx.decl.tests)) or "(none declared at git HEAD)"
         return f"unknown test {test_id!r}. Declared tests: {known}"
     if not test.run:
@@ -296,6 +302,8 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
     ctx = Context.build(root)
     policy = active_policy(ctx.decl, policy_id)
     if policy is None:
+        if ctx.decl.source == "none":
+            return f"no declarations in effect, so no policy to decide against. next: {no_declarations_next(ctx.decl)}"
         return ("no policy declared in belief.yaml at git HEAD; "
                 "a decision without visible criteria is not a decision")
 
