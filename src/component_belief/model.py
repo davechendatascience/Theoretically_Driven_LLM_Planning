@@ -122,7 +122,9 @@ def score_trial(contract: Contract, trial: dict[str, Any]) -> tuple[bool | None,
     except ExprError:
         return None, "unparsable_rule"
 
-    missing = needed - set(metrics)
+    # a metric recorded as null is an unmeasured metric: excluded like a missing
+    # one, never compared (a null reaching the rule crashed every evaluation)
+    missing = needed - {k for k, v in metrics.items() if v is not None}
     if missing:
         return None, "missing_metrics"
 
