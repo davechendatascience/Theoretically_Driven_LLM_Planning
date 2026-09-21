@@ -1,58 +1,97 @@
-# Component Belief-Update MCP
+# Theoretically Driven LLM Planning
 
-Evidence-grounded belief state for a system modelled as components and
-interfaces. Design rules in [`docs/component_belief_mcp_design_rules.md`](docs/component_belief_mcp_design_rules.md),
-design in [`docs/component_belief_mcp_design.md`](docs/component_belief_mcp_design.md).
+A dual-MCP epistemic architecture for rigorous software architecture, system planning, and capability verification.
 
-## The commitment
+```
+                         THEORETICALLY DRIVEN LLM PLANNING
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+     consistency-belief (Deductive)                  component-belief (Empirical)
+  • Grounded in: Declared Axioms                  • Grounded in: Executable Test Trials
+  • Representation: Deductive Proof DAG           • Representation: Component System Graph
+  • Verification: LLM Falsification Probes        • Verification: Mechanical Test Execution
+    (counterexample search, gap detection)          (exit codes, captured artifacts, hashes)
+  • Model: Lean-style Proof Obligations           • Model: Beta-Binomial Credible Intervals
+  • Storage: .consistency/ (append-only)          • Storage: .belief/ (append-only)
+```
 
-An LLM agent is the primary caller, and an agent is a fluent producer of
-*plausible* numbers. So **the agent has no write path to a belief.** There is no
-`set_belief`, no free-text field a belief model reads. Beliefs are a pure
-function of `(belief-eligible evidence, declared priors, model version)`.
+## The Commitment
 
-This is enforced by a missing tool, not by a prompt instruction.
+An LLM agent is the primary caller, and an agent is a fluent producer of *plausible* numbers and assertions. Therefore, **in both MCPs, the agent has no write path to a belief**:
+* In `component-belief`, there is no `set_belief`. Beliefs are a pure function of `(belief-eligible evidence, declared priors, model version)`.
+* In `consistency-belief`, there is no `set_consistent`. Consistency is a pure function of `(axiomatic reachability, topological acyclicity, falsification probe outcomes)`.
 
-| Channel | Tool | Belief-eligible |
+This discipline is enforced by **missing tools**, not prompt instructions.
+
+| Channel | Tool | Epistemic Weight |
 |---|---|---|
-| Server ran a declared test | `run_test` | yes — artifact + hash captured |
-| External import | `ingest` | yes — requires source + artifact |
-| Agent or human statement | `note` | **no** — it is testimony |
+| Server ran a declared test | `component_belief.run_test` | Measured empirical evidence (artifact + hash captured) |
+| Server ran a falsification probe | `consistency_belief.verify_step` | Deductive verification trial (counterexample / entailment probe) |
+| External import | `component_belief.ingest` | Imported evidence (requires source + artifact) |
+| Agent or human statement | `note` (both servers) | **Zero weight** — recorded as `provenance=asserted` (testimony) |
 
-## Install
+---
 
-```bash
-pip install -e .
+## 1. `consistency-belief`: Deductive Proof Consistency (Lean-Style)
+
+Design rules in [`docs/consistency_belief_mcp_design_rules.md`](docs/consistency_belief_mcp_design_rules.md).
+Declarations in [`consistency.yaml`](consistency.yaml).
+
+Axiom-to-branch design consistency for architectures, specifications, and planning:
+* **Axiomatic Grounding**: Components, contracts, and design mutations must trace transitively back to declared root axioms (`AXM-...`). Ungrounded nodes are flagged as `UNGROUNDED`.
+* **Mechanical DAG Kernel**: Enforces strict acyclicity before any semantic reasoning. Circular dependencies ($A \implies B \implies A$) are rejected immediately with cycle traces.
+* **Open Proof Obligations (`sorry`)**: Any derived lemma or contract with fewer than $n_{\min}$ verification trials is surfaced as an open `OBLIGATION`.
+* **Topological Blast Radii**: Modifying an upstream axiom or lemma invalidates all downstream dependents, marking them `STALE` until re-verified.
+* **LLM Measurement via Falsification Probes**: The LLM measures consistency through adversarial probes (`verify_step`), searching for concrete counterexamples or unstated assumptions rather than merely affirming belief.
+
+### The Loop
+```
+status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 ```
 
-Register with Claude Code via the included `.mcp.json`, or run directly:
+### The Six Tools
+* `status`: 7 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `audit`, `cycle`).
+* `propose_branch`: Proposes new contracts or lemmas; validates acyclicity and premise validity.
+* `verify_step`: Executes/records falsifiable verification trials (counterexample search, entailment, negation).
+* `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
+* `note`: Qualitative annotation (inert channel, zero proof weight).
+* `decide`: Evaluates consistency policy; enforces human approval for `ADOPT`.
 
-```bash
-PYTHONPATH=src python -m component_belief.server
+```
+AXM-damage-nonneg [AXIOM]
+└── LMA-combat-health-monotonicity [PROVEN 2/2]
+    └── BRN-combat-resolver [PROVEN 2/2]
+
+basis: verification_trials×14 set=a1b1f9 · proven=7 obligations=0 refuted=0
 ```
 
-## Declarations live in git, not in tools
+---
 
-Components, interfaces, contracts, tests, priors, and policies are declared in
-`belief.yaml`. The server reads it from **git HEAD, not the working tree** — so
-editing the file changes nothing until a human commits it.
+## 2. `component-belief`: Empirical Evidence Grounding
 
-That is the entire approval gate for rule 10.5, and it costs zero tools and
-zero roundtrips. Uncommitted edits show as `PENDING` in `status`; a threshold
-lowered in the working tree cannot flip a verdict.
+Design rules in [`docs/component_belief_mcp_design_rules.md`](docs/component_belief_mcp_design_rules.md),
+design in [`docs/component_belief_mcp_design.md`](docs/component_belief_mcp_design.md).
+Declarations in [`belief.yaml`](belief.yaml).
 
-> Caveat: this is exactly as strong as your commit discipline. If agents can
-> commit unattended, add CODEOWNERS on `belief.yaml` or require signed commits.
+Evidence-grounded belief state for a system modeled as components and interfaces:
+* **Declared Contracts**: Slices defined per component/interface, operating condition, and compatibility key.
+* **Trial-Level Granularity**: Stores individual trials from pytest or telemetry into `.belief/`.
+* **Beta-Binomial Statistics**: Computes uncertainty intervals; rejects premature verdicts on sparse data (`insufficient_evidence`).
+* **Regressions & Bottlenecks**: Surfaces regressions and ranks bottlenecks by decision relevance without blaming unobserved components.
 
-## The loop
-
+### The Loop
 ```
 status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 ```
 
-Six tools total — `status`, `run_test`, `ingest`, `note`, `amend`, `decide` —
-because tool schemas are standing context in every session, paid whether or not
-the server is used.
+### The Six Tools
+* `status`: 7 views (`graph`, `coverage`, `belief`, `diagnose`, `plan`, `cycle`, `trace`).
+* `run_test`: Executes declared test commands, captures artifacts, extracts trials.
+* `ingest`: Imports external evidence with provenance.
+* `amend`: Corrects or invalidates trials without destructive mutations.
+* `note`: Qualitative annotation (inert channel).
+* `decide`: Evaluates policy against observed evidence; requires human approver for `ADOPT`/`ROLLBACK`.
 
 ```
 CTR-grasp-reachable [normal, model_revision=v3] supported 0.91 [0.84,0.96] n=34
@@ -61,80 +100,110 @@ basis: evidence×37 set=a3f9c1 · model bb-1 · prior none
 next: run_test TST-grasp-ik conditions={low}  # closes the thin slice
 ```
 
-`set=` is a hash of the exact evidence set, expandable with
-`status(view="trace", set=a3f9c1)`. An id *range* would be cheaper and would
-occasionally lie — slices use a non-contiguous subset once invalid trials and
-other buckets are dropped.
+---
 
-## What it refuses to do
+## Declarations Live in Git, Not in Tools
 
-- **Score an annotation.** `note()` is inert by construction.
-- **Issue a verdict from sparse data.** `insufficient_evidence` is checked
-  first, so n=2 can never present as a result.
-- **Pool incompatible evidence.** Trials differing on a declared
-  `compatibility_key` land in separate slices; a hardware swap reports
-  `not_comparable`, never "no regression detected".
-- **Recommend optimising what it cannot see.** If the leading suspect has no
-  test targeting it, `coverage_limited: true` and *no* optimisation
-  recommendation is produced. The answer is instrumentation.
-- **Score a declared metric off an exit code.** A test that declares
-  `ik_success` but emits nothing gets its trial excluded with
-  `missing_metrics`, not silently passed.
-- **Self-approve.** `adopt` and `rollback` will not record without `approver=`.
+Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not the working tree**:
+* Editing a declaration file changes nothing until a human commits it.
+* Uncommitted edits show as `PENDING` in status.
+* Neither a threshold change nor a weakened axiom in the working tree can flip a verdict without a human git commit.
 
-## Writing tests
+> Caveat: This is exactly as strong as your commit discipline. If agents can commit unattended, add CODEOWNERS on `consistency.yaml` and `belief.yaml` or require signed commits.
 
-A declared test writes trials to `$OUT` (expanded on every platform):
+---
 
-```yaml
-tests:
-  - id: TST-grasp-ik
-    layer: component          # component | interface | e2e
-    targets: [CMP-grasp]
-    run: python tools/pytest_trials.py $OUT -- tests/test_grasp.py -q
-    metrics: [passed]
-    capture: [lighting, model_revision]
+## Install & Register
+
+```bash
+pip install -e .
 ```
+
+Register both servers with Claude Code or Antigravity via `.mcp.json`:
 
 ```json
-{"trials": [{"metrics": {"ik_success": true}, "conditions": {"lighting": "low"}}]}
+{
+  "mcpServers": {
+    "consistency-belief": {
+      "command": "uv",
+      "args": [
+        "--directory", "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "run", "consistency-belief-mcp"
+      ],
+      "env": {
+        "CONSISTENCY_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "CONSISTENCY_ACTOR": "agent"
+      }
+    },
+    "component-belief": {
+      "command": "uv",
+      "args": [
+        "--directory", "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "run", "component-belief-mcp"
+      ],
+      "env": {
+        "BELIEF_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "BELIEF_ACTOR": "agent"
+      }
+    }
+  }
+}
 ```
 
-`tools/pytest_trials.py` adapts any pytest suite, emitting one trial per test
-case — trial-level granularity is rule 3.1, and "the suite passed" throws away
-the evidence every later question needs.
+Or run directly:
+```bash
+PYTHONPATH=src python -m consistency_belief.server
+PYTHONPATH=src python -m component_belief.server
+```
 
-A test's version is the hash of its `run` line and metric spec, so editing a
-test mints a new version and beliefs stop pooling across the boundary. That is
-what stops "we improved the test and the number went up" from reading as
-progress.
+---
 
 ## Layout
 
 ```
-belief.yaml                     declarations — human-owned, git-approved
-src/component_belief/
-  declarations.py               load from git HEAD, validate
-  model.py                      belief slices; no writer exists
-  diagnose.py                   four status classes, decision-relevance ranking
-  decide.py                     policies; the endpoint-disagreement estimator
-  planning.py                   round selection, every skip with a reason
-  runner.py                     test execution and artifact capture
-  views.py / render.py          the seven status views, compact output
-  stats.py                      Beta-Binomial (no SciPy dependency)
-  expr.py                       whitelisted AST rule evaluator, never eval()
-  store.py                      append-only JSONL ledger
-tools/pytest_trials.py          pytest -> trials adapter
-.belief/                        evidence, artifacts, events, decisions
+consistency.yaml                                       # Axioms, definitions, lemmas, contracts (applied to itself)
+belief.yaml                                            # Components, interfaces, contracts, tests (applied to itself)
+docs/
+  consistency_belief_mcp_design_rules.md               # 8 design rules for deductive consistency
+  component_belief_mcp_design_rules.md                 # 11 design rules for empirical belief
+  component_belief_mcp_design.md                       # Empirical model & architecture specification
+src/
+  consistency_belief/                                  # Deductive MCP server
+    declarations.py                                    # Git-HEAD loader and schema validator
+    graph.py                                           # Proof DAG kernel (acyclicity, grounding, blast radius)
+    model.py                                           # Verification state (PROVEN, REFUTED, OBLIGATION, STALE)
+    probes.py                                          # LLM verification probe generators & parsers
+    decide.py                                          # Consistency policy evaluation & human approval gate
+    render.py / views.py                               # ASCII proof tree and status views
+    server.py                                          # FastMCP server (6 tools)
+    store.py                                           # Append-only JSONL ledger in .consistency/
+  component_belief/                                    # Empirical MCP server
+    declarations.py                                    # Git-HEAD loader and validation
+    model.py                                           # Beta-Binomial belief slices
+    diagnose.py                                        # Bottleneck ranking & discriminating tests
+    decide.py                                          # Policy evaluation & human approval gate
+    planning.py                                        # Round test selection
+    runner.py                                          # Test execution and artifact capture
+    views.py / render.py                               # Empirical status views
+    server.py                                          # FastMCP server (6 tools)
+    store.py                                           # Append-only JSONL ledger in .belief/
+tools/pytest_trials.py                                 # pytest -> trials JSON adapter
+tests/                                                 # 109 test cases asserting all epistemic invariants
 ```
+
+---
 
 ## Tests
 
 ```bash
 PYTHONPATH=src python -m pytest tests -q
+# 109 passed in 1.73s
 ```
 
-73 tests. They assert the invariants above, not the implementation: that
-asserted evidence cannot move a posterior, that an uncommitted threshold cannot
-flip a verdict, that a hardware swap reports `not_comparable`, and that the
-rule language rejects `__import__`.
+The test suite asserts the core epistemic invariants across both systems:
+1. Asserted notes cannot move posteriors or close proof obligations.
+2. Uncommitted threshold or axiom edits cannot alter verdicts.
+3. Mechanical DAG checking detects and rejects circular dependencies.
+4. Upstream mutations trigger exact topological blast radius invalidation.
+5. Falsification probes capturing counterexamples immediately transition claims to `REFUTED`.
+6. Final adoption decisions refuse to self-approve without a human approver.
