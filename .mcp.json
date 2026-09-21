@@ -10,6 +10,17 @@
         "BELIEF_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
         "BELIEF_ACTOR": "agent"
       }
+    },
+    "consistency-belief": {
+      "command": "uv",
+      "args": [
+        "--directory", "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "run", "consistency-belief-mcp"
+      ],
+      "env": {
+        "CONSISTENCY_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "CONSISTENCY_ACTOR": "agent"
+      }
     }
   }
 }

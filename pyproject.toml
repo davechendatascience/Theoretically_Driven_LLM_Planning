@@ -17,6 +17,7 @@ dev = ["pytest>=7.4"]
 
 [project.scripts]
 component-belief-mcp = "component_belief.server:main"
+consistency-belief-mcp = "consistency_belief.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

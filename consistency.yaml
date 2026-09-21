@@ -1,0 +1,98 @@
+# Declarations for the consistency-belief MCP, applied to itself.
+#
+# Like belief.yaml, this file is the approval gate. The server reads it from
+# git HEAD, not the working tree — editing it changes nothing until a human
+# commits. Uncommitted edits show up in `status` as PENDING.
+
+axioms:
+  - id: AXM-axiomatic-grounding
+    domain: epistemic
+    statement: >-
+      Every architectural claim, contract, and component must derive
+      transitively from declared root axioms and definitions.
+    rationale: >-
+      Ungrounded claims in architectural planning introduce hidden
+      assumptions and non-auditable failure modes.
+
+  - id: AXM-falsifiable-measurement
+    domain: verification
+    statement: >-
+      Consistency cannot be self-asserted; it must be measured via
+      adversarial falsification trials with captured prompts and counterexamples.
+    rationale: >-
+      LLMs produce agreeable confirmations by default; rigorous consistency
+      requires actively attempting to construct counterexamples.
+
+  - id: AXM-acyclicity
+    domain: logic
+    statement: >-
+      Deductive reasoning graphs must be strictly directed and acyclic.
+    rationale: >-
+      Circular arguments (A implies B implies A) provide zero inferential
+      soundness and conceal contradictions.
+
+  - id: AXM-blast-radius-invalidation
+    domain: integrity
+    statement: >-
+      Modifying an upstream premise or axiom invalidates all downstream
+      derived conclusions until re-verified.
+    rationale: >-
+      Foundational mutations ripple through intermediate lemmas down to
+      terminal contracts; retaining old belief is unsound.
+
+definitions:
+  - id: DEF-proof-obligation
+    term: Proof Obligation
+    meaning: >-
+      An open proof goal (Lean-style `sorry`) representing a derived
+      claim that lacks sufficient verification trials.
+
+  - id: DEF-counterexample
+    term: Counterexample
+    meaning: >-
+      A concrete, realizable scenario where all premises are satisfied
+      but the derived claim fails.
+
+lemmas:
+  - id: LMA-kernel-enforces-acyclicity
+    statement: >-
+      Mechanical DAG checking prevents circular reasoning prior to any
+      LLM semantic verification attempt.
+    premises: [AXM-acyclicity]
+    derivation_rule: Structural induction on directed graph insertion
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: LMA-blast-radius-propagation
+    statement: >-
+      Topological ordering guarantees that every affected child of an
+      invalidated node is identified and marked STALE.
+    premises: [AXM-blast-radius-invalidation, AXM-acyclicity]
+    derivation_rule: Kahn topological traversal over dependency edges
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+branches:
+  - id: BRN-dag-integrity
+    subject: CMP-proof-dag
+    claim_type: contract
+    statement: >-
+      ProofDAG rejects circular insertions and identifies exact transitive
+      reachability to axioms.
+    premises: [LMA-kernel-enforces-acyclicity]
+    derivation_rule: Formal unit test suite asserting graph invariants
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-falsification-trial-ledger
+    subject: CMP-trial-ledger
+    claim_type: contract
+    statement: >-
+      Verification trials are immutable and counterexamples permanently
+      refute a claim until amended.
+    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation]
+    derivation_rule: Append-only JSONL ledger with SHA-256 content hashing
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+policies:
+  - id: POL-consistency-gate
+    criteria:
+      - {target: BRN-dag-integrity, require: proven}
+      - {target: BRN-falsification-trial-ledger, require: proven}
