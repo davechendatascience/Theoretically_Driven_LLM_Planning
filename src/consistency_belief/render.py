@@ -63,6 +63,15 @@ def _state_badge(s: ConsistencySlice) -> str:
     return f"[{s.state.upper()}]"
 
 
+HEADLINE_CHARS = 110
+
+
+def headline(statement: str, limit: int = HEADLINE_CHARS) -> str:
+    """A statement's first line, cut to fit a tree row; status(view="branches") has it in full."""
+    text = " ".join(statement.split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
 def render_ascii_dag(dag: ProofDAG, slices: list[ConsistencySlice]) -> str:
     """Render the proof DAG as an ASCII tree starting from root axioms."""
     slice_map = {s.target_id: s for s in slices}
@@ -78,12 +87,13 @@ def render_ascii_dag(dag: ProofDAG, slices: list[ConsistencySlice]) -> str:
 
         connector = "└── " if is_last else "├── "
         badge = "[AXIOM]" if node.kind == "axiom" else ("[DEF]" if node.kind == "definition" else slice_badge(slice_map.get(nid)))
-        
-        cycle_marker = " (recursive/visited)" if nid in visited else ""
-        lines.append(f"{prefix}{connector}{nid} {badge}{cycle_marker}: {node.statement}")
 
         if nid in visited:
+            # A node with several premises hangs under each of them; its statement and subtree
+            # are printed once, so the tree grows with the graph, not with its paths.
+            lines.append(f"{prefix}{connector}{nid} {badge} (shown above)")
             return
+        lines.append(f"{prefix}{connector}{nid} {badge}: {headline(node.statement)}")
         visited.add(nid)
 
         children = sorted(dag.children.get(nid, set()))
@@ -96,7 +106,7 @@ def render_ascii_dag(dag: ProofDAG, slices: list[ConsistencySlice]) -> str:
         if not node:
             continue
         badge = "[AXIOM]" if node.kind == "axiom" else "[DEF]"
-        lines.append(f"{root} {badge}: {node.statement}")
+        lines.append(f"{root} {badge}: {headline(node.statement)}")
         children = sorted(dag.children.get(root, set()))
         for j, child in enumerate(children):
             print_subtree(child, "", j == len(children) - 1)

@@ -319,3 +319,14 @@ def test_amend_reclassifies_without_editing(committed_repo: Path):
     raw = Store(committed_repo).raw_records()
     assert any(r.get("id") == "TRL-0001" and r.get("outcome") == "falsified" for r in raw)
     assert "Trial TRL-0001" in out
+
+
+def test_tree_prints_each_statement_once_and_short(committed_repo: Path):
+    long_claim = "Fan curve keeps compute below 40W " + "under every load profile " * 20
+    propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap", "AXM-energy-budget"],
+                   claim=long_claim, rationale="two premises, so it hangs under both")
+    tree = status("tree")
+    rows = [line for line in tree.splitlines() if "BRN-fan-curve" in line]
+    assert len(rows) == 2 and sum("(shown above)" in r for r in rows) == 1
+    assert all(len(r) < 200 for r in rows)
+    assert long_claim.strip() in status("branches", subject="BRN-fan-curve")
