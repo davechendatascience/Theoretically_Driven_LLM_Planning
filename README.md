@@ -46,16 +46,18 @@ Axiom-to-branch design consistency for architectures, specifications, and planni
 * **Trials Are Bound to What They Verified**: Every trial records a fingerprint of its target's statement and premises and of every premise upstream. Restating a node sets its earlier trials aside (they are reported, not counted); restating anything upstream marks the node `STALE` until it is re-verified. A revised claim keeps its id instead of needing a new one to escape old verdicts.
 * **Staged Proposals**: `propose_branch` stages a branch in the ledger. It persists across calls, `verify_step` can target it and later proposals can cite it as a premise at once, and it shows as `· STAGED` in every view. It supports `decide()` only once the same id is declared in `consistency.yaml` at git HEAD; trials recorded while staged carry over if the declared statement is the same.
 * **LLM Measurement via Falsification Probes**: The LLM measures consistency through adversarial probes (`verify_step`), searching for concrete counterexamples or unstated assumptions rather than merely affirming belief.
+* **Only a Counterexample Refutes**: A probe with outcome `falsified` makes a node `REFUTED`. A `gap` -- a missing premise, an unproven step -- leaves it unproven: it counts against consensus (so the node reads `DOUBTED` once it has enough trials) and is listed under *Entailment Gaps* in `status(view="contradictions")`, whatever evidence text it carries.
 
 ### The Loop
 ```
 status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 ```
 
-### The Six Tools
+### The Seven Tools
 * `status`: 7 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `audit`, `cycle`).
 * `propose_branch`: Stages new contracts or lemmas (declared or staged premises); validates acyclicity and premise validity; re-proposing a staged id restates it.
 * `verify_step`: Executes/records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified.
+* `amend`: Reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending an amendment; the original record and the reason stay in the ledger.
 * `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
 * `note`: Qualitative annotation (inert channel, zero proof weight).
 * `decide`: Evaluates consistency policy; enforces human approval for `ADOPT`.

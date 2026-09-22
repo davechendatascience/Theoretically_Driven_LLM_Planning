@@ -36,6 +36,7 @@ class ConsistencySlice:
     n_min: int
     min_consensus: float
     counterexamples: list[str] = field(default_factory=list)
+    gaps: list[str] = field(default_factory=list)   # entailment gaps: unproven, not refuted
     trial_ids: list[str] = field(default_factory=list)
     set_handle: str = "000000"
     issues: list[str] = field(default_factory=list)
@@ -90,10 +91,18 @@ def compute_consistency(
         n_min = int(node.metadata.get("n_min", 3))
         min_consensus = float(node.metadata.get("min_consensus", 0.8))
 
+        # Only a falsified probe refutes. A gap -- a missing premise, an unproven step -- leaves
+        # the claim unproven and counts against consensus, but it is not a counterexample,
+        # whatever evidence text it carries.
         counterexamples = [
-            t["counterexample"]
+            t.get("counterexample") or t.get("reasoning") or "falsified by probe"
             for t in target_trials
-            if t.get("counterexample")
+            if t.get("outcome") == "falsified"
+        ]
+        gaps = [
+            t.get("counterexample") or t.get("reasoning") or "entailment gap"
+            for t in target_trials
+            if t.get("outcome") == "gap"
         ]
 
         trial_ids = sorted(t["id"] for t in target_trials if "id" in t)
@@ -106,9 +115,9 @@ def compute_consistency(
         elif any(a in stale_set for a in anc) or target_id in stale_set:
             state = STALE
             issues = [f"ancestor in {sorted(anc & stale_set)} was modified or invalidated"]
-        elif counterexamples or any(t.get("outcome") == "falsified" for t in target_trials):
+        elif counterexamples:
             state = REFUTED
-            issues = [f"falsified by counterexample: {counterexamples[0]}" if counterexamples else "falsified by probe"]
+            issues = [f"falsified by counterexample: {counterexamples[0]}"]
         elif stale_trials and n_trials < n_min:
             state = STALE
             issues = [f"{len(stale_trials)} trial(s) verified it before {', '.join(restated)} was restated; "
@@ -121,6 +130,8 @@ def compute_consistency(
         elif consensus_rate < min_consensus:
             state = DOUBTED
             issues = [f"consensus rate {consensus_rate:.2f} below required {min_consensus:.2f}"]
+            if gaps:
+                issues.append(f"entailment gap: {gaps[0]}")
         else:
             state = PROVEN
             issues = []
@@ -138,6 +149,7 @@ def compute_consistency(
             n_min=n_min,
             min_consensus=min_consensus,
             counterexamples=counterexamples,
+            gaps=gaps,
             trial_ids=trial_ids,
             set_handle=handle,
             issues=issues,

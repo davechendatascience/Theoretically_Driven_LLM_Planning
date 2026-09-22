@@ -8,6 +8,7 @@ import pytest
 
 from conftest import git
 from consistency_belief.server import (
+    amend,
     audit_change,
     decide,
     note,
@@ -283,3 +284,38 @@ def test_legacy_trials_without_fingerprints_still_count(committed_repo: Path):
                             "outcome": "sound", "passed": True, "counterexample": None,
                             "reasoning": f"legacy {i}", "repro": {}, "validity": "valid"})
     assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+
+
+# ---------- gaps and amendments ----------
+
+def test_a_gap_with_evidence_leaves_a_claim_unproven_not_refuted(committed_repo: Path):
+    verify_step("BRN-gpu-throttling", strategy="counterexample", outcome="sound", rationale="ok")
+    verify_step("BRN-gpu-throttling", strategy="entailment", outcome="gap", rationale="incomplete",
+                counterexample="Missing premise: the 35W figure assumes a 25C ambient")
+    branches = status("branches", subject="BRN-gpu-throttling")
+    assert "[DOUBTED]" in branches
+    assert "entailment gaps: Missing premise" in branches
+    contradictions = status("contradictions")
+    assert "Entailment Gaps -- unproven, not refuted (1):" in contradictions
+    assert "Refuted Claims" not in contradictions
+    verdict = decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
+    assert "MORE_TESTING" in verdict and "REJECT" not in verdict
+
+
+def test_amend_reclassifies_without_editing(committed_repo: Path):
+    out = verify_step("BRN-gpu-throttling", outcome="falsified", rationale="wrong target",
+                      counterexample="this belonged to another branch")
+    assert "[REFUTED]" in status("branches", subject="BRN-gpu-throttling")
+
+    assert "reason is required" in amend("TRL-0001", validity="invalid", reason="")
+    assert "unknown trial id" in amend("TRL-9999", validity="invalid", reason="typo")
+    assert "validity must be one of" in amend("TRL-0001", validity="bogus", reason="x")
+
+    amended = amend("TRL-0001", validity="invalid", reason="recorded against the wrong branch")
+    assert "amended TRL-0001: validity=invalid" in amended
+    assert "[OBLIGATION 0/2]" in status("branches", subject="BRN-gpu-throttling")
+
+    from consistency_belief.store import Store
+    raw = Store(committed_repo).raw_records()
+    assert any(r.get("id") == "TRL-0001" and r.get("outcome") == "falsified" for r in raw)
+    assert "Trial TRL-0001" in out

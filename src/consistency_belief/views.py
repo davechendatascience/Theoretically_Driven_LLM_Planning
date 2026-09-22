@@ -118,6 +118,8 @@ def view_branches(ctx: Context, subject: str | None = None) -> str:
         lines.append(f"  axiomatic roots: {', '.join(s.axiomatic_basis) or '(none)'}")
         if s.counterexamples:
             lines.append(f"  counterexamples: {'; '.join(s.counterexamples)}")
+        if s.gaps:
+            lines.append(f"  entailment gaps: {'; '.join(s.gaps)}")
         if s.issues:
             lines.append(f"  issues: {'; '.join(s.issues)}")
         lines.append(f"  verification trials: {s.n_passed}/{s.n_trials} passed (n_min={s.n_min}, set={s.set_handle})")
@@ -168,9 +170,11 @@ def view_obligations(ctx: Context) -> str:
 def view_contradictions(ctx: Context) -> str:
     refuted = [s for s in ctx.slices if s.state == REFUTED]
     ungrounded = [s for s in ctx.slices if s.state == UNGROUNDED]
+    gapped = [s for s in ctx.slices if s.gaps and s.state not in (REFUTED, UNGROUNDED, PROVEN)]
 
-    if not refuted and not ungrounded:
-        return envelope("Zero contradictions or ungrounded branches detected.", basis_line(ctx.slices))
+    if not refuted and not ungrounded and not gapped:
+        return envelope("Zero contradictions, entailment gaps or ungrounded branches detected.",
+                        basis_line(ctx.slices))
 
     lines = []
     if refuted:
@@ -179,6 +183,14 @@ def view_contradictions(ctx: Context) -> str:
             lines.append(f"• {s.target_id}: {s.statement}")
             for cx in s.counterexamples:
                 lines.append(f"    COUNTEREXAMPLE: {cx}")
+        lines.append("")
+
+    if gapped:
+        lines.append(f"Entailment Gaps -- unproven, not refuted ({len(gapped)}):")
+        for s in gapped:
+            lines.append(f"• {s.target_id} [{s.state.upper()}]: {s.statement}")
+            for gap in s.gaps:
+                lines.append(f"    GAP: {gap}")
         lines.append("")
 
     if ungrounded:
@@ -237,6 +249,7 @@ def view_cycle(ctx: Context) -> dict[str, Any]:
                 "n_passed": s.n_passed,
                 "n_min": s.n_min,
                 "counterexamples": s.counterexamples,
+                "gaps": s.gaps,
                 "issues": s.issues,
                 "staged": s.staged,
                 "n_superseded": s.n_superseded,

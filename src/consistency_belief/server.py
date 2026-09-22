@@ -14,7 +14,7 @@ from .graph import ProofNode
 from .model import compute_consistency
 from .probes import STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, parse_probe_result
 from .render import basis_line, bullet, envelope
-from .store import Store
+from .store import VALIDITY, Store
 from .views import (
     VIEWS,
     Context,
@@ -36,6 +36,9 @@ Axioms, definitions, and policies live in a checked-in consistency.yaml and load
 from git HEAD, not the working tree — editing that file changes nothing until a human commits it.
 
 The loop: status(view="obligations") -> verify_step(...) -> status(view="tree").
+
+Only a falsified probe refutes; a gap leaves a claim unproven (DOUBTED) and is listed as an
+entailment gap. amend() reclassifies a mis-recorded trial without editing it.
 
 Proposals are staged, not lost: propose_branch persists a branch in the ledger, where it can be
 verified and cited as a premise by later proposals at once, but it supports decide() only once
@@ -240,6 +243,42 @@ def verify_step(
         lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
 
     return envelope("\n".join(lines), basis_line(fresh.slices))
+
+
+@mcp.tool()
+def amend(trial_id: str, validity: str, reason: str) -> str:
+    """Correct a verification trial without editing it.
+
+    Appends an amendment that folds over the original; the trial as first recorded
+    stays in the ledger with the reason it was reclassified. validity is one of
+    valid | invalid | quarantined | superseded -- only valid trials count. Use it
+    for a trial recorded against the wrong target, with the wrong outcome, or
+    from a probe later shown to be broken; restate the node instead when the
+    claim itself changes.
+    """
+    ctx = Context.build(project_root())
+    if validity not in VALIDITY:
+        return f"validity must be one of {', '.join(VALIDITY)}"
+    if not reason:
+        return "reason is required: an unexplained reclassification is not auditable"
+    known = {t.get("id"): t for t in ctx.store.effective_trials()}
+    if trial_id not in known:
+        return f"unknown trial id {trial_id!r}"
+
+    ctx.store.append_amendment(trial_id, validity=validity, reason=reason, actor=_actor())
+    ctx.store.append_event("amend", {"target": trial_id, "validity": validity}, actor=_actor())
+
+    fresh = Context.build(project_root())
+    target = known[trial_id].get("target_id")
+    target_slice = next((s for s in fresh.slices if s.target_id == target), None)
+    status_line = (f"{target} [{target_slice.state.upper()}] {target_slice.n_passed}/{target_slice.n_trials} trials"
+                   if target_slice else str(target))
+    return envelope(
+        f"amended {trial_id}: validity={validity} -- {reason}\n"
+        f"the original record is retained; this appended an amendment\n"
+        f"updated status: {status_line}",
+        basis_line(fresh.slices),
+    )
 
 
 @mcp.tool()
