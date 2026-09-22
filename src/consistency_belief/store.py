@@ -156,6 +156,18 @@ class Store:
     def events(self) -> list[dict[str, Any]]:
         return list(self._read(self.events_path))
 
+    def staged_proposals(self) -> list[dict[str, Any]]:
+        """Every branch proposed through propose_branch, latest proposal per id, in the order
+        the ids were first proposed. They persist here until a declaration at git HEAD with
+        the same id takes their place."""
+        proposals: dict[str, dict[str, Any]] = {}
+        for event in self.events():
+            if event.get("tool") == "propose_branch":
+                payload = event.get("payload", {})
+                if payload.get("id"):
+                    proposals[payload["id"]] = payload
+        return list(proposals.values())
+
     # ---------- decisions ----------
 
     def append_decision(self, record: dict[str, Any]) -> dict[str, Any]:

@@ -101,15 +101,22 @@ def test_propose_branch_rejects_cycle_and_unknown_premise(committed_repo: Path):
     assert "rejected proposal 'BRN-bad':" in bad_premise_out
     assert "unknown premise 'AXM-nonexistent'" in bad_premise_out
 
-    # Cycle attempt
-    cycle_out = propose_branch(
+    # A declared node is restated in consistency.yaml, not through a proposal
+    declared_out = propose_branch(
         id="AXM-energy-budget",
         subject="CMP-cycle",
         premises=["BRN-gpu-throttling"],
         claim="Loop",
         rationale="Loop",
     )
-    assert "rejected proposal 'AXM-energy-budget':" in cycle_out
+    assert "rejected proposal 'AXM-energy-budget':" in declared_out
+    assert "declared in consistency.yaml at git HEAD" in declared_out
+
+    # Cycle attempt through staged proposals: restating BRN-x on its own dependent
+    propose_branch(id="BRN-x", subject="CMP-x", premises=["BRN-gpu-throttling"], claim="x", rationale="x")
+    propose_branch(id="BRN-y", subject="CMP-y", premises=["BRN-x"], claim="y", rationale="y")
+    cycle_out = propose_branch(id="BRN-x", subject="CMP-x", premises=["BRN-y"], claim="x again", rationale="x")
+    assert "rejected proposal 'BRN-x':" in cycle_out
     assert "cycle detected" in cycle_out
 
 
@@ -162,3 +169,117 @@ def test_counterexample_refutes_and_blocks_decide(committed_repo: Path):
     # Decide now returns REJECT
     decide_rejected = decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
     assert "REJECT" in decide_rejected
+
+
+# ---------- staged proposals and statement-bound trials ----------
+
+def _commit_yaml(repo: Path, text: str, message: str) -> None:
+    (repo / "consistency.yaml").write_text(text, encoding="utf-8")
+    git(repo, "add", "consistency.yaml")
+    git(repo, "commit", "-q", "-m", message)
+
+
+def test_staged_branch_persists_and_can_be_verified(committed_repo: Path):
+    out = propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap"],
+                         claim="Fan curve keeps compute below 40W.", rationale="thermal headroom")
+    assert "Branch BRN-fan-curve staged" in out
+
+    # a later call, which rebuilds everything from git HEAD and the ledger, still knows it
+    v = verify_step("BRN-fan-curve", strategy="counterexample", outcome="sound", rationale="checked")
+    assert "Trial TRL-0001 recorded for BRN-fan-curve" in v
+    assert "is staged" in v
+
+    obligations = status("obligations")
+    assert "BRN-fan-curve [OBLIGATION · STAGED]" in obligations
+    assert "staged -- proposed, not yet declared at git HEAD" in status("tree")
+
+
+def test_staged_branch_can_be_cited_and_cannot_support_adopt(committed_repo: Path):
+    propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap"],
+                   claim="Fan curve keeps compute below 40W.", rationale="thermal headroom")
+    out = propose_branch(id="BRN-fan-alarm", subject="CMP-fan", premises=["BRN-fan-curve"],
+                         claim="An alarm fires when the fan curve saturates.", rationale="follows")
+    assert "Branch BRN-fan-alarm staged" in out
+    assert "[GROUNDED]" in out
+
+    for node in ("LMA-compute-cap", "BRN-fan-curve", "BRN-fan-alarm"):
+        verify_step(node, outcome="sound", rationale="ok")
+        verify_step(node, outcome="sound", rationale="ok again")
+        verify_step(node, outcome="sound", rationale="ok thrice")
+    verdict = decide("BRN-fan-alarm", policy_id="POL-energy-gate")
+    assert "ADOPT" not in verdict
+    assert "BRN-fan-alarm is STAGED" in verdict and "BRN-fan-curve is STAGED" in verdict
+
+
+def test_trials_carry_over_when_the_same_statement_is_declared(committed_repo: Path):
+    claim = "Fan curve keeps compute below 40W."
+    propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap"], claim=claim,
+                   rationale="thermal headroom")
+    verify_step("BRN-fan-curve", outcome="sound", rationale="ok")
+    verify_step("BRN-fan-curve", outcome="sound", rationale="ok again")
+
+    _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML.replace("\npolicies:", f"""
+  - id: BRN-fan-curve
+    subject: CMP-fan
+    claim_type: contract
+    statement: {claim}
+    premises: [LMA-compute-cap]
+    derivation_rule: thermal headroom
+    sufficiency: {{n_min: 2, min_consensus: 0.8}}
+
+policies:"""), "declare the fan curve")
+    tree = status("tree")
+    assert "BRN-fan-curve [PROVEN 2/2]" in tree
+    assert "staged" not in tree
+
+
+def test_restating_a_declared_node_sets_its_trials_aside(committed_repo: Path):
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="ok")
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="ok again")
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+
+    _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML.replace(
+        "Cap GPU clock to guarantee power < 35W.", "Cap GPU clock to guarantee power < 38W."), "restate")
+    branches = status("branches", subject="BRN-gpu-throttling")
+    assert "[OBLIGATION 0/2]" in branches
+    assert "2 verified an earlier statement" in branches
+
+
+def test_restating_a_premise_makes_dependents_stale(committed_repo: Path):
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="ok")
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="ok again")
+
+    _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML.replace(
+        "Compute power cannot exceed 40W.", "Compute power cannot exceed 45W."), "restate the lemma")
+    branches = status("branches", subject="BRN-gpu-throttling")
+    assert "[STALE]" in branches
+    assert "before LMA-compute-cap was restated" in branches
+    assert "BRN-gpu-throttling is STALE" in decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
+
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="re-verified")
+    verify_step("BRN-gpu-throttling", outcome="sound", rationale="re-verified again")
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+
+
+def test_restating_a_staged_branch_sets_its_trials_aside(committed_repo: Path):
+    propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap"],
+                   claim="Fan curve keeps compute below 40W.", rationale="v1")
+    verify_step("BRN-fan-curve", outcome="falsified", rationale="no", counterexample="fan stalls at 70C")
+    assert "[REFUTED · STAGED]" in status("branches", subject="BRN-fan-curve")
+
+    out = propose_branch(id="BRN-fan-curve", subject="CMP-fan", premises=["LMA-compute-cap"],
+                         claim="Fan curve plus throttling keeps compute below 40W.", rationale="v2")
+    assert "restated" in out and "no longer count" in out
+    branches = status("branches", subject="BRN-fan-curve")
+    assert "[OBLIGATION 0/3 · STAGED]" in branches
+    assert "1 verified an earlier statement" in branches
+
+
+def test_legacy_trials_without_fingerprints_still_count(committed_repo: Path):
+    from consistency_belief.store import Store
+    store = Store(committed_repo)
+    for i in range(2):
+        store.append_trial({"target_id": "BRN-gpu-throttling", "strategy": "counterexample",
+                            "outcome": "sound", "passed": True, "counterexample": None,
+                            "reasoning": f"legacy {i}", "repro": {}, "validity": "valid"})
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")

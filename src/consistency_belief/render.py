@@ -45,6 +45,11 @@ def envelope(body: str, basis: str) -> str:
 def slice_badge(s: ConsistencySlice | None) -> str:
     if s is None:
         return "[UNKNOWN]"
+    badge = _state_badge(s)
+    return badge[:-1] + " · STAGED]" if s.staged else badge
+
+
+def _state_badge(s: ConsistencySlice) -> str:
     if s.state == PROVEN:
         return f"[PROVEN {s.n_passed}/{s.n_trials}]"
     if s.state == REFUTED:

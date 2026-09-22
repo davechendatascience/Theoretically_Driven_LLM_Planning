@@ -37,6 +37,12 @@ from git HEAD, not the working tree — editing that file changes nothing until 
 
 The loop: status(view="obligations") -> verify_step(...) -> status(view="tree").
 
+Proposals are staged, not lost: propose_branch persists a branch in the ledger, where it can be
+verified and cited as a premise by later proposals at once, but it supports decide() only once
+the same id is declared in consistency.yaml at git HEAD. Trials are bound to the statement they
+verified: restating a node sets its earlier trials aside, and restating any premise upstream
+makes it STALE until it is re-verified.
+
 Four rules:
 1. Every component, contract, and change must ground transitively in declared Axioms.
 2. Verification trials are falsifiable probes (counterexample search, entailment, negation) — never ungrounded assertion.
@@ -109,10 +115,19 @@ def propose_branch(
     """Propose a new component contract, lemma, or architectural change.
 
     The server checks acyclicity and verifies that all premises are recognized
-    nodes in the graph. If valid, the branch is staged as an open proof obligation.
+    nodes in the graph -- declared ones, or branches staged by earlier proposals.
+    If valid, the branch is staged: it persists as an open proof obligation that
+    verify_step can target and later proposals can cite, and it supports decide()
+    once the same id is declared in consistency.yaml at git HEAD. Proposing an id
+    that is already staged restates it; trials of the earlier claim stop counting.
     """
     root = project_root()
     ctx = Context.build(root)
+    if id in ctx.dag.nodes and not ctx.dag.nodes[id].staged:
+        return (f"rejected proposal {id!r}:\n" + bullet([
+            f"{id!r} is declared in consistency.yaml at git HEAD; restate it there -- trials are bound "
+            "to the statement they verified, so a restated node re-opens its obligations"]))
+    restating = any(p["id"] == id for p in ctx.store.staged_proposals())
 
     node = ProofNode(
         id=id,
@@ -121,8 +136,9 @@ def propose_branch(
         premises=list(premises),
         derivation_rule=rationale,
         subject=subject,
+        metadata={"staged": True},
     )
-    errors = ctx.dag.add_node(node)
+    errors = ctx.dag.premise_errors(node)
     if errors:
         return f"rejected proposal {id!r}:\n" + bullet(errors)
 
@@ -135,14 +151,17 @@ def propose_branch(
         "branch_type": branch_type,
     }, actor=_actor())
 
+    ctx = Context.build(root)
     grounded, ground_issues = ctx.dag.is_grounded(id)
     ground_status = "GROUNDED" if grounded else f"UNGROUNDED ({'; '.join(ground_issues)})"
 
     return envelope(
-        f"Branch {id} proposed on subject {subject!r} [{ground_status}].\n"
+        f"Branch {id} {'restated' if restating else 'staged'} on subject {subject!r} [{ground_status}].\n"
         f"Premises: {', '.join(premises)}\n"
         f"Claim: {claim}\n"
-        f"Next: call verify_step({id!r}) to run falsification probes.",
+        + ("Trials of the earlier claim no longer count.\n" if restating else "")
+        + f"Staged: verify_step({id!r}) and later proposals can use it now; it supports decide() once "
+        f"{id!r} is declared in consistency.yaml at git HEAD.",
         basis_line(ctx.slices)
     )
 
@@ -192,6 +211,9 @@ def verify_step(
         "reasoning": parsed["reasoning"],
         "repro": repro or {"actor": _actor()},
         "validity": "valid",
+        "statement_sha": node.fingerprint(),
+        "basis": ctx.dag.basis_fingerprints(target_id),
+        "staged": node.staged,
     }
 
     trial_id = ctx.store.append_trial(trial_record)
@@ -211,6 +233,9 @@ def verify_step(
         f"Trial {trial_id} recorded for {target_id} (strategy={strategy}, outcome={parsed['outcome']}).",
         f"Updated status: {slice_line}",
     ]
+    if node.staged:
+        lines.append(f"{target_id} is staged: the trial vouches for the proposed statement and carries over if "
+                     "the same statement is declared at git HEAD.")
     if parsed["counterexample"]:
         lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
 

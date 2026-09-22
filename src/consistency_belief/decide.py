@@ -63,6 +63,9 @@ def evaluate_consistency_policy(
             refutations.append(f"{s.target_id} is REFUTED: {'; '.join(s.counterexamples or ['falsified by probe'])}")
         elif s.state == UNGROUNDED:
             refutations.append(f"{s.target_id} is UNGROUNDED: {'; '.join(s.issues)}")
+        elif s.staged:
+            obligations.append(f"{s.target_id} is STAGED ({s.state.upper()}, {s.n_trials}/{s.n_min} trials): "
+                               "declare it in consistency.yaml and commit before it can support a decision")
         elif s.state != PROVEN:
             obligations.append(f"{s.target_id} is {s.state.upper()} ({s.n_trials}/{s.n_min} trials)")
 

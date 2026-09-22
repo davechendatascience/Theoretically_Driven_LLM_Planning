@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .declarations import Declarations, load as load_declarations
-from .graph import ProofDAG
+from .graph import ProofDAG, ProofNode
 from .model import PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice, compute_consistency
 from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
 from .store import Store
@@ -23,6 +23,7 @@ class Context:
     decl: Declarations
     dag: ProofDAG
     slices: list[ConsistencySlice]
+    staged_issues: list[str] = field(default_factory=list)
 
     @classmethod
     def build(cls, root: Path, staged_nodes: list[Any] | None = None) -> Context:
@@ -30,14 +31,40 @@ class Context:
         decl = load_declarations(root)
         dag = ProofDAG.from_declarations(decl)
 
-        # Merge staged nodes if any
-        if staged_nodes:
-            for n in staged_nodes:
-                dag.add_node(n)
+        staged = [staged_node(p) for p in store.staged_proposals() if p["id"] not in dag.nodes]
+        staged_issues = _add_in_dependency_order(dag, staged + list(staged_nodes or []))
 
         trials = store.effective_trials()
         slices = compute_consistency(dag, trials)
-        return cls(root=root, store=store, decl=decl, dag=dag, slices=slices)
+        return cls(root=root, store=store, decl=decl, dag=dag, slices=slices, staged_issues=staged_issues)
+
+
+def staged_node(proposal: dict[str, Any]) -> ProofNode:
+    """The proof node a propose_branch event stands for."""
+    return ProofNode(
+        id=proposal["id"],
+        kind="branch" if proposal.get("branch_type", "contract") == "contract" else "lemma",
+        statement=proposal.get("claim", ""),
+        premises=list(proposal.get("premises", [])),
+        derivation_rule=proposal.get("rationale", ""),
+        subject=proposal.get("subject", ""),
+        metadata={"staged": True},
+    )
+
+
+def _add_in_dependency_order(dag: ProofDAG, nodes: list[ProofNode]) -> list[str]:
+    """Add staged nodes whose premises are present, repeatedly, so a proposal may cite another
+    proposal made after it; report the ones that never resolve (a withdrawn or renamed premise)."""
+    pending = list(nodes)
+    while pending:
+        ready = [n for n in pending if all(p in dag.nodes for p in n.premises)]
+        if not ready:
+            break
+        for n in ready:
+            dag.add_node(n)
+        pending = [n for n in pending if n not in ready]
+    return [f"staged {n.id}: premise(s) {', '.join(p for p in n.premises if p not in dag.nodes)} not found"
+            for n in pending]
 
 
 def no_declarations_next(decl: Declarations) -> str:
@@ -60,12 +87,16 @@ def view_no_declarations(ctx: Context, view: str) -> str:
 
 
 def view_tree(ctx: Context) -> str:
+    n_staged = sum(1 for n in ctx.dag.nodes.values() if n.staged)
     header = [
         f"Proof DAG: {len(ctx.dag.nodes)} nodes ({len(ctx.decl.axioms)} axioms, "
-        f"{len(ctx.decl.lemmas)} lemmas, {len(ctx.decl.branches)} branches)",
+        f"{len(ctx.decl.lemmas)} lemmas, {len(ctx.decl.branches)} branches"
+        + (f", {n_staged} staged -- proposed, not yet declared at git HEAD" if n_staged else "") + ")",
         f"Source: {ctx.decl.source}{' [PENDING UNCOMMITTED EDITS]' if ctx.decl.pending else ''}",
-        "",
     ]
+    if ctx.staged_issues:
+        header += ["Staged proposals that do not resolve:", bullet(ctx.staged_issues)]
+    header.append("")
     tree_text = render_ascii_dag(ctx.dag, ctx.slices)
     return envelope("\n".join(header) + "\n" + tree_text, basis_line(ctx.slices))
 
@@ -90,6 +121,12 @@ def view_branches(ctx: Context, subject: str | None = None) -> str:
         if s.issues:
             lines.append(f"  issues: {'; '.join(s.issues)}")
         lines.append(f"  verification trials: {s.n_passed}/{s.n_trials} passed (n_min={s.n_min}, set={s.set_handle})")
+        if s.n_superseded or s.n_stale:
+            lines.append(f"  not counted: {s.n_superseded} verified an earlier statement, "
+                         f"{s.n_stale} predate a restated premise")
+        if s.staged:
+            lines.append("  staged: proposed, not declared at git HEAD -- declare it in consistency.yaml "
+                         "and commit before it can support decide()")
         lines.append("")
 
     return envelope("\n".join(lines).rstrip(), basis_line(target_slices))
@@ -119,7 +156,7 @@ def view_obligations(ctx: Context) -> str:
 
     lines = [f"Open Proof Obligations ({len(open_obs)}):", ""]
     for s in open_obs:
-        lines.append(f"• {s.target_id} [{s.state.upper()}]: {s.statement}")
+        lines.append(f"• {s.target_id} [{s.state.upper()}{' · STAGED' if s.staged else ''}]: {s.statement}")
         lines.append(f"    premises: {', '.join(s.premises) or '(none)'}")
         lines.append(f"    progress: {s.n_trials}/{s.n_min} trials (need {max(0, s.n_min - s.n_trials)} more)")
         if s.issues:
@@ -201,6 +238,9 @@ def view_cycle(ctx: Context) -> dict[str, Any]:
                 "n_min": s.n_min,
                 "counterexamples": s.counterexamples,
                 "issues": s.issues,
+                "staged": s.staged,
+                "n_superseded": s.n_superseded,
+                "n_stale": s.n_stale,
             }
             for s in ctx.slices
         ],

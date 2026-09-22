@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .declarations import Declarations
+from .ids import content_hash
 
 
 @dataclass
@@ -22,6 +23,15 @@ class ProofNode:
     derivation_rule: str = ""
     subject: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def staged(self) -> bool:
+        """Proposed through propose_branch but not declared in consistency.yaml at git HEAD."""
+        return bool(self.metadata.get("staged"))
+
+    def fingerprint(self) -> str:
+        """What a verification trial vouches for: the statement and the premises it rests on."""
+        return content_hash({"statement": self.statement, "premises": sorted(self.premises)})
 
 
 class ProofDAG:
@@ -57,14 +67,20 @@ class ProofDAG:
             ))
         return dag
 
-    def add_node(self, node: ProofNode) -> list[str]:
+    def premise_errors(self, node: ProofNode) -> list[str]:
+        """Why `node` could not join the graph: unknown premises, or premises that already
+        depend on it (checked against the graph as it stands, a restated node's dependents
+        included)."""
         errors: list[str] = []
         for p in node.premises:
             if p not in self.nodes:
                 errors.append(f"unknown premise {p!r}")
             elif p == node.id or node.id in self.ancestors(p):
                 errors.append(f"cycle detected: premise {p!r} transitively depends on {node.id!r}")
+        return errors
 
+    def add_node(self, node: ProofNode) -> list[str]:
+        errors = self.premise_errors(node)
         if errors:
             return errors
 
@@ -106,6 +122,11 @@ class ProofDAG:
     def roots(self) -> set[str]:
         """Nodes with no premises (should be axioms or definitions)."""
         return {nid for nid, p in self.parents.items() if not p}
+
+    def basis_fingerprints(self, node_id: str) -> dict[str, str]:
+        """Fingerprint of every transitive premise: a trial recorded under one basis stops
+        vouching for the node once any premise upstream is restated (rule 3)."""
+        return {aid: self.nodes[aid].fingerprint() for aid in sorted(self.ancestors(node_id))}
 
     def axiomatic_basis(self, node_id: str) -> set[str]:
         """All ancestor nodes that are declared axioms."""

@@ -39,6 +39,9 @@ class ConsistencySlice:
     trial_ids: list[str] = field(default_factory=list)
     set_handle: str = "000000"
     issues: list[str] = field(default_factory=list)
+    staged: bool = False            # proposed, not declared at git HEAD: cannot support decide()
+    n_superseded: int = 0           # trials that verified an earlier statement of this node
+    n_stale: int = 0                # trials recorded before a premise upstream was restated
 
     @property
     def is_sound(self) -> bool:
@@ -77,7 +80,8 @@ def compute_consistency(
         grounded, ground_issues = dag.is_grounded(target_id)
         anc = dag.ancestors(target_id)
         axioms = sorted(dag.axiomatic_basis(target_id))
-        target_trials = by_target.get(target_id, [])
+        target_trials, n_superseded, stale_trials = _partition(dag, node, by_target.get(target_id, []))
+        restated = _restated_premises(dag, target_id, stale_trials)
 
         n_trials = len(target_trials)
         n_passed = sum(1 for t in target_trials if t.get("passed", False))
@@ -105,9 +109,15 @@ def compute_consistency(
         elif counterexamples or any(t.get("outcome") == "falsified" for t in target_trials):
             state = REFUTED
             issues = [f"falsified by counterexample: {counterexamples[0]}" if counterexamples else "falsified by probe"]
+        elif stale_trials and n_trials < n_min:
+            state = STALE
+            issues = [f"{len(stale_trials)} trial(s) verified it before {', '.join(restated)} was restated; "
+                      f"re-verify ({n_trials}/{n_min} under the current premises)"]
         elif n_trials < n_min:
             state = OBLIGATION
             issues = [f"insufficient verification trials: {n_trials}/{n_min} completed"]
+            if n_superseded:
+                issues.append(f"{n_superseded} earlier trial(s) verified a previous statement and no longer count")
         elif consensus_rate < min_consensus:
             state = DOUBTED
             issues = [f"consensus rate {consensus_rate:.2f} below required {min_consensus:.2f}"]
@@ -131,6 +141,37 @@ def compute_consistency(
             trial_ids=trial_ids,
             set_handle=handle,
             issues=issues,
+            staged=node.staged,
+            n_superseded=n_superseded,
+            n_stale=len(stale_trials),
         ))
 
     return slices
+
+
+def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
+    """Split a node's trials into those that vouch for it as it stands now, a count of those
+    that verified an earlier statement, and those recorded before a premise upstream was
+    restated. Trials recorded before fingerprints existed carry none and count as current."""
+    current_statement = node.fingerprint()
+    current_basis = dag.basis_fingerprints(node.id)
+    current, superseded, stale = [], 0, []
+    for t in trials:
+        if "statement_sha" not in t:
+            current.append(t)
+        elif t["statement_sha"] != current_statement:
+            superseded += 1
+        elif t.get("basis") is not None and t["basis"] != current_basis:
+            stale.append(t)
+        else:
+            current.append(t)
+    return current, superseded, stale
+
+
+def _restated_premises(dag: ProofDAG, node_id: str, stale_trials: list[dict[str, Any]]) -> list[str]:
+    current = dag.basis_fingerprints(node_id)
+    changed: set[str] = set()
+    for t in stale_trials:
+        recorded = t.get("basis") or {}
+        changed |= {k for k in set(recorded) | set(current) if recorded.get(k) != current.get(k)}
+    return sorted(changed)

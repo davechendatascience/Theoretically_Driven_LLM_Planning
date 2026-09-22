@@ -43,6 +43,8 @@ Axiom-to-branch design consistency for architectures, specifications, and planni
 * **Mechanical DAG Kernel**: Enforces strict acyclicity before any semantic reasoning. Circular dependencies ($A \implies B \implies A$) are rejected immediately with cycle traces.
 * **Open Proof Obligations (`sorry`)**: Any derived lemma or contract with fewer than $n_{\min}$ verification trials is surfaced as an open `OBLIGATION`.
 * **Topological Blast Radii**: Modifying an upstream axiom or lemma invalidates all downstream dependents, marking them `STALE` until re-verified.
+* **Trials Are Bound to What They Verified**: Every trial records a fingerprint of its target's statement and premises and of every premise upstream. Restating a node sets its earlier trials aside (they are reported, not counted); restating anything upstream marks the node `STALE` until it is re-verified. A revised claim keeps its id instead of needing a new one to escape old verdicts.
+* **Staged Proposals**: `propose_branch` stages a branch in the ledger. It persists across calls, `verify_step` can target it and later proposals can cite it as a premise at once, and it shows as `· STAGED` in every view. It supports `decide()` only once the same id is declared in `consistency.yaml` at git HEAD; trials recorded while staged carry over if the declared statement is the same.
 * **LLM Measurement via Falsification Probes**: The LLM measures consistency through adversarial probes (`verify_step`), searching for concrete counterexamples or unstated assumptions rather than merely affirming belief.
 
 ### The Loop
@@ -52,8 +54,8 @@ status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 
 ### The Six Tools
 * `status`: 7 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `audit`, `cycle`).
-* `propose_branch`: Proposes new contracts or lemmas; validates acyclicity and premise validity.
-* `verify_step`: Executes/records falsifiable verification trials (counterexample search, entailment, negation).
+* `propose_branch`: Stages new contracts or lemmas (declared or staged premises); validates acyclicity and premise validity; re-proposing a staged id restates it.
+* `verify_step`: Executes/records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified.
 * `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
 * `note`: Qualitative annotation (inert channel, zero proof weight).
 * `decide`: Evaluates consistency policy; enforces human approval for `ADOPT`.
@@ -108,6 +110,7 @@ Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not th
 * Editing a declaration file changes nothing until a human commits it.
 * Uncommitted edits show as `PENDING` in status.
 * Neither a threshold change nor a weakened axiom in the working tree can flip a verdict without a human git commit.
+* A staged proposal (consistency-belief) is reviewable before that commit -- it can be verified and cited -- but it cannot support a decision until it is declared and committed.
 
 > Caveat: This is exactly as strong as your commit discipline. If agents can commit unattended, add CODEOWNERS on `consistency.yaml` and `belief.yaml` or require signed commits.
 
