@@ -21,3 +21,4 @@
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 33, "run_id": "RUN-0021", "synthesized": false, "test": "TST-consistency-server@b952d308"}, "session": "", "timestamp": "2026-09-23T14:23:27+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 54, "run_id": "RUN-0022", "synthesized": false, "test": "TST-beliefs@32bd673a"}, "session": "", "timestamp": "2026-09-23T14:28:31+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 31, "run_id": "RUN-0023", "synthesized": false, "test": "TST-server@c38f683a"}, "session": "", "timestamp": "2026-09-23T14:29:31+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 18, "run_id": "RUN-0024", "synthesized": false, "test": "TST-stamp-monitor@0056950c"}, "session": "", "timestamp": "2026-09-23T14:35:30+00:00", "tool": "run_test"}

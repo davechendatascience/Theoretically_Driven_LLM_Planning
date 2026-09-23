@@ -1,0 +1,166 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestImpact::test_a_claimed_change_is_traced_through_both_ledgers"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestImpact::test_a_declared_read_is_part_of_the_chain"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestImpact::test_an_unrelated_change_touches_nothing_and_says_so"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestImpact::test_uncommitted_edits_stale_nothing_but_name_the_rerun"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestImpact::test_an_unknown_base_is_an_answer_not_a_crash"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_a_fresh_run_audits_clean"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_an_edited_artifact_is_caught"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_a_line_ending_rewrite_is_not_tampering"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_an_edited_stamp_and_a_damaged_ledger_line_are_caught"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_duplicate_ids_and_dangling_citations"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestAudit::test_uncommitted_declarations_are_reported"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestWorkflow::test_reclassifying_only_failures_is_a_pattern"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestWorkflow::test_a_single_retraction_is_reported_not_flagged"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestWorkflow::test_an_agent_cannot_approve_its_own_adoption"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestWorkflow::test_an_adoption_on_evidence_since_gone_stale"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor.TestWorkflow::test_a_decision_on_dirty_tree_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor::test_the_tools_read_and_never_write"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_stamp_monitor::test_the_cli_exits_nonzero_on_a_block"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
