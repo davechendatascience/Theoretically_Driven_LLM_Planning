@@ -153,3 +153,12 @@ def test_source_citations_finds_files_not_prose():
     # prose about the design names no file, whatever it says about functions
     assert source_citations("The jaws hold a handle when both finger groups touch its geometry.") == []
     assert source_citations("A query answers for the stations it names and nothing between them.") == []
+
+
+def test_a_declared_minimum_of_zero_proves_nothing(mini_dag: ProofDAG):
+    """A node declared with n_min 0 and consensus 0 must not come out proven with no trials: a
+    minimum below one is read as one, so a proof always rests on at least one trial."""
+    mini_dag.nodes["LMA-1"].metadata.update({"n_min": 0, "min_consensus": 0.0})
+    slices = compute_consistency(mini_dag, [], targets=["LMA-1"])
+    assert slices[0].state == OBLIGATION
+    assert slices[0].n_min == 1

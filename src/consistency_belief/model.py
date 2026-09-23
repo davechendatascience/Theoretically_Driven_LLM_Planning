@@ -115,7 +115,9 @@ def compute_consistency(
         n_independent, strategies = independent_trials(target_trials)
         untried = [s for s in PASS_STRATEGIES if s not in strategies]
 
-        n_min = int(node.metadata.get("n_min", 3))
+        # A proof rests on at least one trial: a declared minimum below one would let a node
+        # with no trials at all come out proven.
+        n_min = max(1, int(node.metadata.get("n_min", 3)))
         min_consensus = float(node.metadata.get("min_consensus", 0.8))
 
         # Only a falsified probe refutes. A gap -- a missing premise, an unproven step -- leaves
