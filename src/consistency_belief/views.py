@@ -327,9 +327,65 @@ def view_coverage(ctx: Context) -> str:
                     f"basis: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source} · next: {nxt}")
 
 
+def view_component_audit(ctx: Context, component_id: str) -> str:
+    """What a component's designs rest on.
+
+    Axioms, definitions and lemmas carry no subject -- they are the ground every design shares --
+    so a component reaches them only through its branches. This walks that closure: the branches
+    that govern the component, everything they rest on, and which other components rest on the
+    same ground, which is what a restatement there would disturb.
+    """
+    branches = sorted(nid for nid, n in ctx.dag.nodes.items() if n.subject == component_id)
+    if not branches:
+        return (f"{component_id} has no branch: no design is declared over it, so it rests on no "
+                "axiom. status(view=\"coverage\") lists it under undeclared design or planned.")
+
+    slices = {s.target_id: s for s in ctx.slices}
+    ground: dict[str, list[str]] = {}
+    for bid in branches:
+        for anc in ctx.dag.ancestors(bid):
+            ground.setdefault(anc, []).append(bid)
+
+    def others_on(node_id: str) -> list[str]:
+        return sorted({n.subject for d in ctx.dag.descendants(node_id)
+                       if (n := ctx.dag.nodes[d]).kind == "branch"
+                       and n.subject in ctx.decl.components and n.subject != component_id})
+
+    comp = ctx.decl.components.get(component_id)
+    lines = [f"What {component_id} rests on"]
+    if comp:
+        lines.append(f"  {len(comp.code)} code path(s)"
+                     + (f" · contracts: {', '.join(comp.contracts)}" if comp.contracts else " · no contract"))
+    lines.append("")
+    lines.append(f"branches governing it ({len(branches)}):")
+    lines += [f"  {bid} {slice_badge(slices.get(bid))}" for bid in branches]
+
+    for kind, title in (("axiom", "axioms"), ("definition", "definitions"), ("lemma", "lemmas")):
+        ids = sorted(i for i in ground if ctx.dag.nodes[i].kind == kind)
+        if not ids:
+            continue
+        lines += ["", f"{title} it rests on ({len(ids)}):"]
+        for nid in ids:
+            via = ", ".join(sorted(set(ground[nid])))
+            shared = others_on(nid)
+            tail = f"  [also: {', '.join(shared)}]" if shared else "  [only this component]"
+            lines.append(f"  {nid}{tail}")
+            lines.append(f"      via {via}")
+
+    unused = sorted(i for i, n in ctx.dag.nodes.items()
+                    if n.kind in ("axiom", "definition") and i not in ground
+                    and not ctx.dag.descendants(i))
+    if unused:
+        lines += ["", f"declared and reached by nothing at all ({len(unused)}): " + ", ".join(unused)]
+    return envelope("\n".join(lines), basis_line(ctx.slices))
+
+
 def view_audit(ctx: Context, subject: str | None = None) -> str:
     if not subject:
-        return "Supply subject=<node_id> to compute topological blast radius and downstream dependencies."
+        return ("Supply subject=<node_id> for a blast radius, or subject=<CMP-id> for what a "
+                "component's designs rest on.")
+    if subject in ctx.decl.components:
+        return view_component_audit(ctx, subject)
 
     node = ctx.dag.get(subject)
     if not node:

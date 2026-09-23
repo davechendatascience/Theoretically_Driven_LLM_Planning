@@ -141,7 +141,9 @@ def status(
       coverage       - components (belief.yaml) against the designs declared over them:
                        governed, undeclared design, planned, and the broken ones whose
                        component was removed
-      audit          - blast radius report for a given subject (nodes invalidated if modified)
+      audit          - for a node id, the blast radius if it is modified; for a CMP- id, what
+                       that component's designs rest on (its branches, the axioms, definitions
+                       and lemmas they reach, and which other components share that ground)
       cycle          - full state as structured JSON
     """
     root = project_root()

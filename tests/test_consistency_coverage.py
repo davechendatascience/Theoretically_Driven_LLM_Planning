@@ -248,3 +248,20 @@ def test_coverage_prints_the_contract_and_its_belief_state(linked: Path):
     text = view_coverage(Context.build(linked))
     assert "CTR-motion-clear [no evidence]" in text, "a cited contract with no trials says so"
     assert "evidence: none cited" in text
+
+
+# --- what a component's designs rest on --------------------------------------------------------
+
+def test_audit_of_a_component_walks_to_its_axioms(linked: Path):
+    from consistency_belief.views import view_audit
+
+    ctx = Context.build(linked)
+    text = view_audit(ctx, "CMP-motion")
+    assert "BRN-motion-gate" in text
+    assert "AXM-safety" in text, "a component reaches an axiom through its branches"
+    shared = next(l for l in text.splitlines() if l.strip().startswith("AXM-safety"))
+    assert "CMP-planner" in shared, "shared ground is named, since a restatement disturbs it"
+    assert "prose" not in shared, "only declared components are named as sharing it"
+
+    none = view_audit(ctx, "CMP-gripper")
+    assert "no design is declared over it" in none
