@@ -22,6 +22,7 @@ DECLARATION_FILE = "consistency.yaml"
 
 _EVIDENCE_ID = re.compile(r"\b(?:CMP|CTR)-[A-Za-z0-9][A-Za-z0-9-]*\b")
 COMPONENT_ID = re.compile(r"CMP-[A-Za-z0-9][A-Za-z0-9-]*")
+_NUMBER = re.compile(r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?")
 
 
 @dataclass(frozen=True)
@@ -123,6 +124,7 @@ class ComponentRef:
     purpose: str = ""
     code: list[str] = field(default_factory=list)
     contracts: list[str] = field(default_factory=list)
+    rules: dict[str, tuple[str, str]] = field(default_factory=dict)   # contract -> (rule, scores)
 
     @property
     def implemented(self) -> bool:
@@ -205,6 +207,7 @@ def load(root: Path) -> Declarations:
         ))
     decl.components, decl.components_source = load_components(root)
     decl.issues.extend(validate_links(decl))
+    decl.issues.extend(check_scored_definitions(decl))
     return decl
 
 
@@ -229,10 +232,44 @@ def load_components(root: Path) -> tuple[dict[str, ComponentRef], str]:
             purpose=comp.purpose,
             code=list(comp.code),
             contracts=sorted(c.id for c in decl.contracts_for_subject(cid)),
+            rules={c.id: (c.rule, c.scores) for c in decl.contracts_for_subject(cid)},
         )
         for cid, comp in decl.components.items()
     }
     return refs, decl.source
+
+
+def check_scored_definitions(decl: Declarations) -> list[Issue]:
+    """A contract may name the definition its acceptance rule measures. Where it does, the
+    definition must exist and the rule's thresholds must be the definition's.
+
+    This is the drift a number invites once it lives in two files: the definition is restated and
+    the rule that scores it keeps the old bar, or the other way round, and both ledgers go on
+    reporting confidently. Structural constants 0 and 1 are ignored -- they are how a rule says
+    'none' and 'all', not thresholds.
+    """
+    issues: list[Issue] = []
+    for ref in decl.components.values():
+        for cid, (rule, scores) in sorted(ref.rules.items()):
+            if not scores:
+                continue
+            defn = decl.definitions.get(scores)
+            if defn is None:
+                issues.append(Issue(
+                    "UNKNOWN_DEFINITION", cid,
+                    f"scores {scores!r}, which consistency.yaml does not declare",
+                ))
+                continue
+            in_rule = {float(n) for n in _NUMBER.findall(rule or "")} - {0.0, 1.0}
+            in_def = {float(n) for n in _NUMBER.findall(defn.meaning or "")}
+            drifted = sorted(in_rule - in_def)
+            if drifted:
+                issues.append(Issue(
+                    "THRESHOLD_DRIFT", cid,
+                    f"rule {rule!r} scores {scores} at {drifted}, which that definition does not "
+                    "state -- one of the two was restated and the other was not",
+                ))
+    return issues
 
 
 def validate_links(decl: Declarations) -> list[Issue]:

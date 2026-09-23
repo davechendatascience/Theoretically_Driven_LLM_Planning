@@ -76,6 +76,7 @@ class Contract:
     id: str
     subject: str = ""
     claim_type: str = "capability"
+    scores: str = ""                # the consistency-belief definition this rule measures, if any
     metrics: list[dict[str, Any]] = field(default_factory=list)
     acceptance: dict[str, Any] = field(default_factory=dict)
     exclusions: list[str] = field(default_factory=list)

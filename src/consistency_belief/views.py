@@ -315,7 +315,8 @@ def view_coverage(ctx: Context) -> str:
 
     issues = [i for i in decl.issues
               if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE",
-                            "REMOVED_COMPONENT", "UNLISTED_SUBJECT", "MISSING_EVIDENCE")]
+                            "REMOVED_COMPONENT", "UNLISTED_SUBJECT", "MISSING_EVIDENCE",
+                            "UNKNOWN_DEFINITION", "THRESHOLD_DRIFT")]
     if issues:
         lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
 
@@ -356,6 +357,10 @@ def view_component_audit(ctx: Context, component_id: str) -> str:
     if comp:
         lines.append(f"  {len(comp.code)} code path(s)"
                      + (f" · contracts: {', '.join(comp.contracts)}" if comp.contracts else " · no contract"))
+        scored = [(cid, d) for cid, (_r, d) in sorted(comp.rules.items()) if d]
+        if scored:
+            lines.append("  contracts scoring a definition: "
+                         + ", ".join(f"{cid} -> {d}" for cid, d in scored))
     lines.append("")
     lines.append(f"branches governing it ({len(branches)}):")
     lines += [f"  {bid} {slice_badge(slices.get(bid))}" for bid in branches]

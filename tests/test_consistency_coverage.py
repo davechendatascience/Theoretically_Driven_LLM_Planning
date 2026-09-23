@@ -13,7 +13,7 @@ import pytest
 
 from component_belief.declarations import load as load_components_declarations
 from consistency_belief.declarations import load
-from consistency_belief.views import Context, view_coverage
+from consistency_belief.views import Context, view_audit, view_coverage
 from conftest import git
 
 BELIEF = """
@@ -40,12 +40,18 @@ contracts:
   - id: CTR-motion-clear
     subject: CMP-motion
     claim_type: capability
+    scores: DEF-clearance
     metrics: [{id: clearance, unit: m}]
     acceptance: {rule: "clearance > 0.5"}
     evaluable_by: []
 """
 
 CONSISTENCY = """
+definitions:
+  - id: DEF-clearance
+    term: Clearance
+    meaning: The tool keeps at least 0.5 m from every obstacle.
+
 components:
   - {id: CMP-motion, note: what the gate below governs}
   - CMP-planner
@@ -253,8 +259,6 @@ def test_coverage_prints_the_contract_and_its_belief_state(linked: Path):
 # --- what a component's designs rest on --------------------------------------------------------
 
 def test_audit_of_a_component_walks_to_its_axioms(linked: Path):
-    from consistency_belief.views import view_audit
-
     ctx = Context.build(linked)
     text = view_audit(ctx, "CMP-motion")
     assert "BRN-motion-gate" in text
@@ -265,3 +269,30 @@ def test_audit_of_a_component_walks_to_its_axioms(linked: Path):
 
     none = view_audit(ctx, "CMP-gripper")
     assert "no design is declared over it" in none
+
+
+# --- a contract cites the definition its rule scores -------------------------------------------
+
+def test_a_rule_matching_its_definition_is_not_reported(linked: Path):
+    decl = load(linked)
+    assert not [i for i in decl.issues if i.code in ("UNKNOWN_DEFINITION", "THRESHOLD_DRIFT")]
+    assert "CTR-motion-clear -> DEF-clearance" in view_audit(Context.build(linked), "CMP-motion")
+
+
+def test_a_threshold_that_drifted_from_its_definition_is_reported(linked: Path):
+    (linked / "belief.yaml").write_text(BELIEF.replace('rule: "clearance > 0.5"', 'rule: "clearance > 0.8"'),
+                                        encoding="utf-8")
+    git(linked, "commit", "-qam", "raise the rule's bar without restating the definition")
+
+    drift = [i for i in load(linked).issues if i.code == "THRESHOLD_DRIFT"]
+    assert [i.subject for i in drift] == ["CTR-motion-clear"]
+    assert "0.8" in drift[0].message
+
+
+def test_scoring_a_definition_that_does_not_exist_is_reported(linked: Path):
+    (linked / "belief.yaml").write_text(BELIEF.replace("scores: DEF-clearance", "scores: DEF-gone"),
+                                        encoding="utf-8")
+    git(linked, "commit", "-qam", "score a definition consistency.yaml does not declare")
+
+    unknown = [i for i in load(linked).issues if i.code == "UNKNOWN_DEFINITION"]
+    assert [i.subject for i in unknown] == ["CTR-motion-clear"]
