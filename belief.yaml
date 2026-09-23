@@ -142,6 +142,20 @@ components:
       - src/component_belief/__init__.py
       - tools/pytest_trials.py
 
+  - id: CMP-stamp-monitor
+    purpose: Report across both ledgers what a change touches, whether the evidence is intact, and how the loop was followed
+    testable_capability: >-
+      Traces a changed path to the contracts, design branches and policies it
+      touches; reports a damaged ledger line, a changed artifact or stamp, and an
+      agent approving its own adoption; and writes nothing while doing so
+    failure_modes:
+      - {id: FM-monitor-writes, observable: a monitor tool changes a ledger file}
+      - {id: FM-missed-impact, observable: a changed claimed path is not traced to its contract}
+      - {id: FM-silent-tamper, observable: an edited artifact or stamp audits clean}
+    remediation: stamp_monitor.impact / audit / workflow; the tool list in stamp_monitor/server.py
+    code:
+      - src/stamp_monitor/
+
 interfaces:
   - id: IFC-declarations__model
     producer: CMP-declarations
@@ -246,6 +260,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-server]
 
+  - id: CTR-monitor-read-only
+    subject: CMP-stamp-monitor
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-stamp-monitor]
+
 tests:
   - id: TST-declarations
     layer: component
@@ -305,6 +327,14 @@ tests:
     reads: [tests/conftest.py]
     mandatory: true
 
+  - id: TST-stamp-monitor
+    layer: component
+    targets: [CMP-stamp-monitor]
+    run: python tools/pytest_trials.py $OUT -- tests/test_stamp_monitor.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
 priors: []
 
 policies:
@@ -316,6 +346,7 @@ policies:
       - {slice: CTR-trial-ledger-replay, require: supported}
       - {slice: CTR-model-honest, require: supported}
       - {slice: CTR-diagnosis-refuses-blind-optimisation, require: supported}
+      - {slice: CTR-monitor-read-only, require: supported}
       - {slice: CTR-surface-intact, require: supported}
       - {safety_gates: all_passed}
     weights: null
