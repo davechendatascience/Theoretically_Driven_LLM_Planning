@@ -5,6 +5,10 @@ for a design **follow**, the other whether the built thing **works**. They are p
 in the design ledger names the component it governs in the component ledger — so neither a proof
 about nothing nor code nobody justified can hide.
 
+A third, read-only server, `stamp-monitor`, watches the joins between them: which contracts and
+design branches a change touches, whether the recorded evidence is still what was recorded, and
+whether the history shows the loop being routed around. It writes nothing.
+
 ```
                          THEORETICALLY DRIVEN LLM PLANNING
                                          │
@@ -44,7 +48,8 @@ configuration control. Analysis stages live in `consistency-belief`, Test stages
 | Component, integration, system test | contracts and tests by `layer`; `run_test`; `.belief/` | Test |
 | Traceability | a branch's `subject` names a component and its derivation rule names the contract; `status(view="coverage")` on both sides | mechanical |
 | Configuration control | declarations from git HEAD; a content stamp on every run; evidence goes stale once a file it rests on changes; every decision names its revision | mechanical |
-| Change control | `audit_change` (recorded), STALE on restatement, `amend`, `decide(approver=)` | mechanical, plus a human approver |
+| Change control | `audit_change` (recorded), STALE on restatement, `amend`, `decide(approver=)`; `stamp-monitor impact` traces a change through both ledgers | mechanical, plus a human approver |
+| Configuration audit | `stamp-monitor audit` re-verifies stamps, artifacts and ledger integrity; `stamp-monitor workflow` checks the history for self-approval and one-sided reclassification | mechanical, read-only |
 | Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
 | Release gate | `POL-consistency-gate` requires each branch proven **and** its cited contract supported | both ledgers |
 
@@ -196,6 +201,34 @@ view says so instead of reporting an empty graph.
 
 ---
 
+## 4. `stamp-monitor`: The Read-Only Monitor
+
+Design in [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
+
+Each belief server sees its own ledger. The monitor sees across them, and writes nothing: stamps are
+made by the runner that ran the command, because a monitor that accepted registrations would be an
+agent-writable path into the evidence. Freshness itself is a library (`component_belief/staleness.py`)
+that both belief servers already import, so there is one definition of "stale".
+
+| Tool | Answers |
+|---|---|
+| `impact(base, worktree)` | changed path → component / test → contract (state at HEAD) → design branch → policy, and the tests to re-run |
+| `audit()` | every ledger line parses; ids unique; amendments and decisions cite records that exist; stamps and artifacts still match their digests; declarations are committed |
+| `workflow()` | reclassifications that remove only adverse results; adoptions without a human approver; decisions on dirty-tree evidence; adoptions whose evidence has since gone stale |
+
+```text
+src/component_belief/runner.py changed
+→ CMP-runner → CTR-surface-intact [stale]
+→ BRN-runner-captures (governs CMP-runner, cites CTR-surface-intact)
+→ POL-release, POL-consistency-gate
+next: run_test TST-server
+```
+
+The same reports run from a shell for hooks and CI: `stamp-monitor impact|audit|workflow`, exiting 1
+on a `[block]` finding from `audit` or `workflow`.
+
+---
+
 ## Declarations Live in Git, Not in Tools
 
 Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not the working tree**:
@@ -214,8 +247,9 @@ Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not th
 pip install -e .
 ```
 
-Register both servers with Claude Code or Antigravity via `.mcp.json`. Point both at the **same**
-project root: the join is only available when the two ledgers describe one repository.
+Register the servers with Claude Code or Antigravity via `.mcp.json` (the included one registers all
+three). Point them at the **same** project root: the join is only available when the ledgers
+describe one repository.
 
 ```json
 {
@@ -250,6 +284,7 @@ Or run directly:
 ```bash
 PYTHONPATH=src python -m consistency_belief.server
 PYTHONPATH=src python -m component_belief.server
+PYTHONPATH=src python -m stamp_monitor.server
 ```
 
 ---
@@ -263,6 +298,7 @@ docs/
   consistency_belief_mcp_design_rules.md               # 8 design rules for deductive consistency
   component_belief_mcp_design_rules.md                 # 11 design rules for empirical belief
   component_belief_mcp_design.md                       # Empirical model & architecture specification
+  stamp_monitor_mcp_design.md                          # Stamps, freshness, and the read-only monitor
 src/
   consistency_belief/                                  # Deductive MCP server
     declarations.py                                    # Git-HEAD loader, schema validator, component join
@@ -284,6 +320,11 @@ src/
     views.py / render.py                               # Empirical status views
     server.py                                          # FastMCP server (6 tools)
     store.py                                           # Append-only JSONL ledger in .belief/
+  stamp_monitor/                                       # Read-only monitor over both ledgers
+    impact.py                                          # A change traced through both ledgers
+    audit.py                                           # Stamp, artifact and ledger integrity
+    workflow.py                                        # Conformance patterns in recorded history
+    server.py / cli.py                                 # FastMCP server (3 tools); the same reports from a shell
 tools/pytest_trials.py                                 # pytest -> trials JSON adapter
 tests/                                                 # the suites belief.yaml declares as tests; the ledger holds the count
 .claude/
@@ -314,3 +355,5 @@ The test suite asserts the core epistemic invariants across both systems:
 8. Three probes of one strategy by one actor do not close an obligation; a pass of three strategies does.
 9. A gate contract is read from its latest run; evidence measured before a claimed file changed is stale and cannot satisfy an adopt criterion.
 10. A falsification argued from a source file is refused before anything is recorded; a decision names the revision it was taken at.
+11. Evidence is bound to the content it measured: discarded uncommitted edits, a weakened test, or an edited stamp make it stale; a rewritten history with the same bytes does not.
+12. The monitor writes nothing, and reports a damaged ledger line, a changed artifact, and an agent approving its own adoption.

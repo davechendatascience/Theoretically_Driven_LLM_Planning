@@ -18,6 +18,8 @@ dev = ["pytest>=7.4"]
 [project.scripts]
 component-belief-mcp = "component_belief.server:main"
 consistency-belief-mcp = "consistency_belief.server:main"
+stamp-monitor-mcp = "stamp_monitor.server:main"
+stamp-monitor = "stamp_monitor.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

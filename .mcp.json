@@ -21,6 +21,16 @@
         "CONSISTENCY_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
         "CONSISTENCY_ACTOR": "agent"
       }
+    },
+    "stamp-monitor": {
+      "command": "uv",
+      "args": [
+        "--directory", "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "run", "stamp-monitor-mcp"
+      ],
+      "env": {
+        "STAMP_MONITOR_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning"
+      }
     }
   }
 }
