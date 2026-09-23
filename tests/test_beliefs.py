@@ -427,3 +427,28 @@ def test_every_file_and_folder_carries_a_stamp(repo, monkeypatch):
     assert records["src/deep"].directory, "a tracked folder is stamped too"
     assert "claimed" in records["src/deep"].kinds(), "a folder carries what its files carry"
     assert not records["src/deep"].prune_candidate(), "a folder is not pruned as if it were code"
+
+
+def test_the_artifacts_view_writes_the_verdicts_to_a_file(repo, monkeypatch):
+    """A verdict you can diff week to week beats one you have to re-read from a report."""
+    import json
+
+    from component_belief import server
+
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "thing.bin").write_text("x", encoding="utf-8")
+    (repo / "belief.yaml").write_text(
+        (repo / "belief.yaml").read_text(encoding="utf-8") + "\nartifacts: [out]\n", encoding="utf-8")
+    from conftest import git
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "one artifact")
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    text = server.status(view="artifacts")
+    assert "stamps.jsonl" in text
+
+    rows = [json.loads(line) for line in (repo / ".belief/cache/stamps.jsonl").read_text().splitlines()]
+    by_path = {r["path"]: r for r in rows}
+    assert by_path["out/thing.bin"]["verdict"].startswith("undecidable")
+    assert by_path["out/thing.bin"]["at"] and by_path["out/thing.bin"]["declarations"] == "git-HEAD"
+    assert any(r["directory"] for r in rows), "folders are in the file too"
