@@ -143,6 +143,20 @@ def _is_environment(rel: str) -> bool:
     return any(part in rel for part in ENVIRONMENT) or rel.endswith("sitecustomize.py")
 
 
+_PYC = re.compile(r"^(?P<dir>(?:.*/)?)__pycache__/(?P<name>[^/.]+)\.[^/]+\.pyc$")
+
+
+def _source_of(root: Path, rel: str) -> str:
+    """An import with valid cached bytecode opens `__pycache__/x.cpython-312.pyc`, never `x.py`
+    -- so without this mapping every project module a run imported read as environment noise."""
+    match = _PYC.match(rel)
+    if match:
+        source = f"{match.group('dir')}{match.group('name')}.py"
+        if (root / source).is_file():
+            return source
+    return rel
+
+
 def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
     """The distinct project-relative paths the run opened, the environment's own files aside.
 
@@ -159,7 +173,7 @@ def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
         if not line.startswith(base):
             continue
         # posix form: everything downstream -- git paths, stamps, the environment filter -- uses `/`
-        rel = Path(os.path.relpath(line, base)).as_posix()
+        rel = _source_of(root, Path(os.path.relpath(line, base)).as_posix())
         if _is_environment(rel):
             continue
         seen.setdefault(rel, None)

@@ -295,6 +295,22 @@ def test_the_read_log_drops_the_environments_own_files(tmp_path):
     assert readlog.harvest(root, log) == ["lib/data.txt", "tools/run.py"]
 
 
+def test_an_import_from_cached_bytecode_counts_as_reading_the_source(tmp_path):
+    """With a valid .pyc Python opens only the cache, so the source it compiled from is what the run
+    read. A .pyc whose source is gone stays environment noise."""
+    from component_belief import readlog
+
+    root = tmp_path / "proj"
+    (root / "src" / "pkg").mkdir(parents=True)
+    (root / "src" / "pkg" / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    log = tmp_path / "reads.log"
+    log.write_text("\n".join(str(root / p) for p in (
+        "src/pkg/__pycache__/mod.cpython-312.pyc",
+        "src/pkg/__pycache__/gone.cpython-312.pyc",
+    )), encoding="utf-8")
+    assert readlog.harvest(root, log) == ["src/pkg/mod.py"]
+
+
 def _probe_test(repo, script: str) -> None:
     """Declare TST-grasp-ik as `python probe.py`, with `script` as probe.py, and commit."""
     from conftest import git
