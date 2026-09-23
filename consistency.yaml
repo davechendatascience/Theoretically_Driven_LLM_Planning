@@ -217,8 +217,10 @@ definitions:
       The belief-eligible trials on one contract that fall in the same
       declared condition bucket and carry the same value for every key in the
       contract's declared compatibility key. Each slice is a claim of its own:
-      the verdict a slice issues is on that slice, and its sufficiency is
-      counted over that slice's trials alone.
+      the verdict a slice issues is on that slice, its sufficiency is counted
+      over that slice's trials alone, and the posterior over it is computed
+      from that slice's trials and its contract's declared prior alone, with
+      nothing from another slice entering it.
 
   - id: DEF-restatement
     term: Restatement
@@ -414,8 +416,9 @@ branches:
     statement: >-
       A slice's posterior changes only through belief-eligible evidence, and
       never through a record whose provenance is asserted; below its declared
-      sufficiency a slice issues no verdict; and trials that differ on a
-      declared compatibility key are never pooled into one measured belief.
+      sufficiency a slice issues no verdict; and trials that differ on their
+      contract's declared compatibility key are never pooled into one measured
+      belief.
     premises: [AXM-no-belief-write-path, LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-contract-slice]
     derivation_rule: >-
       By AXM-no-belief-write-path a measured belief -- the posterior over a
@@ -425,9 +428,11 @@ branches:
       slice, and its sufficiency is counted over its own trials, so by
       AXM-sparse-data-no-verdict a slice below its declared sufficiency issues
       no verdict. By DEF-contract-slice trials that differ on a key of the
-      contract's declared compatibility key belong to different slices, and by
+      contract's declared compatibility key belong to different slices; by
       AXM-no-belief-write-path a measured belief is the posterior over one
-      slice, so they are never pooled into one measured belief.
+      slice, and by DEF-contract-slice that posterior is computed from its own
+      slice's trials and the contract's declared prior alone, so they are never
+      pooled into one measured belief.
       evidence: CTR-model-honest
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
