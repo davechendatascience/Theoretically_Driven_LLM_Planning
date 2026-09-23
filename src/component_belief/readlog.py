@@ -24,7 +24,7 @@ import re
 from pathlib import Path
 
 HOOK = '''"""Written by component-belief: record what this process opens, under the project root."""
-import atexit, os, sys
+import atexit, contextlib, os, sys
 
 _ROOT = os.environ.get("BELIEF_READ_ROOT", "")
 _OUT = os.environ.get("BELIEF_READS", "")
@@ -54,16 +54,20 @@ if _ROOT and _OUT:
     sys.addaudithook(_audit)
     atexit.register(_flush)
 
-try:                              # keep any sitecustomize the environment already had
+with contextlib.suppress(ImportError):   # keep any sitecustomize the environment already had
     import sitecustomize_original  # noqa: F401
-except ImportError:
-    pass
 '''
 
 
-def instrument(env: dict[str, str], root: Path, log: Path) -> tuple[dict[str, str], Path]:
-    """Return env with the read hook installed, and the hook directory the command must see."""
-    hook_dir = log.parent / "readhook"
+def instrument(env: dict[str, str], root: Path, log: Path,
+               hook_dir: Path | None = None) -> tuple[dict[str, str], Path]:
+    """Return env with the read hook installed, and the hook directory the command must see.
+
+    The hook goes in the ledger's cache, not beside the run's artifacts: the artifacts directory
+    is checked in, and a generated sitecustomize landing there becomes repository source -- which
+    is how the project's own lint gate came to be checking it.
+    """
+    hook_dir = hook_dir or (log.parent.parent.parent / "cache" / "readhook")
     hook_dir.mkdir(parents=True, exist_ok=True)
     (hook_dir / "sitecustomize.py").write_text(HOOK, encoding="utf-8")
     log.write_text("", encoding="utf-8")

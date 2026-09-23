@@ -87,7 +87,8 @@ def run_test(
     env = dict(os.environ)
     env["OUT"] = str(out_path)
     env["BELIEF_RUN_ID"] = run_id
-    env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log")
+    env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log",
+                                       store.dir / "cache" / "readhook")
     command = readlog.weave(_substitute_out(test.run, out_path), hook_dir)
 
     try:
