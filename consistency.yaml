@@ -314,18 +314,19 @@ branches:
     statement: >-
       The proof kernel builds the premise graph as DEF-premise-graph defines,
       so the graph never contains a cycle, as AXM-acyclicity requires, and a
-      node whose ancestry does not end in declared axioms or definitions is
-      ungrounded and never proven.
+      lemma or branch whose ancestry does not end in declared axioms or
+      definitions is ungrounded and never proven.
     premises: [LMA-kernel-enforces-acyclicity, AXM-acyclicity, AXM-axiomatic-grounding, DEF-premise-graph, DEF-proof-state]
     derivation_rule: >-
       DEF-premise-graph defines the premise graph as the build the proof kernel
       makes on every read. By LMA-kernel-enforces-acyclicity no such build
       contains a cycle, which is what AXM-acyclicity requires of a deductive
       graph. By DEF-proof-state a node no build admits is never proven, and a
-      node in the graph is proven only when it cites a premise and every node
-      it depends on that cites none is a declared axiom or definition; so a
-      node whose ancestry ends anywhere else is never proven, which is the
-      ungrounded case AXM-axiomatic-grounding forbids.
+      lemma or branch in the graph is proven only when it cites a premise and
+      every node it depends on that cites none is a declared axiom or
+      definition; so a lemma or branch whose ancestry ends anywhere else is
+      never proven, which is the ungrounded case AXM-axiomatic-grounding
+      forbids.
       evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
@@ -336,9 +337,9 @@ branches:
       A recorded trial is never edited or removed. It stops being current only
       when an appended amendment reclassifies it, or when its target, or a node
       its target depends on in the build before or after the change, is
-      restated or removed. While a falsified trial whose counterexample meets
-      DEF-counterexample is current, its target's claim does not follow from
-      its premises.
+      restated or removed. A counterexample that meets DEF-counterexample
+      against the target's present statement and premises shows that the
+      target's claim does not follow from them.
     premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger, DEF-premise-graph, DEF-restatement]
     derivation_rule: >-
       By DEF-ledger a trial is an entry in an append-only record, so it is
@@ -356,9 +357,10 @@ branches:
       already in it; and by LMA-blast-radius-propagation a restatement or
       removal of a node r makes a trial stop being current only when its
       target is r or depends on r in the build before or after the change. A
-      counterexample meeting DEF-counterexample is a scenario in which every
-      premise holds and the claim fails, so the claim does not follow from its
-      premises. evidence: CTR-trial-ledger-replay
+      counterexample meeting DEF-counterexample against the target as it now
+      stands is a scenario in which every present premise holds and the
+      present claim fails, so that claim does not follow from those premises.
+      evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-declarations-gate
@@ -413,7 +415,7 @@ branches:
       A slice's posterior changes only through belief-eligible evidence, and
       never through a record whose provenance is asserted; below its declared
       sufficiency a slice issues no verdict; and trials that differ on a
-      declared compatibility key are never pooled into one posterior.
+      declared compatibility key are never pooled into one measured belief.
     premises: [AXM-no-belief-write-path, LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-contract-slice]
     derivation_rule: >-
       By AXM-no-belief-write-path a measured belief -- the posterior over a
@@ -423,8 +425,9 @@ branches:
       slice, and its sufficiency is counted over its own trials, so by
       AXM-sparse-data-no-verdict a slice below its declared sufficiency issues
       no verdict. By DEF-contract-slice trials that differ on a key of the
-      contract's declared compatibility key belong to different slices, and a
-      posterior is over one slice, so they are never pooled into one.
+      contract's declared compatibility key belong to different slices, and by
+      AXM-no-belief-write-path a measured belief is the posterior over one
+      slice, so they are never pooled into one measured belief.
       evidence: CTR-model-honest
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
