@@ -157,17 +157,19 @@ definitions:
     term: Premise graph
     meaning: >-
       The directed graph the proof kernel builds afresh on every read, from the
-      axioms, definitions, lemmas and branches declared at the head revision
-      and the proposals staged in the ledger. A build starts from the empty
-      graph and admits nodes one at a time, each at most once, and never
-      removes one. A node is admitted only once every premise it cites is
-      already in the graph, and a build ends only when every node left out
-      cites a premise that is not in it. Admitting a node adds it together
-      with an edge from each premise it cites to it; no other step adds a node
-      or an edge. A node depends on another when a path of edges leads from the
-      other to it. Only a citation is an edge: an assumption a derivation
-      relies on without citing it is not in the graph, and a cycle is a cycle
-      among these edges.
+      axioms, definitions, lemmas and branches declared at the head revision and
+      the proposals staged in the ledger. A node is identified by its id. For an
+      id declared at the head revision the declaration is its only candidate for
+      admission, whether or not it can be admitted; a staged proposal is a
+      candidate only for an id not declared there. A build starts from the empty
+      graph and admits nodes one at a time, each at most once, and never removes
+      one. A node is admitted only once every premise it cites is already in the
+      graph, and a build ends only when every candidate left out cites a premise
+      that is not in it. Admitting a node adds it together with an edge from
+      each premise it cites to it; no other step adds a node or an edge. A node
+      depends on another when a path of edges leads from the other to it. Only a
+      citation is an edge: an assumption a derivation relies on without citing
+      it is not in the graph, and a cycle is a cycle among these edges.
 
   - id: DEF-current-trial
     term: Current trial
@@ -417,8 +419,9 @@ branches:
       proof state is computed from its place in the graph, the version of it the
       build admitted -- its declaration at the head revision, or, for an id not
       declared there, its staged proposal -- with that version's statement,
-      cited premises and declared sufficiency, and the trials on it, its subject
-      excluded; a subject is neither a premise, by DEF-premise-graph, nor part
+      cited premises and declared sufficiency, and the trials on it, and from
+      nothing else belief.yaml or the ledger says about it, its subject
+      included; a subject is neither a premise, by DEF-premise-graph, nor part
       of a fingerprint, by DEF-current-trial, so losing it changes neither the
       branch's place in the graph nor which of its trials are current, and its
       proof state stands. evidence: CTR-consistency-declarations-gate
@@ -507,19 +510,19 @@ branches:
       by DEF-proof-state a node's proof state is computed from its place in the
       premise graph, the version of it the build admitted -- its declaration at
       the head revision, or, for an id not declared there, its staged proposal
-      -- and the trials recorded on it; a report changes no declaration and,
-      appending no record, stages or restates no proposal, so neither which
-      version a build admits nor that version changes. By DEF-premise-graph the
-      graph is built from the axioms, definitions, lemmas and branches declared
-      at the head revision and the proposals staged in the ledger; a report
-      changes no declaration and appends no record, so it stages no proposal and
-      the graph is unchanged, whatever else it reads or writes. By
-      DEF-current-trial whether a trial is current depends on its validity after
-      amendments, its target being in the premise graph, and the fingerprints it
-      recorded; a report appends no trial and no amendment and leaves the graph
-      unchanged, so the trials recorded on each node, and which of them are
-      current, are unchanged. So no proof state changes. evidence:
-      CTR-monitor-read-only
+      -- and the trials recorded on it, and from nothing else belief.yaml or the
+      ledger says about it; a report changes no declaration and, appending no
+      record, stages or restates no proposal, so neither which version a build
+      admits nor that version changes. By DEF-premise-graph the graph is built
+      from the axioms, definitions, lemmas and branches declared at the head
+      revision and the proposals staged in the ledger; a report changes no
+      declaration and appends no record, so it stages no proposal and the graph
+      is unchanged, whatever else it reads or writes. By DEF-current-trial
+      whether a trial is current depends on its validity after amendments, its
+      target being in the premise graph, and the fingerprints it recorded; a
+      report appends no trial and no amendment and leaves the graph unchanged,
+      so the trials recorded on each node, and which of them are current, are
+      unchanged. So no proof state changes. evidence: CTR-monitor-read-only
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
