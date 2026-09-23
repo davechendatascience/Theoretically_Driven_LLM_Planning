@@ -200,17 +200,17 @@ definitions:
   - id: DEF-proof-state
     term: Proof state
     meaning: >-
-      Only a node in the premise graph has a proof state; a node no build
-      admits has none and is never proven. A node's proof state is computed
-      from its place in the premise graph and the trials recorded on it alone,
-      and from nothing else belief.yaml or the ledger says about it, its
-      subject included. A lemma or branch is proven exactly when it cites at
-      least one premise and every node it depends on that cites none is a
-      declared axiom or definition; its current trials cover at least its
-      declared minimum of distinct strategy and actor pairs, a minimum below
-      one being read as one; the share of its current trials that passed
-      meets its declared consensus; and none of its current trials is
-      falsified.
+      Only a node in the premise graph has a proof state; a node no build admits
+      has none and is never proven. A node's proof state is computed from its
+      place in the premise graph, its own declaration or staged proposal -- its
+      statement, the premises it cites and its declared sufficiency -- and the
+      trials recorded on it, and from nothing else belief.yaml or the ledger
+      says about it, its subject included. A lemma or branch is proven exactly
+      when it cites at least one premise and every node it depends on that cites
+      none is a declared axiom or definition; its current trials cover at least
+      its declared minimum of distinct strategy and actor pairs, a minimum below
+      one being read as one; the share of its current trials that passed meets
+      its declared consensus; and none of its current trials is falsified.
 
   - id: DEF-contract-slice
     term: Contract slice
