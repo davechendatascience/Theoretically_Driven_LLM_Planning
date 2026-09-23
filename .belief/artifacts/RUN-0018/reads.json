@@ -1,0 +1,6 @@
+[
+ "pyproject.toml",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "src/consistency_belief/declarations.py",
+ "tools/pytest_trials.py"
+]

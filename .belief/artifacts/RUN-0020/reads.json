@@ -1,0 +1,5 @@
+[
+ "pyproject.toml",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "tools/pytest_trials.py"
+]

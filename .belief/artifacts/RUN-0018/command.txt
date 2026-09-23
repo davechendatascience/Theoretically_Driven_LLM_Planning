@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0018\result.json -- tests/test_consistency_declarations.py tests/test_consistency_coverage.py -q -p no:asyncio
+exit=0
+test=TST-consistency-declarations@22197892
+at=2026-09-23T14:16:50+00:00

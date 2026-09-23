@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0022\result.json -- tests/test_beliefs.py tests/test_gate_and_staleness.py -q -p no:asyncio
+exit=0
+test=TST-beliefs@32bd673a
+at=2026-09-23T14:28:30+00:00
