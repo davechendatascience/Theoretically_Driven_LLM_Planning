@@ -271,34 +271,36 @@ lemmas:
 
   - id: LMA-blast-radius-propagation
     statement: >-
-      When a node r is restated, a trial of r, or of a node that depends on r,
-      that recorded a fingerprint of r other than r's new one is not current.
-      When r is removed, so that it is neither declared at the head revision
-      nor staged in the ledger, no trial of r or of a node that depends on r is
-      current. Either way, for a node other than r that depends on r neither in
-      the build before the change nor in the build after it, whether each of
-      its trials is current does not change.
-    premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial]
+      Consider a change that restates or removes one node r, as DEF-restatement
+      defines them, and changes no other id's candidate. When r is restated, a
+      trial of r, or of a node that depends on r, that recorded a fingerprint of
+      r other than r's new one is not current. When r is removed, no trial of r
+      or of a node that depends on r is current. Either way, for a node other
+      than r that depends on r neither in the build before the change nor in the
+      build after it, whether each of its trials is current does not change.
+    premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial, DEF-restatement]
     derivation_rule: >-
-      By DEF-current-trial a trial that recorded fingerprints is current only
-      if the one it recorded for r, as its target's or as that of a node its
-      target depends on, is r's fingerprint now; after a restatement, one that
-      recorded any other is not. A removed node is neither declared nor staged,
-      so no build admits it, and since DEF-premise-graph admits a node only
-      once every premise it cites is in the graph, induction along a path from
-      r shows that no node depending on r is admitted either; a trial whose
+      By DEF-current-trial a trial that recorded fingerprints is current only if
+      the one it recorded for r, as its target's or as that of a node its target
+      depends on, is r's fingerprint now; by DEF-restatement a restatement
+      changes r's statement or cited premises, so r's fingerprint now differs
+      from its old one, and a trial that recorded any other is not current. A
+      removed node's id is neither declared nor staged, so by DEF-premise-graph
+      it has no candidate and no build admits it, and since a node is admitted
+      only once every premise it cites is in the graph, induction along a path
+      from r shows that no node depending on r is admitted either; a trial whose
       target is not in the graph is not current. Now take a node e other than r
       that depends on r in neither build. If e is in the graph in one of them,
       every node its citations lead back to is in that build and is one e
-      depends on there, so r is not among them; the other build declares e and
-      each of those nodes exactly as before, since only r changed, so it admits
-      e with the same nodes behind it and the same fingerprints, and each of
-      e's trials is current exactly as it was. If e is in neither build, none
-      of its trials is current in either. For trials that recorded
-      fingerprints this is the invalidation AXM-blast-radius-invalidation
-      requires; a trial made before trials carried fingerprints is not
-      invalidated this way, and the lemma claims nothing about it. It needs no
-      traversal order and no acyclic graph.
+      depends on there, so r is not among them; the change alters no candidate
+      but r's, so the other build gives e and each of those nodes the same
+      candidate, admits e with the same nodes behind it and the same
+      fingerprints, and each of e's trials is current exactly as it was. If e is
+      in neither build, none of its trials is current in either. For trials that
+      recorded fingerprints this is the invalidation
+      AXM-blast-radius-invalidation requires; a trial made before trials carried
+      fingerprints is not invalidated this way, and the lemma claims nothing
+      about it. It needs no traversal order and no acyclic graph.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-asserted-is-inert
@@ -381,9 +383,16 @@ branches:
       declaration beside a staged proposal with the same id, changes that node's
       candidate, which by DEF-restatement restates it when the two differ in
       statement or cited premises and changes nothing a trial depends on when
-      they do not; and by LMA-blast-radius-propagation a restatement or removal
-      of a node r makes a trial stop being current only when its target is r or
-      depends on r in the build before or after the change. A counterexample
+      they do not; and by LMA-blast-radius-propagation a change that restates or
+      removes one node r makes a trial stop being current only when its target
+      is r or depends on r in the build before or after the change. A change
+      that alters several candidates at once is judged trial by trial: by
+      DEF-current-trial a trial stops being current only if an amendment is
+      appended to it, its target leaves the graph, or a fingerprint it recorded,
+      of its target or of a node its target depended on, differs from that
+      node's now, or its target now depends on a node it did not; each of these,
+      amendments aside, needs some node its target depends on in the build
+      before or after the change to be restated or removed. A counterexample
       meeting DEF-counterexample against the target as it now stands is a
       scenario in which every present premise holds and the present claim fails,
       so that claim does not follow from those premises. evidence:
