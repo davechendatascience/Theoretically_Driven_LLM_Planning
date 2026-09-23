@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 
 HOOK = '''"""Written by component-belief: record what this process opens, under the project root."""
@@ -60,8 +61,8 @@ except ImportError:
 '''
 
 
-def instrument(env: dict[str, str], root: Path, log: Path) -> dict[str, str]:
-    """Return env with the read hook installed, the log emptied and ready to append to."""
+def instrument(env: dict[str, str], root: Path, log: Path) -> tuple[dict[str, str], Path]:
+    """Return env with the read hook installed, and the hook directory the command must see."""
     hook_dir = log.parent / "readhook"
     hook_dir.mkdir(parents=True, exist_ok=True)
     (hook_dir / "sitecustomize.py").write_text(HOOK, encoding="utf-8")
@@ -72,7 +73,29 @@ def instrument(env: dict[str, str], root: Path, log: Path) -> dict[str, str]:
     out["BELIEF_READS"] = str(log)
     existing = out.get("PYTHONPATH", "")
     out["PYTHONPATH"] = f"{hook_dir}{os.pathsep}{existing}" if existing else str(hook_dir)
-    return out
+    return out, hook_dir
+
+
+def weave(command: str, hook_dir: Path) -> str:
+    """Keep the hook on PYTHONPATH through a command that sets PYTHONPATH itself.
+
+    A declared command of the form `env PYTHONPATH=third_party:. python ...` replaces the
+    environment the runner prepared, and the hook silently records nothing -- which reads exactly
+    like a run that opened no files. Each assignment in the command gets the hook directory
+    prepended instead, the same rewriting the runner already does for $OUT.
+    """
+    hook = str(hook_dir)
+
+    def _prepend(match: "re.Match[str]") -> str:
+        quote, value = match.group("q") or "", match.group("v")
+        if hook in value:
+            return match.group(0)
+        return f"PYTHONPATH={quote}{hook}{os.pathsep}{value}{quote}"
+
+    return _ASSIGNMENT.sub(_prepend, command)
+
+
+_ASSIGNMENT = re.compile(r"PYTHONPATH=(?P<q>['\"]?)(?P<v>[^'\"\s]*)(?P=q)")
 
 
 def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:

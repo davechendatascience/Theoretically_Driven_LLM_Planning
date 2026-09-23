@@ -87,8 +87,8 @@ def run_test(
     env = dict(os.environ)
     env["OUT"] = str(out_path)
     env["BELIEF_RUN_ID"] = run_id
-    env = readlog.instrument(env, root, artifact_dir / "reads.log")
-    command = _substitute_out(test.run, out_path)
+    env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log")
+    command = readlog.weave(_substitute_out(test.run, out_path), hook_dir)
 
     try:
         completed = subprocess.run(

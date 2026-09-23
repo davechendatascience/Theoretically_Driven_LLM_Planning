@@ -239,3 +239,36 @@ def test_the_read_hook_records_what_a_run_opened(repo, monkeypatch):
     assert "opened" in artifact.kinds(), artifact.stamps
     assert artifact.artifact_verdict().startswith("kept"), artifact.artifact_verdict()
     assert "reader.py" not in [p for p in stamps if stamps[p].prune_candidate()]
+
+
+def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
+    """A declared command of the form `env PYTHONPATH=... python ...` replaces the environment the
+    runner prepared. Recording nothing then reads exactly like a run that opened no files."""
+    from pathlib import Path
+
+    from component_belief import readlog, server
+    from component_belief.store import Store
+    from conftest import git
+
+    woven = readlog.weave("env PYTHONPATH=third_party:. python x.py", Path("/hook"))
+    assert woven.startswith("env PYTHONPATH=/hook:third_party:. ")
+    assert readlog.weave('PYTHONPATH="a:b" python x.py', Path("/hook")) == 'PYTHONPATH="/hook:a:b" python x.py'
+    assert readlog.weave("python x.py", Path("/hook")) == "python x.py"
+
+    (repo / "lib").mkdir(exist_ok=True)
+    (repo / "lib" / "data.txt").write_text("payload", encoding="utf-8")
+    (repo / "reader2.py").write_text(
+        "import os\nfrom pathlib import Path\n"
+        "Path('lib/data.txt').read_text()\n"
+        "Path(os.environ['OUT']).write_text('[{\"metrics\": {\"ik_success\": true}}]')\n",
+        encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        '    run: "echo ok"', '    run: "env PYTHONPATH=lib:. python reader2.py"')
+    (repo / "belief.yaml").write_text(belief, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a test that sets PYTHONPATH itself")
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    server.run_test(test_id="TST-grasp-ik")
+    reads = readlog.read(Store(repo).artifacts_dir / "RUN-0001")
+    assert "lib/data.txt" in reads, reads
