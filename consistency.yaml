@@ -4,13 +4,24 @@
 # git HEAD, not the working tree — editing it changes nothing until a human
 # commits. Uncommitted edits show up in `status` as PENDING.
 #
+# A branch states what must hold of any implementation and cites, at the end of
+# its derivation rule, the contract that measures it (`evidence: CTR-...`). It
+# does not describe what a function returns: a verifier judges it from the
+# premises alone, and the measurement lives in belief.yaml. The policy at the
+# bottom requires both -- the branch proven here, its contract supported there.
+#
 # The components these designs govern. belief.yaml owns each one -- its purpose, code paths and
 # contracts -- so this list is an import: it says which components the design ledger speaks for,
 # and every branch's subject must be one of them.
 
 components:
+  - {id: CMP-declarations, note: belief.yaml loaded from git HEAD and validated}
+  - {id: CMP-consistency-declarations, note: consistency.yaml loaded from git HEAD and joined to belief.yaml}
   - {id: CMP-proof-dag, note: the DAG kernel and the verification state over it}
-  - {id: CMP-trial-ledger, note: the append-only record of proposals, trials and withdrawals}
+  - {id: CMP-trial-ledger, note: the append-only record of proposals, trials, decisions and withdrawals}
+  - {id: CMP-belief-model, note: belief slices from evidence, priors and the model version}
+  - {id: CMP-diagnosis, note: bottleneck ranking and the decision policy}
+  - {id: CMP-runner, note: test execution, artifact capture and the tool surface}
 
 axioms:
   - id: AXM-axiomatic-grounding
@@ -48,6 +59,44 @@ axioms:
       Foundational mutations ripple through intermediate lemmas down to
       terminal contracts; retaining old belief is unsound.
 
+  - id: AXM-no-belief-write-path
+    domain: epistemic
+    statement: >-
+      A belief changes only through evidence the server itself produced by
+      running a declared test, or imported with an artifact and its hash; a
+      statement by an agent or a human carries zero weight.
+    rationale: >-
+      An LLM agent is a fluent producer of plausible numbers; a belief it can
+      write is a belief that measures nothing.
+
+  - id: AXM-commit-is-approval
+    domain: integrity
+    statement: >-
+      A declaration takes effect only from the committed revision; the working
+      tree is inert until a human commits it.
+    rationale: >-
+      The commit is the approval gate; an uncommitted edit that changed a
+      verdict would let the agent approve its own threshold.
+
+  - id: AXM-sparse-data-no-verdict
+    domain: epistemic
+    statement: >-
+      Below the declared sufficiency for a claim no verdict is issued; an
+      estimate may be shown, labelled as insufficient.
+    rationale: >-
+      Declaring victory on two trials is the likeliest failure of an
+      agent-driven loop; sparse data must read as "we do not know".
+
+  - id: AXM-observe-before-optimise
+    domain: diagnosis
+    statement: >-
+      A recommendation to optimise a component requires an observation of that
+      component against its own contract; an end-to-end outcome alone
+      attributes to no component.
+    rationale: >-
+      Optimising an uninstrumented component converts missing measurement into
+      apparent progress; instrumentation is the binding constraint until then.
+
 definitions:
   - id: DEF-proof-obligation
     term: Proof Obligation
@@ -60,6 +109,13 @@ definitions:
     meaning: >-
       A concrete, realizable scenario where all premises are satisfied
       but the derived claim fails.
+
+  - id: DEF-belief-eligible
+    term: Belief-eligible evidence
+    meaning: >-
+      A trial record with provenance measured (the server ran the declared
+      test and captured the artifact) or imported (brought in with a source,
+      an artifact and its hash). A note, with provenance asserted, is not one.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -78,29 +134,153 @@ lemmas:
     derivation_rule: Kahn topological traversal over dependency edges
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: LMA-asserted-is-inert
+    statement: >-
+      A record with provenance asserted cannot change any belief slice.
+    premises: [AXM-no-belief-write-path, DEF-belief-eligible]
+    derivation_rule: >-
+      By AXM-no-belief-write-path only evidence the server produced or imported
+      with an artifact reaches a belief; by DEF-belief-eligible an asserted
+      record is neither, so no slice is a function of it.
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: LMA-worktree-inert
+    statement: >-
+      An edit to a declaration file that is not committed changes no verdict
+      and no proof state.
+    premises: [AXM-commit-is-approval]
+    derivation_rule: >-
+      By AXM-commit-is-approval the working tree carries no declaration in
+      effect; a verdict and a proof state are functions of the declarations in
+      effect and the ledger, so an uncommitted edit leaves both as they were.
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 branches:
   - id: BRN-dag-integrity
     subject: CMP-proof-dag
     claim_type: contract
     statement: >-
-      ProofDAG rejects circular insertions and identifies exact transitive
-      reachability to axioms.
-    premises: [LMA-kernel-enforces-acyclicity]
-    derivation_rule: Formal unit test suite asserting graph invariants
+      No claim is admitted whose premises reach back to itself, and a claim
+      whose ancestry does not end in declared axioms or definitions is
+      reported ungrounded, never proven.
+    premises: [LMA-kernel-enforces-acyclicity, AXM-axiomatic-grounding]
+    derivation_rule: >-
+      From LMA-kernel-enforces-acyclicity, insertion is refused when a premise
+      already depends on the claim, so no admitted node is its own ancestor.
+      From AXM-axiomatic-grounding a claim counts only through its path to
+      declared axioms, so an ancestry ending anywhere else is ungrounded and
+      cannot be proven. evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-falsification-trial-ledger
     subject: CMP-trial-ledger
     claim_type: contract
     statement: >-
-      Verification trials are immutable and counterexamples permanently
-      refute a claim until amended.
-    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation]
-    derivation_rule: Append-only JSONL ledger with SHA-256 content hashing
+      A recorded trial is never edited; a falsified probe whose counterexample
+      satisfies DEF-counterexample makes its target refuted; only an appended
+      amendment sets a trial aside; and restating a premise upstream sets its
+      dependents' trials aside until they are re-verified.
+    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample]
+    derivation_rule: >-
+      From AXM-falsifiable-measurement a measurement is captured, so a trial is
+      a record and a correction is another record folding over it. A scenario
+      meeting DEF-counterexample is a failed derivation, so the claim it
+      targets is refuted. From LMA-blast-radius-propagation a restated premise
+      reaches every dependent, so trials recorded under the old premise no
+      longer vouch for them. evidence: CTR-trial-ledger-replay
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-declarations-gate
+    subject: CMP-declarations
+    claim_type: contract
+    statement: >-
+      Only committed declarations reach the belief model; a contract that no
+      declared test can measure accepts no evidence; and an uncommitted edit
+      leaves every verdict as it was.
+    premises: [LMA-worktree-inert, AXM-no-belief-write-path]
+    derivation_rule: >-
+      From LMA-worktree-inert an uncommitted edit changes no verdict. A
+      contract with no producing test has no measurement, so admitting
+      evidence against it would move a belief without one, which
+      AXM-no-belief-write-path forbids. evidence: CTR-declarations-gate
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-consistency-declarations-gate
+    subject: CMP-consistency-declarations
+    claim_type: contract
+    statement: >-
+      Only committed axioms, definitions, lemmas and branches enter the proof
+      graph; a premise that names no declared node, and a cycle among
+      declarations, are reported before any verification is recorded; and a
+      branch whose subject belief.yaml no longer declares is reported as
+      governing nothing rather than as proven.
+    premises: [LMA-worktree-inert, AXM-acyclicity, AXM-axiomatic-grounding]
+    derivation_rule: >-
+      From LMA-worktree-inert only committed declarations are in effect. From
+      AXM-acyclicity a cycle among declarations is unsound, so it is reported
+      at load rather than verified. From AXM-axiomatic-grounding a claim about
+      a component that no longer exists grounds nothing it governs, so the
+      join reports it. evidence: CTR-consistency-declarations-gate
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-model-honest
+    subject: CMP-belief-model
+    claim_type: contract
+    statement: >-
+      A slice's posterior is a function of belief-eligible evidence, declared
+      priors and the model version alone; below declared sufficiency the slice
+      carries an estimate and no verdict; and trials that differ on a declared
+      compatibility key are never pooled.
+    premises: [LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-belief-eligible]
+    derivation_rule: >-
+      From LMA-asserted-is-inert and DEF-belief-eligible nothing but measured
+      or imported evidence enters a posterior. From AXM-sparse-data-no-verdict
+      a slice under its sufficiency reports insufficient rather than a verdict.
+      Pooling across a compatibility key would average two measurement
+      processes into a number neither produced, which is a belief without a
+      measurement. evidence: CTR-model-honest
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-diagnosis-coverage-first
+    subject: CMP-diagnosis
+    claim_type: contract
+    statement: >-
+      When no declared test observes the leading candidate, the diagnosis
+      names instrumentation as the binding constraint and recommends no
+      optimisation; a component is blamed only on an observation against its
+      own contract.
+    premises: [AXM-observe-before-optimise]
+    derivation_rule: >-
+      From AXM-observe-before-optimise an optimisation recommendation needs an
+      observation of its target; where no test can produce one, the only
+      recommendation that satisfies the axiom is to instrument, and
+      attributing an end-to-end failure to an unobserved component would be a
+      blame without an observation. evidence: CTR-diagnosis-refuses-blind-optimisation
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-runner-captures
+    subject: CMP-runner
+    claim_type: contract
+    statement: >-
+      Every measured record carries the artifact the server captured and its
+      hash, and a metric the artifact does not contain is excluded rather than
+      synthesised.
+    premises: [AXM-no-belief-write-path, DEF-belief-eligible]
+    derivation_rule: >-
+      From DEF-belief-eligible a measured record is one the server produced
+      with its artifact, so a record without one is not measured. A metric
+      absent from the artifact has no measurement behind it, and scoring it
+      would move a belief on nothing, which AXM-no-belief-write-path forbids.
+      evidence: CTR-surface-intact
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
   - id: POL-consistency-gate
     criteria:
-      - {target: BRN-dag-integrity, require: proven}
-      - {target: BRN-falsification-trial-ledger, require: proven}
+      - {target: BRN-dag-integrity, require: proven, evidence: supported}
+      - {target: BRN-falsification-trial-ledger, require: proven, evidence: supported}
+      - {target: BRN-declarations-gate, require: proven, evidence: supported}
+      - {target: BRN-consistency-declarations-gate, require: proven, evidence: supported}
+      - {target: BRN-model-honest, require: proven, evidence: supported}
+      - {target: BRN-diagnosis-coverage-first, require: proven, evidence: supported}
+      - {target: BRN-runner-captures, require: proven, evidence: supported}

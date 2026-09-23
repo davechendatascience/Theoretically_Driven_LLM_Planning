@@ -10,3 +10,7 @@ venv/
 # Derived belief cache — regenerable from evidence + declarations, never the
 # source of truth. The evidence ledger itself IS committed on purpose.
 .belief/cache/
+
+# The design-trial ledger .consistency/ is committed for the same reason as
+# .belief/: verification records are part of the baseline they verified.
+.consistency/cache/

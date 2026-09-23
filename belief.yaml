@@ -3,6 +3,17 @@
 # This file is the approval gate. The server reads it from git HEAD, not the
 # working tree — editing it changes nothing until a human commits. Uncommitted
 # edits show up in `status` as PENDING and score no evidence.
+#
+# Every contract below is a `kind: gate`: the pytest suites are deterministic
+# procedures, so a suite passes or fails at a revision. The belief is read from
+# the latest run, not from a rate that reruns of the same result cannot move.
+#
+# Every component claims its code. The claim is what lets the artifacts view
+# say which files are owned, the coverage view (consistency-belief) tell a
+# planned component from an unclaimed one, and the belief view mark evidence
+# stale once a claimed file changes after the revision it measured. Files that
+# only the tool surface exercises (server, views, render) are claimed by the
+# component whose end-to-end contract measures that surface.
 
 components:
   - id: CMP-declarations
@@ -15,38 +26,64 @@ components:
       - {id: FM-worktree-leak, observable: an uncommitted threshold change alters a verdict}
       - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
     remediation: Tighten validate(); the fatal-code set in Declarations.is_scorable
+    code:
+      - src/component_belief/declarations.py
+      - src/component_belief/expr.py
+
+  - id: CMP-consistency-declarations
+    purpose: Load consistency.yaml from git HEAD, validate it, and join it to this file's components
+    outputs: [IFC-cdeclarations__proofdag]
+    testable_capability: >-
+      Reports an unknown premise, a cycle among declarations and a subject this
+      file no longer declares, and refuses to let uncommitted edits take effect
+    failure_modes:
+      - {id: FM-cycle-admitted, observable: two declarations citing each other load with no CIRCULAR_DEPENDENCY issue}
+      - {id: FM-removed-subject-silent, observable: a branch whose component left belief.yaml reads as governing it}
+      - {id: FM-worktree-leak, observable: an uncommitted axiom edit alters a proof state}
+    remediation: validate() and validate_links() in the consistency declarations loader
+    code:
+      - src/consistency_belief/declarations.py
 
   - id: CMP-proof-dag
     purpose: Hold the proof DAG and compute each node's verification state
+    inputs: [IFC-cdeclarations__proofdag]
     outputs: [IFC-proofdag__views]
     testable_capability: >-
       Admits a node only on declared or staged premises and without a cycle, in
-      dependency order rather than file order, and moves a node to REFUTED only
-      on a falsified probe
+      dependency order rather than file order, moves a node to REFUTED only on a
+      falsified probe, and counts independent trials by strategy and actor
     failure_modes:
       - {id: FM-file-order, observable: a branch declared above its premise is dropped from the graph}
       - {id: FM-gap-refutes, observable: an entailment gap is reported as a counterexample}
       - {id: FM-stale-carried, observable: a trial keeps counting after its target or a premise is restated}
-    remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints
+      - {id: FM-repeat-counts, observable: three probes of one strategy by one actor close an obligation}
+    remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints and independence count
     code:
       - src/consistency_belief/graph.py
       - src/consistency_belief/model.py
       - src/consistency_belief/probes.py
 
   - id: CMP-trial-ledger
-    purpose: Append-only store of proposals, trials, amendments and withdrawals
+    purpose: Append-only store of proposals, trials, amendments, decisions and withdrawals, and the tool surface over it
     inputs: [IFC-proofdag__views]
     testable_capability: >-
       Replays the same state from the events alone, keeping a withdrawn proposal
-      and its trials on record
+      and its trials on record, refusing a falsification argued from the source,
+      and naming the revision every decision was taken at
     failure_modes:
       - {id: FM-mutating-history, observable: an amendment edits the record it corrects}
       - {id: FM-withdrawn-erased, observable: a withdrawn proposal leaves no trace}
       - {id: FM-declared-masked, observable: a stale staged copy stands in for a declaration}
-    remediation: Store.staged_proposals / withdrawn; every write goes through append_event
+      - {id: FM-source-falsification, observable: a counterexample naming a source file is recorded as a refutation}
+    remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     code:
       - src/consistency_belief/store.py
       - src/consistency_belief/decide.py
+      - src/consistency_belief/server.py
+      - src/consistency_belief/views.py
+      - src/consistency_belief/render.py
+      - src/consistency_belief/ids.py
+      - src/consistency_belief/__init__.py
 
   - id: CMP-belief-model
     purpose: Compute belief slices from evidence, priors, and declarations
@@ -54,30 +91,56 @@ components:
     outputs: [IFC-model__diagnose]
     testable_capability: >-
       Produces a conditioned posterior per (contract, bucket, compat_group)
-      that no asserted evidence can influence
+      that no asserted evidence can influence, reads a gate contract from its
+      latest run, and sets evidence aside once the code it measured has changed
     failure_modes:
       - {id: FM-pollution, observable: an annotation changes a posterior}
       - {id: FM-silent-pooling, observable: incompatible trials land in one slice}
       - {id: FM-premature-verdict, observable: a verdict is issued below n_min}
-    remediation: model.eligible() and the slice key in compute_slices()
+      - {id: FM-stale-counted, observable: a trial measured before a claimed file changed still counts as current}
+    remediation: model.eligible() and the slice key in compute_slices(); staleness.CodeStaleness
+    code:
+      - src/component_belief/model.py
+      - src/component_belief/stats.py
+      - src/component_belief/staleness.py
 
   - id: CMP-diagnosis
-    purpose: Rank bottlenecks by decision relevance
+    purpose: Rank bottlenecks by decision relevance, and evaluate the declared policy
     inputs: [IFC-model__diagnose]
     testable_capability: >-
       Returns coverage_limited instead of an optimisation recommendation when
-      no test targets the leading candidate
+      no test targets the leading candidate, and refuses to adopt on an
+      insufficient or stale slice
     failure_modes:
       - {id: FM-optimise-the-unseen, observable: an optimisation is recommended for an uninstrumented component}
       - {id: FM-e2e-attribution, observable: a component is blamed with no local observation}
-    remediation: diagnose() status assignment and the coverage_limited branch
+      - {id: FM-adopt-on-stale, observable: a policy adopts on a slice whose evidence predates a code change}
+    remediation: diagnose() status assignment and the coverage_limited branch; decide.evaluate_policy
+    code:
+      - src/component_belief/diagnose.py
+      - src/component_belief/planning.py
+      - src/component_belief/decide.py
 
   - id: CMP-runner
-    purpose: Execute declared tests and capture artifacts
-    testable_capability: Records measured evidence with an artifact and hash, never transcribed
+    purpose: Execute declared tests, capture artifacts, and serve the tool surface
+    testable_capability: >-
+      Records measured evidence with an artifact, its hash and the revision it
+      ran at, never transcribed; and no tool on the surface writes a belief
     failure_modes:
       - {id: FM-fabricated-metric, observable: a declared metric is synthesised from an exit code}
-    remediation: runner.run_test() synthesis branch
+      - {id: FM-unversioned-run, observable: a measured record carries no sw_revision}
+    remediation: runner.run_test() synthesis branch; the tool list in server.py
+    code:
+      - src/component_belief/runner.py
+      - src/component_belief/readlog.py
+      - src/component_belief/store.py
+      - src/component_belief/server.py
+      - src/component_belief/views.py
+      - src/component_belief/render.py
+      - src/component_belief/stamps.py
+      - src/component_belief/ids.py
+      - src/component_belief/__init__.py
+      - tools/pytest_trials.py
 
 interfaces:
   - id: IFC-declarations__model
@@ -98,48 +161,110 @@ interfaces:
     producer_guarantees:
       - every slice carries its applicable conditions
       - insufficient slices carry no verdict
+      - a stale slice carries no verdict and names the change it predates
     consumer_assumptions:
       - every slice carries its applicable conditions
       - insufficient slices carry no verdict
+      - a stale slice carries no verdict and names the change it predates
+
+  - id: IFC-cdeclarations__proofdag
+    producer: CMP-consistency-declarations
+    consumer: CMP-proof-dag
+    semantics: Validated axioms, definitions, lemmas and branches, joined to the components belief.yaml declares
+    producer_guarantees:
+      - every premise names a declared node, or the declaration carries UNKNOWN_PREMISE
+      - a cycle among declarations is reported before the graph is built
+    consumer_assumptions:
+      - every premise names a declared node, or the declaration carries UNKNOWN_PREMISE
+      - a cycle among declarations is reported before the graph is built
+
+  - id: IFC-proofdag__views
+    producer: CMP-proof-dag
+    consumer: CMP-trial-ledger
+    semantics: Verification state per node, recomputed from the ledger's trials on every read
+    producer_guarantees:
+      - a trial counts only under the statement fingerprint it was recorded against
+      - only a falsified probe refutes
+    consumer_assumptions:
+      - a trial counts only under the statement fingerprint it was recorded against
+      - only a falsified probe refutes
 
 contracts:
   - id: CTR-declarations-gate
     subject: CMP-declarations
     claim_type: capability
+    kind: gate
     metrics: [{id: passed, unit: bool}]
-    acceptance: {rule: "passed == true", target_rate: 0.95}
+    acceptance: {rule: "passed == true"}
     evaluable_by: [TST-declarations]
-    sufficiency: {n_min: 8, max_ci_width: 0.35}
+
+  - id: CTR-consistency-declarations-gate
+    subject: CMP-consistency-declarations
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-consistency-declarations]
+
+  - id: CTR-proof-dag-invariants
+    subject: CMP-proof-dag
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-consistency-graph]
+
+  - id: CTR-trial-ledger-replay
+    subject: CMP-trial-ledger
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-consistency-server]
 
   - id: CTR-model-honest
     subject: CMP-belief-model
     claim_type: capability
+    kind: gate
     metrics: [{id: passed, unit: bool}]
-    acceptance: {rule: "passed == true", target_rate: 0.95}
+    acceptance: {rule: "passed == true"}
     evaluable_by: [TST-beliefs]
-    sufficiency: {n_min: 8, max_ci_width: 0.35}
 
   - id: CTR-diagnosis-refuses-blind-optimisation
     subject: CMP-diagnosis
     claim_type: capability
+    kind: gate
     metrics: [{id: passed, unit: bool}]
-    acceptance: {rule: "passed == true", target_rate: 0.95}
+    acceptance: {rule: "passed == true"}
     evaluable_by: [TST-diagnose]
-    sufficiency: {n_min: 8, max_ci_width: 0.35}
 
   - id: CTR-surface-intact
     subject: CMP-runner
     claim_type: capability
+    kind: gate
     metrics: [{id: passed, unit: bool}]
-    acceptance: {rule: "passed == true", target_rate: 0.95}
+    acceptance: {rule: "passed == true"}
     evaluable_by: [TST-server]
-    sufficiency: {n_min: 8, max_ci_width: 0.35}
 
 tests:
   - id: TST-declarations
     layer: component
     targets: [CMP-declarations]
     run: python tools/pytest_trials.py $OUT -- tests/test_declarations.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+
+  - id: TST-consistency-declarations
+    layer: component
+    targets: [CMP-consistency-declarations]
+    run: python tools/pytest_trials.py $OUT -- tests/test_consistency_declarations.py tests/test_consistency_coverage.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+
+  - id: TST-consistency-graph
+    layer: component
+    targets: [CMP-proof-dag]
+    run: python tools/pytest_trials.py $OUT -- tests/test_consistency_graph.py tests/test_consistency_probes.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
 
@@ -165,13 +290,25 @@ tests:
     capture: [case]
     mandatory: true
 
+  - id: TST-consistency-server
+    layer: e2e
+    targets: [CMP-trial-ledger]
+    run: python tools/pytest_trials.py $OUT -- tests/test_consistency_server.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    mandatory: true
+
 priors: []
 
 policies:
   - id: POL-release
     criteria:
       - {slice: CTR-declarations-gate, require: supported}
+      - {slice: CTR-consistency-declarations-gate, require: supported}
+      - {slice: CTR-proof-dag-invariants, require: supported}
+      - {slice: CTR-trial-ledger-replay, require: supported}
       - {slice: CTR-model-honest, require: supported}
       - {slice: CTR-diagnosis-refuses-blind-optimisation, require: supported}
+      - {slice: CTR-surface-intact, require: supported}
       - {safety_gates: all_passed}
     weights: null
