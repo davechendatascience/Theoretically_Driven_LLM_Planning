@@ -447,8 +447,11 @@ def test_the_artifacts_view_writes_the_verdicts_to_a_file(repo, monkeypatch):
     text = server.status(view="artifacts")
     assert "stamps.jsonl" in text
 
-    rows = [json.loads(line) for line in (repo / ".belief/cache/stamps.jsonl").read_text().splitlines()]
+    lines = (repo / ".belief/stamps.jsonl").read_text().splitlines()
+    header, rows = json.loads(lines[0]), [json.loads(l) for l in lines[1:]]
+    assert header["kind"] == "header" and header["declarations"] == "git-HEAD" and header["at"]
     by_path = {r["path"]: r for r in rows}
     assert by_path["out/thing.bin"]["verdict"].startswith("undecidable")
-    assert by_path["out/thing.bin"]["at"] and by_path["out/thing.bin"]["declarations"] == "git-HEAD"
+    assert "at" not in by_path["out/thing.bin"], "a committed file diffs on verdicts, not on clocks"
+    assert [r["path"] for r in rows] == sorted(r["path"] for r in rows), "stable order"
     assert any(r["directory"] for r in rows), "folders are in the file too"
