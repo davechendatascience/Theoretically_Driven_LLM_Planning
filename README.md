@@ -116,17 +116,24 @@ next: run_test TST-grasp-ik conditions={low}  # closes the thin slice
 
 ## 3. The Join: `subject`
 
-A branch declares the component it governs:
+`consistency.yaml` opens with the components its designs govern, and each branch names one of them:
 
 ```yaml
-# consistency.yaml                     # belief.yaml
-- id: BRN-motion-gate                  - id: CMP-motion
-  subject: CMP-motion          ───────►  purpose: Plan motion
-  premises: [AXM-safety]                 code: [motion.py]
-  derivation_rule: "motion.py,           ...
-    evidence: CTR-motion-clear" ──────► - id: CTR-motion-clear
-                                          subject: CMP-motion
+# consistency.yaml                       # belief.yaml
+components:                              components:
+  - {id: CMP-motion, note: the gate} ───►  - id: CMP-motion
+                                             purpose: Plan motion
+branches:                                    code: [motion.py]
+  - id: BRN-motion-gate                      ...
+    subject: CMP-motion          ───────►
+    premises: [AXM-safety]                 contracts:
+    derivation_rule: "motion.py,           - id: CTR-motion-clear
+      evidence: CTR-motion-clear" ───────►   subject: CMP-motion
 ```
+
+The `components:` list is an import, not a copy: belief.yaml owns each component, and this file
+says which of them its designs speak for. A listed id belief.yaml no longer declares is
+`REMOVED_COMPONENT`; a branch whose subject is missing from the list is `UNLISTED_SUBJECT`.
 
 consistency-belief reads `belief.yaml` at git HEAD — one way, read-only — and checks both ends of
 that arrow. `status(view="coverage")` then sorts every component by what each ledger knows:

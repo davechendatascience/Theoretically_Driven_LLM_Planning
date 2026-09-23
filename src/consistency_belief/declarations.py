@@ -90,6 +90,19 @@ class Branch:
 
 
 @dataclass
+class ComponentImport:
+    """A component this file's designs govern, listed at the top of consistency.yaml.
+
+    The id is the whole content: belief.yaml owns the component -- its purpose, code paths,
+    contracts and measurements -- and this list says which of them the design ledger speaks for,
+    the way an import names what a module uses. The note is for the reader.
+    """
+
+    id: str
+    note: str = ""
+
+
+@dataclass
 class Policy:
     id: str
     criteria: list[dict[str, Any]] = field(default_factory=list)
@@ -129,6 +142,7 @@ class Declarations:
     raw_present: bool = False
     components: dict[str, ComponentRef] = field(default_factory=dict)
     components_source: str = "none"  # git-HEAD | none | unavailable
+    governs: dict[str, ComponentImport] = field(default_factory=dict)
 
     def issues_for(self, subject: str) -> list[Issue]:
         return [i for i in self.issues if i.subject == subject]
@@ -232,7 +246,21 @@ def validate_links(decl: Declarations) -> list[Issue]:
         return []
     issues: list[Issue] = []
     known = set(decl.components) | {c for ref in decl.components.values() for c in ref.contracts}
+
+    for cid in decl.governs:
+        if cid not in decl.components:
+            issues.append(Issue(
+                "REMOVED_COMPONENT", cid,
+                "listed under components: here, but belief.yaml does not declare it -- the component "
+                "was removed or renamed; drop it from the list, or re-declare it there",
+            ))
     for bid, brn in decl.branches.items():
+        if decl.governs and brn.subject in decl.components and brn.subject not in decl.governs:
+            issues.append(Issue(
+                "UNLISTED_SUBJECT", bid,
+                f"subject {brn.subject!r} is a declared component but is missing from this file's "
+                "components: list; add it, so the file says which components its designs govern",
+            ))
         if not brn.subject:
             issues.append(Issue("UNATTACHED_SUBJECT", bid, "branch declares no subject component"))
         elif brn.subject not in decl.components:
@@ -280,6 +308,9 @@ def _parse(text: str) -> Declarations:
     for raw in data.get("branches") or []:
         b = Branch(**_only(raw, Branch))
         decl.branches[b.id] = b
+    for raw in data.get("components") or []:
+        c = ComponentImport(id=raw, note="") if isinstance(raw, str) else ComponentImport(**_only(raw, ComponentImport))
+        decl.governs[c.id] = c
     for raw in data.get("policies") or []:
         p = Policy(**_only(raw, Policy))
         decl.policies[p.id] = p

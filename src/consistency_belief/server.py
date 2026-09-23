@@ -73,7 +73,8 @@ number. Numbers written into claims rot: restating a claim invalidates trials th
 the old wording, and a figure measured under one configuration is silently wrong under the next.
 
 A branch's `subject` is the join between the two ledgers: it names a component declared in
-belief.yaml, where that component's code paths, contracts and measurements live. status(view=
+belief.yaml, where that component's code paths, contracts and measurements live, and
+consistency.yaml opens with the list of components its designs govern (an import, not a copy). status(view=
 "coverage") reads both at git HEAD and sorts every component into governed (code, and a declared
 branch saying why), undeclared design (code with no declared branch -- prune it or declare it),
 planned (a design declared before anything is built, which is allowed) and broken (the subject was

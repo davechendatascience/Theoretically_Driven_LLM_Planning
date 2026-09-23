@@ -46,6 +46,10 @@ contracts:
 """
 
 CONSISTENCY = """
+components:
+  - {id: CMP-motion, note: what the gate below governs}
+  - CMP-planner
+
 axioms:
   - id: AXM-safety
     domain: safety
@@ -201,3 +205,31 @@ def test_withdraw_refuses_a_declaration_and_an_empty_reason(linked: Path, monkey
                           claim="Staged.", rationale="r")
     assert "reason is empty" in server.withdraw(id="BRN-staged", reason="  ")
     assert "unknown proposal" in server.withdraw(id="BRN-nothing", reason="r")
+
+
+# --- the components a design file governs ------------------------------------------------------
+
+def test_consistency_yaml_lists_the_components_it_governs(linked: Path):
+    decl = load(linked)
+    assert set(decl.governs) == {"CMP-motion", "CMP-planner"}
+    assert decl.governs["CMP-motion"].note == "what the gate below governs"
+    assert "consistency.yaml governs (2): CMP-motion, CMP-planner" in view_coverage(Context.build(linked))
+
+
+def test_a_listed_component_that_belief_yaml_dropped_is_reported(linked: Path):
+    (linked / "consistency.yaml").write_text(
+        CONSISTENCY.replace("  - CMP-planner", "  - CMP-planner\n  - CMP-deleted"), encoding="utf-8")
+    git(linked, "commit", "-qam", "list a component belief.yaml does not declare")
+
+    removed = [i for i in load(linked).issues if i.code == "REMOVED_COMPONENT"]
+    assert [i.subject for i in removed] == ["CMP-deleted"]
+    assert "removed or renamed" in removed[0].message
+
+
+def test_a_subject_missing_from_the_list_is_reported(linked: Path):
+    (linked / "consistency.yaml").write_text(
+        CONSISTENCY.replace("  - CMP-planner\n", ""), encoding="utf-8")
+    git(linked, "commit", "-qam", "drop a component from the list while a branch still governs it")
+
+    unlisted = [i for i in load(linked).issues if i.code == "UNLISTED_SUBJECT"]
+    assert [i.subject for i in unlisted] == ["BRN-planner-regression"]

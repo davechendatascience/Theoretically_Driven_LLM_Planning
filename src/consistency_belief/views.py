@@ -275,6 +275,8 @@ def view_coverage(ctx: Context) -> str:
         f"Source: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source}",
         "",
     ]
+    if decl.governs:
+        lines += [f"consistency.yaml governs ({len(decl.governs)}): " + ", ".join(sorted(decl.governs)), ""]
     lines += block("governed -- code exists and a declared branch says why", governed, show_code=True)
     lines += block("undeclared design -- code exists, no declared branch (prune it, or declare the design)",
                    undeclared, show_code=True)
@@ -300,7 +302,8 @@ def view_coverage(ctx: Context) -> str:
         "unattached -- the subject is prose, not a component id", unattached)
 
     issues = [i for i in decl.issues
-              if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE")]
+              if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE",
+                            "REMOVED_COMPONENT", "UNLISTED_SUBJECT")]
     if issues:
         lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
 
