@@ -107,9 +107,9 @@ axioms:
   - id: AXM-no-silent-failure
     domain: integrity
     statement: >-
-      A declaration that cannot take its place in the proof graph, or whose
-      subject belief.yaml no longer declares, is reported where the graph is
-      shown; it is never dropped in silence.
+      A declared or staged node that cannot take its place in the premise
+      graph, and a declared or staged branch whose subject belief.yaml no
+      longer declares, are reported; neither is dropped in silence.
     rationale: >-
       A defect nobody sees reads exactly like a design that holds: a lemma
       whose premise was deleted, or a branch left behind by a removed
@@ -199,21 +199,34 @@ definitions:
   - id: DEF-proof-state
     term: Proof state
     meaning: >-
-      A node's proof state is computed from its place in the premise graph and
-      the trials recorded on it alone, and from nothing else belief.yaml or the
-      ledger says about it, its subject included. A lemma or branch is proven
-      exactly when it cites at least one premise and every node it depends on
-      that cites none is a declared axiom or definition; its current trials
-      cover at least its declared minimum of distinct strategy and actor
-      pairs; the share of its current trials that passed meets its declared
-      consensus; and none of its current trials is falsified.
+      Only a node in the premise graph has a proof state; a node no build
+      admits has none and is never proven. A node's proof state is computed
+      from its place in the premise graph and the trials recorded on it alone,
+      and from nothing else belief.yaml or the ledger says about it, its
+      subject included. A lemma or branch is proven exactly when it cites at
+      least one premise and every node it depends on that cites none is a
+      declared axiom or definition; its current trials cover at least its
+      declared minimum of distinct strategy and actor pairs, a minimum below
+      one being read as one; the share of its current trials that passed
+      meets its declared consensus; and none of its current trials is
+      falsified.
 
   - id: DEF-contract-slice
     term: Contract slice
     meaning: >-
       The belief-eligible trials on one contract that fall in the same
       declared condition bucket and carry the same value for every key in the
-      contract's declared compatibility key.
+      contract's declared compatibility key. Each slice is a claim of its own:
+      the verdict a slice issues is on that slice, and its sufficiency is
+      counted over that slice's trials alone.
+
+  - id: DEF-restatement
+    term: Restatement
+    meaning: >-
+      A node is restated when its statement or the premises it cites change
+      while it stays declared at the head revision or staged in the ledger. It
+      is removed when it is neither declared at the head revision nor staged
+      in the ledger.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -308,10 +321,11 @@ branches:
       DEF-premise-graph defines the premise graph as the build the proof kernel
       makes on every read. By LMA-kernel-enforces-acyclicity no such build
       contains a cycle, which is what AXM-acyclicity requires of a deductive
-      graph. By DEF-proof-state a node is proven only when it cites a premise
-      and every node it depends on that cites none is a declared axiom or
-      definition, so a node whose ancestry ends anywhere else is never proven;
-      that is the ungrounded case AXM-axiomatic-grounding forbids.
+      graph. By DEF-proof-state a node no build admits is never proven, and a
+      node in the graph is proven only when it cites a premise and every node
+      it depends on that cites none is a declared axiom or definition; so a
+      node whose ancestry ends anywhere else is never proven, which is the
+      ungrounded case AXM-axiomatic-grounding forbids.
       evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
@@ -325,7 +339,7 @@ branches:
       restated or removed. While a falsified trial whose counterexample meets
       DEF-counterexample is current, its target's claim does not follow from
       its premises.
-    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger, DEF-premise-graph]
+    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger, DEF-premise-graph, DEF-restatement]
     derivation_rule: >-
       By DEF-ledger a trial is an entry in an append-only record, so it is
       never edited or removed, and by AXM-falsifiable-measurement it is a
@@ -333,17 +347,18 @@ branches:
       with its reason. By DEF-current-trial whether a trial is current turns on
       nothing but its validity after amendments, its target's place in the
       graph, and the fingerprints of its target and of the nodes it depends on;
-      validity changes only by an appended amendment. By DEF-premise-graph the
-      graph is built from the declared and staged nodes and their citations
-      alone, so it changes only when a node is declared, restated or removed.
-      Declaring a new node makes no trial stop being current, since a node in
-      the graph cites only nodes already in it; and by
-      LMA-blast-radius-propagation a restatement or removal of a node r makes a
-      trial stop being current only when its target is r or depends on r in
-      the build before or after the change. A counterexample meeting
-      DEF-counterexample is a scenario in which every premise holds and the
-      claim fails, so the claim does not follow from its premises.
-      evidence: CTR-trial-ledger-replay
+      validity changes only by an appended amendment, and a fingerprint only
+      when a statement or the premises cited change, which DEF-restatement
+      calls restating. By DEF-premise-graph the graph is built from the
+      declared and staged nodes and their citations alone, so it changes only
+      when a node is declared, restated or removed. Declaring a new node makes
+      no trial stop being current, since a node in the graph cites only nodes
+      already in it; and by LMA-blast-radius-propagation a restatement or
+      removal of a node r makes a trial stop being current only when its
+      target is r or depends on r in the build before or after the change. A
+      counterexample meeting DEF-counterexample is a scenario in which every
+      premise holds and the claim fails, so the claim does not follow from its
+      premises. evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-declarations-gate
@@ -369,24 +384,26 @@ branches:
     claim_type: contract
     statement: >-
       Only the declarations at the head revision and the proposals staged in
-      the ledger enter the proof graph, and a staged proposal takes no effect
-      as a declaration. A declaration that no build admits is reported, never
-      dropped in silence, and so is a branch whose subject belief.yaml no
-      longer declares; that branch keeps its proof state.
+      the ledger enter the premise graph, and a staged proposal takes no effect
+      as a declaration. A declared or staged node that no build admits is
+      reported, never dropped in silence, and so is a declared or staged branch
+      whose subject belief.yaml no longer declares; that branch keeps its proof
+      state.
     premises: [AXM-commit-is-approval, AXM-no-silent-failure, DEF-premise-graph, DEF-current-trial, DEF-proof-state]
     derivation_rule: >-
       By DEF-premise-graph a build admits nothing but the head revision's
       declarations and the ledger's staged proposals. By AXM-commit-is-approval
       a declaration takes effect only from the committed revision, so a
       proposal that is only staged takes no effect as one. By
-      AXM-no-silent-failure a declaration that cannot take its place in the
-      graph, and a branch whose subject belief.yaml no longer declares, are
-      reported rather than dropped. By DEF-proof-state a node's proof state is
-      computed from its place in the graph and the trials on it alone, its
-      subject excluded; a subject is neither a premise, by DEF-premise-graph,
-      nor part of a fingerprint, by DEF-current-trial, so losing it changes
-      neither the branch's place in the graph nor which of its trials are
-      current, and its proof state stands. evidence: CTR-consistency-declarations-gate
+      AXM-no-silent-failure a declared or staged node that cannot take its
+      place in the premise graph, and a declared or staged branch whose subject
+      belief.yaml no longer declares, are reported rather than dropped. By
+      DEF-proof-state a node's proof state is computed from its place in the
+      graph and the trials on it alone, its subject excluded; a subject is
+      neither a premise, by DEF-premise-graph, nor part of a fingerprint, by
+      DEF-current-trial, so losing it changes neither the branch's place in
+      the graph nor which of its trials are current, and its proof state
+      stands. evidence: CTR-consistency-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-model-honest
@@ -402,8 +419,10 @@ branches:
       By AXM-no-belief-write-path a measured belief -- the posterior over a
       contract slice -- changes only through belief-eligible evidence, and by
       LMA-asserted-is-inert never through an asserted record. By
-      AXM-sparse-data-no-verdict no verdict is issued below a claim's declared
-      sufficiency. By DEF-contract-slice trials that differ on a key of the
+      DEF-contract-slice a slice is a claim of its own, its verdict is on that
+      slice, and its sufficiency is counted over its own trials, so by
+      AXM-sparse-data-no-verdict a slice below its declared sufficiency issues
+      no verdict. By DEF-contract-slice trials that differ on a key of the
       contract's declared compatibility key belong to different slices, and a
       posterior is over one slice, so they are never pooled into one.
       evidence: CTR-model-honest
