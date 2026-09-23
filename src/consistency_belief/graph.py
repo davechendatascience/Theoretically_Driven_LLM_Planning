@@ -53,18 +53,29 @@ class ProofDAG:
                 id=defn.id, kind="definition", statement=f"{defn.term}: {defn.meaning}",
                 derivation_rule="definition",
             ))
-        for lma in decl.lemmas.values():
-            dag.add_node(ProofNode(
-                id=lma.id, kind="lemma", statement=lma.statement,
-                premises=list(lma.premises), derivation_rule=lma.derivation_rule,
-                metadata=lma.sufficiency,
-            ))
-        for brn in decl.branches.values():
-            dag.add_node(ProofNode(
-                id=brn.id, kind="branch", statement=brn.statement,
-                premises=list(brn.premises), derivation_rule=brn.derivation_rule,
-                subject=brn.subject, metadata=brn.sufficiency,
-            ))
+        derived = [
+            ProofNode(id=lma.id, kind="lemma", statement=lma.statement,
+                      premises=list(lma.premises), derivation_rule=lma.derivation_rule,
+                      metadata=lma.sufficiency)
+            for lma in decl.lemmas.values()
+        ] + [
+            ProofNode(id=brn.id, kind="branch", statement=brn.statement,
+                      premises=list(brn.premises), derivation_rule=brn.derivation_rule,
+                      subject=brn.subject, metadata=brn.sufficiency)
+            for brn in decl.branches.values()
+        ]
+        # In dependency order, not file order: a declaration may cite one written below it, and
+        # where it sits in the file is not a fact about the proof.
+        pending = list(derived)
+        while pending:
+            ready = [n for n in pending if all(p in dag.nodes for p in n.premises)]
+            if not ready:
+                break
+            for node in ready:
+                dag.add_node(node)
+            pending = [n for n in pending if n not in ready]
+        for node in pending:                    # unknown premise or a cycle; add to report it
+            dag.add_node(node)
         return dag
 
     def premise_errors(self, node: ProofNode) -> list[str]:

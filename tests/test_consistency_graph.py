@@ -74,3 +74,19 @@ def test_blast_radius_topological_ordering(sample_dag: ProofDAG):
 
     # If leaf node is modified
     assert sample_dag.blast_radius("BRN-1") == []
+
+
+def test_declarations_join_in_dependency_order_not_file_order():
+    """A branch may be declared above the branch it cites; where it sits in the file is not a
+    fact about the proof."""
+    from consistency_belief.declarations import Branch, Declarations, Axiom
+
+    decl = Declarations()
+    decl.axioms["AXM-root"] = Axiom(id="AXM-root", statement="root", rationale="r")
+    decl.branches["BRN-child"] = Branch(id="BRN-child", statement="child", premises=["BRN-parent"],
+                                        derivation_rule="d", subject="CMP-x")
+    decl.branches["BRN-parent"] = Branch(id="BRN-parent", statement="parent", premises=["AXM-root"],
+                                         derivation_rule="d", subject="CMP-x")
+    dag = ProofDAG.from_declarations(decl)
+    assert set(dag.nodes) == {"AXM-root", "BRN-parent", "BRN-child"}
+    assert dag.ancestors("BRN-child") == {"BRN-parent", "AXM-root"}
