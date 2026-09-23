@@ -217,26 +217,31 @@ lemmas:
   - id: LMA-blast-radius-propagation
     statement: >-
       When a node r is restated, a trial of r, or of a node that depends on r,
-      that recorded a fingerprint of r other than r's new one is not current;
-      when r is removed, no trial of r or of a node that depends on r is
-      current. Either way, whether a trial of any other node is current does
-      not change.
+      that recorded a fingerprint of r other than r's new one is not current.
+      When r is removed, so that it is neither declared at the head revision
+      nor staged in the ledger, no trial of r or of a node that depends on r is
+      current. Either way, for a node other than r that depends on r neither in
+      the build before the change nor in the build after it, whether each of
+      its trials is current does not change.
     premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial]
     derivation_rule: >-
       By DEF-current-trial a trial that recorded fingerprints is current only
       if the one it recorded for r, as its target's or as that of a node its
       target depends on, is r's fingerprint now; after a restatement, one that
-      recorded any other is not. When r is removed no build admits it, and
-      since DEF-premise-graph admits a node only once every premise it cites is
-      in the graph, induction along a path from r shows that no node depending
-      on r is admitted either; a trial whose target is not in the graph is not
-      current. A node e that is neither r nor depends on r keeps its statement,
-      its premises and its place in the graph, and so does every node e depends
-      on, since none of them is r or depends on r -- else e would depend on r.
-      So e's target, the nodes it depends on and all their fingerprints are as
-      they were, and each of e's trials is current exactly as before. This is
-      the invalidation AXM-blast-radius-invalidation requires, and it needs no
-      traversal order and no acyclic graph.
+      recorded any other is not. A removed node is neither declared nor staged,
+      so no build admits it, and since DEF-premise-graph admits a node only
+      once every premise it cites is in the graph, induction along a path from
+      r shows that no node depending on r is admitted either; a trial whose
+      target is not in the graph is not current. Now take a node e other than r
+      that depends on r in neither build. If e is in the graph in one of them,
+      every node its citations lead back to is in that build and is one e
+      depends on there, so r is not among them; the other build declares e and
+      each of those nodes exactly as before, since only r changed, so it admits
+      e with the same nodes behind it and the same fingerprints, and each of
+      e's trials is current exactly as it was. If e is in neither build, none
+      of its trials is current in either. This is the invalidation
+      AXM-blast-radius-invalidation requires, and it needs no traversal order
+      and no acyclic graph.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-asserted-is-inert
@@ -292,9 +297,10 @@ branches:
     claim_type: contract
     statement: >-
       A recorded trial is never edited or removed. It stops counting only when
-      an appended amendment reclassifies it, or when its target or a node its
-      target depends on is restated or removed. While a falsified trial whose
-      counterexample meets DEF-counterexample counts, its target is refuted.
+      an appended amendment reclassifies it, or when its target, or a node its
+      target depends on in the build before or after the change, is restated
+      or removed. While a falsified trial whose counterexample meets
+      DEF-counterexample counts, its target is refuted.
     premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger]
     derivation_rule: >-
       By DEF-ledger a trial is an entry in an append-only record, so it is
@@ -306,11 +312,12 @@ branches:
       target and of the nodes it depends on. Validity changes only by an
       appended amendment. Declaring a new node stops no trial, since no node in
       the graph cites a node that is not yet in it; and by
-      LMA-blast-radius-propagation a restatement or removal stops a trial only
-      when it is of the trial's target or of a node its target depends on. A
-      counterexample meeting DEF-counterexample is a scenario in which every
-      premise holds and the claim fails, so while it counts the claim does not
-      follow and its target is refuted. evidence: CTR-trial-ledger-replay
+      LMA-blast-radius-propagation a restatement or removal of a node r stops a
+      trial only when its target is r or depends on r in the build before or
+      after the change. A counterexample meeting DEF-counterexample is a
+      scenario in which every premise holds and the claim fails, so while it
+      counts the claim does not follow and its target is refuted.
+      evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-declarations-gate
