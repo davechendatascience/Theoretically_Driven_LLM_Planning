@@ -159,6 +159,7 @@ class Declarations:
     tests: dict[str, Test] = field(default_factory=dict)
     priors: dict[str, Prior] = field(default_factory=dict)
     policies: dict[str, Policy] = field(default_factory=dict)
+    artifacts: list[str] = field(default_factory=list)   # roots holding generated, untracked output
     issues: list[Issue] = field(default_factory=list)
     source: str = "none"            # git-HEAD | none
     pending: bool = False           # working tree differs from HEAD
@@ -277,6 +278,7 @@ def _parse(text: str) -> Declarations:
     for raw in data.get("policies") or []:
         p = Policy(**_only(raw, Policy))
         decl.policies[p.id] = p
+    decl.artifacts = [str(a) for a in (data.get("artifacts") or [])]
 
     decl.issues.extend(validate(decl))
     return decl

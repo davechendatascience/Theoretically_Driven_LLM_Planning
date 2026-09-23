@@ -91,6 +91,7 @@ Evidence-grounded belief state for a system modeled as components and interfaces
 * **Beta-Binomial Statistics**: Computes uncertainty intervals; rejects premature verdicts on sparse data (`insufficient_evidence`).
 * **Regressions & Bottlenecks**: Surfaces regressions and ranks bottlenecks by decision relevance without blaming unobserved components.
 * **Components Claim Their Code**: `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` at all is *planned*.
+* **Every File Stamped**: `status(view="artifacts")` joins git (added, last changed), the run ledger (which runs invoked it, when), the declarations (what claims or names it) and the filesystem (generated output under the declared `artifacts:` roots). Each stamp carries its source, because "RUN-0140 invoked it at 04:44" is a fact and "its mtime is three weeks old" is a hint. A file nothing claims, nothing has run, and no belief-eligible evidence rests on is a prune candidate — pruning stops being a memory exercise.
 
 ### The Loop
 ```
@@ -98,7 +99,7 @@ status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 ```
 
 ### The Six Tools
-* `status`: 7 views (`graph`, `coverage`, `belief`, `diagnose`, `plan`, `cycle`, `trace`).
+* `status`: 8 views (`graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace`).
 * `run_test`: Executes declared test commands, captures artifacts, extracts trials.
 * `ingest`: Imports external evidence with provenance.
 * `amend`: Corrects or invalidates trials without destructive mutations.

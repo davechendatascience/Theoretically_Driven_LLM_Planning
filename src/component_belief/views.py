@@ -17,11 +17,12 @@ from .decide import active_policy, evaluate_policy
 from .diagnose import diagnose
 from .ids import set_hash
 from .model import compute_slices, unobserved_contracts
+from .stamps import collect as collect_stamps
 from .planning import plan_round
 from .render import basis_line, bullet, envelope, slice_dict, slice_line
 from .store import Store
 
-VIEWS = ("graph", "coverage", "belief", "diagnose", "plan", "cycle", "trace")
+VIEWS = ("graph", "coverage", "belief", "diagnose", "plan", "artifacts", "cycle", "trace")
 
 
 @dataclass
@@ -45,6 +46,55 @@ class Context:
             else:
                 contract_ids = [c.id for c in self.decl.contracts_for_subject(subject)]
         return compute_slices(self.decl, self.trials(), contract_ids)
+
+
+def view_artifacts(ctx: "Context") -> str:
+    """Every file with what made it, what ran it, and whether live evidence rests on it."""
+    records = collect_stamps(ctx.root, ctx.decl, ctx.store)
+    tracked = [r for r in records if r.tracked]
+    generated = [r for r in records if not r.tracked]
+    counts: dict[str, int] = {}
+    for r in records:
+        for s in r.stamps:
+            counts[s["kind"]] = counts.get(s["kind"], 0) + 1
+
+    lines = [f"{len(tracked)} tracked file(s), {len(generated)} generated artifact(s)",
+             "stamps: " + ", ".join(f"{k} {n}" for k, n in sorted(counts.items())), ""]
+
+    supported = [r for r in tracked if "supports" in r.kinds()]
+    if supported:
+        lines.append(f"live evidence rests on ({len(supported)}):")
+        for r in supported[:12]:
+            runs = next(s for s in r.stamps if s["kind"] == "supports")["runs"]
+            lines.append(f"  {r.path}  <- {', '.join(runs)}")
+        lines.append("")
+
+    unclaimed = [r for r in tracked if r.is_code and "claimed" not in r.kinds()]
+    if unclaimed:
+        lines += [f"code no component claims ({len(unclaimed)}): "
+                  + ", ".join(r.path for r in unclaimed[:10]), ""]
+
+    candidates = [r for r in tracked if r.prune_candidate()]
+    lines.append(f"prune candidates -- nothing claims, runs or rests on them ({len(candidates)}):")
+    for r in candidates[:20]:
+        changed = next((s["at"] for s in r.stamps if s["kind"] == "changed"), "?")
+        lines.append(f"  {r.path}  last changed {changed}")
+    if not candidates:
+        lines.append("  (none)")
+
+    if generated:
+        big = sorted(generated, key=lambda r: -r.stamps[0].get("bytes", 0))[:8]
+        lines += ["", "largest generated artifacts, by newest write:"]
+        for r in big:
+            s = r.stamps[0]
+            lines.append(f"  {r.path}  {s.get('bytes', 0) / 1e9:.2f} GB  newest {s['at']}")
+        lines.append("  (a generated artifact is kept by what reads it, which the ledger only knows "
+                     "if a declared test names it)")
+    if not ctx.decl.artifacts:
+        lines += ["", "note: belief.yaml declares no `artifacts:` roots, so generated output is "
+                  "not stamped. Declare the directories that hold it."]
+    return envelope("\n".join(lines), f"basis: stamps×{len(records)} · git + run ledger + "
+                    f"belief.yaml@{ctx.decl.source}")
 
 
 def _declaration_header(decl: Declarations) -> str:

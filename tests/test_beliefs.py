@@ -172,3 +172,38 @@ priors:
     slices = slices_for(repo, [trial(ik=True) for _ in range(6)])
     assert slices[0].prior_id == "PRI-CTR-grasp-reachable"
     assert slices[0].alpha == 8 + 6
+
+
+# --- stamps: what made each file, what ran it, what rests on it --------------------------------
+
+def test_artifacts_view_stamps_files_and_finds_the_unclaimed(repo, monkeypatch):
+    """A file no component claims, no test names and no evidence rests on is a candidate; one a
+    declared test invoked is not."""
+    from component_belief import server
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git
+
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "grasp.py").write_text("# claimed\n", encoding="utf-8")
+    (repo / "src" / "orphan.py").write_text("# nobody claims this\n", encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        "    remediation: Retune approach sampling",
+        "    remediation: Retune approach sampling\n    code: [src/grasp.py]")
+    (repo / "belief.yaml").write_text(belief + "\nartifacts: [out]\n", encoding="utf-8")
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "cache.bin").write_text("x" * 100, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "claim one file, leave the other")
+
+    stamps = {s.path: s for s in collect(repo, load(repo), Store(repo))}
+    assert "claimed" in stamps["src/grasp.py"].kinds()
+    assert stamps["src/orphan.py"].prune_candidate()
+    assert not stamps["src/grasp.py"].prune_candidate()
+    assert "out/cache.bin" in stamps and not stamps["out/cache.bin"].tracked
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    text = server.status(view="artifacts")
+    assert "src/orphan.py" in text.split("prune candidates")[1]
+    assert "out/cache.bin" in text

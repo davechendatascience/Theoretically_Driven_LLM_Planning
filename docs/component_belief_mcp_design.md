@@ -100,6 +100,8 @@ tests:
     metrics: [ik_success]
     capture: [lighting, model_revision, calibration_state, seed]
 
+artifacts: [cache, runs, checkpoints]  # roots holding generated, untracked output; the
+                                       # artifacts view stamps what is under them
 priors: []                             # {contract, alpha, beta, rationale}
 policies:
   - id: POL-release

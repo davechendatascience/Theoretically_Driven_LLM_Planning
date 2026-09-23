@@ -21,6 +21,7 @@ from .render import basis_line, bullet, envelope
 from .runner import run_test as execute_test
 from .store import VALIDITY, Store
 from .views import (
+    view_artifacts,
     VIEWS,
     Context,
     view_belief,
@@ -76,6 +77,8 @@ def status(
       belief    - one line per belief slice with its state, interval, and n
       diagnose  - ranked bottlenecks, discriminating test, coverage limits
       plan      - tests to run this round, and every test skipped with its reason
+  artifacts - every file with what made it, what ran it, and whether live evidence rests
+              on it; prune candidates are the code nothing claims, runs or supports
       cycle     - the full evaluation-cycle report as JSON, with complete chains
       trace     - expand a `set=` citation handle into its exact evidence records
 
@@ -97,6 +100,8 @@ def status(
         return view_diagnose(ctx, subject, policy)
     if view == "plan":
         return view_plan(ctx, budget, policy)
+    if view == "artifacts":
+        return view_artifacts(ctx)
     if view == "trace":
         return view_trace(ctx, set, subject)
     if view == "cycle":
