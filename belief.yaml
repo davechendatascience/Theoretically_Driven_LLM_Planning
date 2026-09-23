@@ -16,6 +16,38 @@ components:
       - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
     remediation: Tighten validate(); the fatal-code set in Declarations.is_scorable
 
+  - id: CMP-proof-dag
+    purpose: Hold the proof DAG and compute each node's verification state
+    outputs: [IFC-proofdag__views]
+    testable_capability: >-
+      Admits a node only on declared or staged premises and without a cycle, in
+      dependency order rather than file order, and moves a node to REFUTED only
+      on a falsified probe
+    failure_modes:
+      - {id: FM-file-order, observable: a branch declared above its premise is dropped from the graph}
+      - {id: FM-gap-refutes, observable: an entailment gap is reported as a counterexample}
+      - {id: FM-stale-carried, observable: a trial keeps counting after its target or a premise is restated}
+    remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints
+    code:
+      - src/consistency_belief/graph.py
+      - src/consistency_belief/model.py
+      - src/consistency_belief/probes.py
+
+  - id: CMP-trial-ledger
+    purpose: Append-only store of proposals, trials, amendments and withdrawals
+    inputs: [IFC-proofdag__views]
+    testable_capability: >-
+      Replays the same state from the events alone, keeping a withdrawn proposal
+      and its trials on record
+    failure_modes:
+      - {id: FM-mutating-history, observable: an amendment edits the record it corrects}
+      - {id: FM-withdrawn-erased, observable: a withdrawn proposal leaves no trace}
+      - {id: FM-declared-masked, observable: a stale staged copy stands in for a declaration}
+    remediation: Store.staged_proposals / withdrawn; every write goes through append_event
+    code:
+      - src/consistency_belief/store.py
+      - src/consistency_belief/decide.py
+
   - id: CMP-belief-model
     purpose: Compute belief slices from evidence, priors, and declarations
     inputs: [IFC-declarations__model]

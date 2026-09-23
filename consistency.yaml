@@ -3,6 +3,14 @@
 # Like belief.yaml, this file is the approval gate. The server reads it from
 # git HEAD, not the working tree — editing it changes nothing until a human
 # commits. Uncommitted edits show up in `status` as PENDING.
+#
+# The components these designs govern. belief.yaml owns each one -- its purpose, code paths and
+# contracts -- so this list is an import: it says which components the design ledger speaks for,
+# and every branch's subject must be one of them.
+
+components:
+  - {id: CMP-proof-dag, note: the DAG kernel and the verification state over it}
+  - {id: CMP-trial-ledger, note: the append-only record of proposals, trials and withdrawals}
 
 axioms:
   - id: AXM-axiomatic-grounding

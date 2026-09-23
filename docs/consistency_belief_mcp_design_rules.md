@@ -43,3 +43,36 @@
 1. Provide an ASCII proof tree (`status(view="tree")`) visualizing the path from root axioms down to terminal branches with verification badges.
 2. Surface open proof obligations explicitly (`status(view="obligations")`), indicating exactly how many verification trials remain.
 3. Surface active contradictions and discovered counterexamples (`status(view="contradictions")`).
+
+## 9. Name the Components a Design Governs
+
+`consistency.yaml` opens with the components its designs speak for, and every branch's `subject`
+names one of them:
+
+```yaml
+components:
+  - {id: CMP-proof-dag, note: the DAG kernel and the verification state over it}
+  - CMP-trial-ledger
+```
+
+The list is an import, not a copy. `belief.yaml` (component-belief) owns each component — its
+purpose, `code:` paths, contracts and measured evidence — and consistency-belief reads that file
+at git HEAD, one way and read-only, to check both ends of the join:
+
+- a listed id `belief.yaml` no longer declares is `REMOVED_COMPONENT`;
+- a branch whose subject is a declared component missing from the list is `UNLISTED_SUBJECT`;
+- a subject that is a `CMP-` id `belief.yaml` no longer declares is `REMOVED_SUBJECT` — the
+  component was deleted or renamed, so that design governs nothing;
+- a subject in prose is `UNATTACHED_SUBJECT`, and a `CMP-`/`CTR-` id cited in a
+  `derivation_rule` that `belief.yaml` does not declare is `UNKNOWN_EVIDENCE`.
+
+All of them are advisory: whether a claim follows from its premises does not depend on whether
+anyone built it, so a node keeps its place in the proof DAG either way. They exist because the
+opposite failure is silent — a design left behind by a component that was deleted reads exactly
+like a design that is still true.
+
+`status(view="coverage")` reads both files and sorts every component into **governed** (code and a
+declared branch), **undeclared design** (code nobody justified — prune it or declare the design),
+**planned** (a design declared before anything is built, which is allowed) and **broken**. The list
+is optional: a project without one is still checked branch by branch, and a project with no
+`belief.yaml` at all keeps working with subjects unchecked.
