@@ -290,3 +290,35 @@ def test_the_read_log_drops_the_environments_own_files(tmp_path):
         "tools/run.py",
     )), encoding="utf-8")
     assert readlog.harvest(root, log) == ["lib/data.txt", "tools/run.py"]
+
+
+def test_evidence_citations_keep_an_artifact_and_flag_the_missing(repo, monkeypatch):
+    """A trial names what it measured; while that trial is live, the file it names is not
+    prunable -- and if the file is already gone, that is its own finding."""
+    from component_belief import server
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git, trial
+
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "model_a.pt").write_text("weights", encoding="utf-8")
+    (repo / "belief.yaml").write_text(
+        (repo / "belief.yaml").read_text(encoding="utf-8") + "\nartifacts: [out]\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "an artifact a trial will cite")
+
+    store = Store(repo)
+    store.append_trials([
+        {**trial(), "repro": {"model_revision": "model_a.pt:abc123"}},
+        {**trial(), "repro": {"model_revision": "model_gone.pt:def456"}},
+    ])
+
+    records = {s.path: s for s in collect(repo, load(repo), store)}
+    assert "cited" in records["out/model_a.pt"].kinds()
+    assert records["out/model_a.pt"].artifact_verdict().startswith("kept")
+    assert collect.dangling.get("model_gone.pt") == 1
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    text = server.status(view="artifacts")
+    assert "model_gone.pt" in text.split("GONE FROM DISK")[1]

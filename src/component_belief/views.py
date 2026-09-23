@@ -98,6 +98,20 @@ def view_artifacts(ctx: "Context") -> str:
                  if r.artifact_verdict().startswith("prunable")) / 1e9
         if gb:
             lines.append(f"  prunable by the read log: {gb:.2f} GB")
+        orphans = [r for r in generated if r.artifact_verdict().startswith("undecidable")
+                   and "cited" not in r.kinds()]
+        if orphans:
+            worst = sorted(orphans, key=lambda r: -r.stamps[0].get("bytes", 0))[:6]
+            lines += ["", f"generated, and no trial cites them ({len(orphans)}):"]
+            lines += [f"  {r.path}  {r.stamps[0].get('bytes', 0) / 1e6:.1f} MB" for r in worst]
+
+    dangling = getattr(collect_stamps, "dangling", {})
+    if dangling:
+        lines += ["", f"CITED BY LIVE EVIDENCE AND GONE FROM DISK ({len(dangling)}):"]
+        for name, n in sorted(dangling.items(), key=lambda kv: -kv[1])[:10]:
+            lines.append(f"  {name}  {n} trials")
+        lines.append("  Those slices can never be re-audited: the number survives, the thing it "
+                     "measured does not. Supersede the evidence, or restore the file.")
     if not ctx.decl.artifacts:
         lines += ["", "note: belief.yaml declares no `artifacts:` roots, so generated output is "
                   "not stamped. Declare the directories that hold it."]

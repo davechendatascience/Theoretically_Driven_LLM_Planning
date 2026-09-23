@@ -90,6 +90,8 @@ def code_roots(decl: Declarations) -> tuple[str, ...]:
 
 
 def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
+    """Every file's stamps. `dangling_citations` reports names live evidence cites that
+    no longer exist; it is attached to the module-level result for the view to print."""
     pattern = re.compile(r"(?<![\w/.])((?:" + "|".join(map(re.escape, code_roots(decl)))
                          + r")/[\w./-]+)")
     tracked = [f for f in _git(root, "ls-files").split("\n")
@@ -118,6 +120,8 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
                  "at": at.group(1) if at else None})
             if run_id in live_runs:
                 supports.setdefault(path, set()).add(run_id)
+
+    cited, dangling = _citations(root, store, decl)
 
     opened: dict[str, list[dict]] = {}
     for run_dir in sorted(store.artifacts_dir.glob("*/")):
@@ -170,12 +174,45 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
                        "bytes": sum(p.stat().st_size for p in files)}]
             stamps += _opened_stamps(hits)
             stamps += [{"kind": "named", "source": "declared test", "by": tid} for tid in declared]
-            if any(s.get("live") for s in hits):
+            if entry.name in cited:
+                stamps.append({"kind": "cited", "source": "evidence", "trials": cited[entry.name],
+                               "note": "belief-eligible trials name it in their reproduction data"})
+            if entry.name in cited:
+                stamps.append({"kind": "supports", "source": "evidence",
+                               "runs": [], "note": f"{cited[entry.name]} live trials cite it"})
+            elif any(s.get("live") for s in hits):
                 stamps.append({"kind": "supports", "source": "evidence",
                                "runs": sorted({s["run"] for s in hits if s.get("live")})[:4],
                                "note": "a run whose evidence is still belief-eligible opened it"})
             out.append(FileStamps(path=prefix, tracked=False, stamps=stamps))
+    collect.dangling = dangling          # the view prints it; nothing else reads it
     return out
+
+
+def _citations(root: Path, store: Store, decl: Declarations) -> tuple[dict[str, int], dict[str, int]]:
+    """What live trials name in their reproduction data, and which of those no longer exist.
+
+    A trial records the revision of the thing it measured -- a checkpoint, a dataset -- and that
+    name is a claim on the file: while the trial is belief-eligible, deleting the file makes its
+    slice unauditable for good. The number survives and the thing it measured does not, which is
+    the one pruning mistake with no remedy, so it is reported as its own finding.
+    """
+    names: dict[str, int] = {}
+    for trial in store.effective_trials():
+        if trial.get("validity") != "valid" or trial.get("provenance") not in ("measured", "imported"):
+            continue
+        for value in (trial.get("repro") or {}).values():
+            if not isinstance(value, str):
+                continue
+            head = value.split(":")[0].strip()
+            if "." in head and "/" not in head and len(head) < 120:
+                names[head] = names.get(head, 0) + 1
+
+    present = {p.name for name in decl.artifacts for p in (root / name).glob("**/*")
+               if (root / name).exists()}
+    present |= {Path(f).name for f in _git(root, "ls-files").split("\n") if f}
+    dangling = {n: c for n, c in names.items() if n not in present}
+    return {n: c for n, c in names.items() if n in present}, dangling
 
 
 def _opened_stamps(hits: list[dict]) -> list[dict]:
