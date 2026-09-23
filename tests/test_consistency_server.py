@@ -626,3 +626,21 @@ def test_a_policy_target_that_left_the_graph_blocks_adoption(committed_repo: Pat
     assert "ADOPT" not in on_it
     assert "BRN-gpu-throttling is declared but not in the proof graph" in on_it
     assert on_it.count("not in the proof graph") == 1, "one absence, reported once"
+
+
+def test_restating_a_node_back_restores_the_trials_that_verified_that_statement(committed_repo: Path):
+    """A trial is bound to the exact statement and basis it verified (DEF-current-trial). Restate
+    a node and its trials stop counting; restate it back and they count again, because they
+    verified exactly what is declared now -- no re-verification is needed, and none is faked."""
+    verify_step("BRN-gpu-throttling", trials=[
+        {"strategy": "counterexample", "outcome": "sound", "rationale": "ok"},
+        {"strategy": "entailment", "outcome": "sound", "rationale": "ok"}])
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+
+    restated = SAMPLE_CONSISTENCY_YAML.replace(
+        "Cap GPU clock to guarantee power < 35W.", "Cap GPU clock to guarantee power < 30W.")
+    _commit_yaml(committed_repo, restated, "restate")
+    assert "[OBLIGATION 0/2]" in status("branches", subject="BRN-gpu-throttling")
+
+    _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML, "restate it back")
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
