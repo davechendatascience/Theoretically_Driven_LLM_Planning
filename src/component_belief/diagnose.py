@@ -18,18 +18,21 @@ from .model import (
     STATE_CONTESTED,
     STATE_INSUFFICIENT,
     STATE_REFUTED,
+    STATE_STALE,
     Slice,
 )
 
 CONFIRMED = "confirmed_failure"
 SUSPECTED = "suspected"
 UNOBSERVED = "unobserved"
+STALE = "stale"
 BLOCKED = "blocked_downstream"
 OK = "ok"
 
 _SUSPICION = {
     CONFIRMED: 1.0,
     UNOBSERVED: 0.55,
+    STALE: 0.5,          # unknown at this revision, but with a known remedy: run its test again
     SUSPECTED: 0.4,
     BLOCKED: 0.1,
     OK: 0.0,
@@ -154,6 +157,10 @@ def diagnose(
             statuses[cid] = (UNOBSERVED, "no contract declared for this component")
         elif not component_slices:
             statuses[cid] = (UNOBSERVED, "no belief-eligible evidence under these conditions")
+        elif any(s.state == STATE_STALE for s in component_slices):
+            why = next((s.stale_reasons[0] for s in component_slices
+                        if s.state == STATE_STALE and s.stale_reasons), "its code changed")
+            statuses[cid] = (STALE, f"evidence predates a change to its code: {why}")
         elif any(s.state == STATE_INSUFFICIENT for s in component_slices):
             statuses[cid] = (UNOBSERVED, "evidence too sparse to support any verdict")
         elif any(s.state == STATE_CONTESTED for s in component_slices):
@@ -222,6 +229,9 @@ def diagnose(
             f"instrument {top.subject}: no registered test targets it, so its "
             f"suspicion cannot be resolved by any measurement you currently have"
         )
+    elif top is not None and top.status == STALE:
+        tests = _tests_targeting(decl, top.subject)
+        recommendation = f"re-run {tests[0].id if tests else 'its test'} for {top.subject}: {top.reason}"
     elif discriminating:
         recommendation = (
             f"run {discriminating['test_id']} — it separates "
@@ -243,7 +253,7 @@ def diagnose(
 
 
 def _confidence(status: str, slices: list[Slice]) -> str:
-    if status == UNOBSERVED:
+    if status in (UNOBSERVED, STALE):
         return "low"
     if status == CONFIRMED:
         return "high" if slices else "medium"

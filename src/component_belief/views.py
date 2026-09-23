@@ -16,7 +16,8 @@ from .declarations import Declarations, load
 from .decide import active_policy, evaluate_policy
 from .diagnose import diagnose
 from .ids import set_hash
-from .model import compute_slices, unobserved_contracts
+from .model import STATE_STALE, compute_slices, unobserved_contracts
+from .staleness import CodeStaleness
 from .stamps import collect as collect_stamps
 from .planning import plan_round
 from .render import basis_line, bullet, envelope, slice_dict, slice_line
@@ -30,22 +31,22 @@ class Context:
     root: Path
     store: Store
     decl: Declarations
+    staleness: CodeStaleness | None = None    # one git diff per revision, cached for this context
 
     @classmethod
     def build(cls, root: Path) -> "Context":
-        return cls(root=root, store=Store(root), decl=load(root))
+        return cls(root=root, store=Store(root), decl=load(root), staleness=CodeStaleness(root))
 
     def trials(self) -> list[dict[str, Any]]:
         return self.store.effective_trials()
 
-    def slices(self, subject: str | None = None):
-        contract_ids = None
-        if subject:
+    def slices(self, subject: str | None = None, contract_ids: list[str] | None = None):
+        if contract_ids is None and subject:
             if subject in self.decl.contracts:
                 contract_ids = [subject]
             else:
                 contract_ids = [c.id for c in self.decl.contracts_for_subject(subject)]
-        return compute_slices(self.decl, self.trials(), contract_ids)
+        return compute_slices(self.decl, self.trials(), contract_ids, staleness=self.staleness)
 
 
 def view_artifacts(ctx: "Context", subject: str | None = None) -> str:
@@ -269,6 +270,12 @@ def view_coverage(ctx: Context) -> str:
         flag = " [mandatory]" if test.mandatory else ""
         lines.append(f"  {test.ref}  layer={test.layer}  cost={test.cost}{flag}")
 
+    stale = [sl for sl in slices if sl.n_stale]
+    if stale:
+        lines += ["", "stale evidence (predates a change to the code it measured; not counted):",
+                  bullet(f"{sl.contract_id} [{sl.condition_label()}] {sl.n_stale} trial(s): {sl.stale_reasons[0]}"
+                         for sl in stale)]
+
     lines += ["", "contracts with no belief-eligible evidence:", bullet(uncovered)]
     if unscorable:
         lines += ["", "contracts accepting no evidence (declaration invalid):", bullet(
@@ -290,9 +297,15 @@ def view_belief(ctx: Context, subject: str | None = None, since: str | None = No
 
     lines = [slice_line(sl) for sl in slices]
     prior_ids = [sl.prior_id for sl in slices if sl.prior_id]
+    stale = [sl for sl in slices if sl.state == STATE_STALE]
     thin = [sl for sl in slices if sl.missing.get("trials_needed")]
     next_action = None
-    if thin:
+    if stale:
+        target = stale[0]
+        tests = decl.tests_for(target.contract_id)
+        if tests:
+            next_action = f"run_test {tests[0].id}  # {target.stale_reasons[0]}"
+    elif thin:
         target = thin[0]
         tests = decl.tests_for(target.contract_id)
         if tests:
@@ -306,7 +319,7 @@ def view_belief(ctx: Context, subject: str | None = None, since: str | None = No
 def view_diagnose(ctx: Context, subject: str | None = None, policy_id: str | None = None) -> str:
     decl = ctx.decl
     trials = ctx.trials()
-    slices = compute_slices(decl, trials)
+    slices = ctx.slices()
     result = diagnose(decl, slices, trials, run_id=subject if subject and subject.startswith("RUN-") else None,
                       policy_id=policy_id)
 
@@ -362,7 +375,7 @@ def view_cycle(ctx: Context, policy_id: str | None = None) -> dict[str, Any]:
     chains — this is where rule 10.1 applies."""
     decl = ctx.decl
     trials = ctx.trials()
-    slices = compute_slices(decl, trials)
+    slices = ctx.slices()
     result = diagnose(decl, slices, trials, policy_id=policy_id)
     policy = active_policy(decl, policy_id)
     verdict = evaluate_policy(decl, policy, slices) if policy else None

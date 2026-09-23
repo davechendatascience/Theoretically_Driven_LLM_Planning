@@ -6,4 +6,4 @@ of (belief-eligible evidence, declared priors, model version).
 """
 
 __version__ = "0.1.0"
-MODEL_VERSION = "bb-1"
+MODEL_VERSION = "bb-2"   # bb-2: gate contracts read from their latest run; evidence goes stale with its code

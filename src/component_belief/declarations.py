@@ -71,11 +71,15 @@ class Interface:
     consumer_assumptions: list[str] = field(default_factory=list)
 
 
+CONTRACT_KINDS = ("rate", "gate")
+
+
 @dataclass
 class Contract:
     id: str
     subject: str = ""
     claim_type: str = "capability"
+    kind: str = "rate"              # rate: a pass rate with an interval | gate: the latest run passes or fails
     scores: str = ""                # the consistency-belief definition this rule measures, if any
     metrics: list[dict[str, Any]] = field(default_factory=list)
     acceptance: dict[str, Any] = field(default_factory=dict)
@@ -196,6 +200,20 @@ class Declarations:
             cid for cid, comp in self.components.items()
             if any(path == entry or fnmatch(path, entry) for entry in comp.code)
         )
+
+    def code_paths_for_subject(self, subject_id: str) -> list[str]:
+        """The code a contract's evidence measured: a component's own claims, or for an
+        interface both sides' -- a change to either end can break the join."""
+        comp = self.components.get(subject_id)
+        if comp is not None:
+            return list(comp.code)
+        iface = self.interfaces.get(subject_id)
+        if iface is None:
+            return []
+        paths: list[str] = []
+        for cid in (iface.producer, iface.consumer):
+            paths += self.components[cid].code if cid in self.components else []
+        return paths
 
 
 def _git_show(root: Path, ref: str) -> str | None:
@@ -326,6 +344,8 @@ def validate(decl: Declarations) -> list[Issue]:
     for cid, contract in decl.contracts.items():
         if contract.subject not in decl.components and contract.subject not in decl.interfaces:
             issues.append(Issue("UNKNOWN_REF", cid, f"subject {contract.subject} is not declared"))
+        if contract.kind not in CONTRACT_KINDS:
+            issues.append(Issue("BAD_KIND", cid, f"kind {contract.kind!r} must be one of {', '.join(CONTRACT_KINDS)}"))
 
         rule = contract.rule
         if not rule:

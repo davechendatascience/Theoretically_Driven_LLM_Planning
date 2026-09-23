@@ -34,6 +34,26 @@ def _git_revision(root: Path) -> str:
         return ""
 
 
+def _git_dirty(root: Path) -> bool:
+    """Whether tracked files other than the ledgers differ from HEAD when the test runs.
+
+    A run on a dirty tree measured HEAD plus whatever was uncommitted, and the record says so:
+    once those edits are committed, the evidence goes stale through the ordinary code-path
+    check, and until then a reader can see the revision is not the whole story. The ledgers are
+    excluded because recording a run dirties them by construction.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no", "--",
+             ".", ":(exclude).belief", ":(exclude).consistency"],
+            cwd=root, capture_output=True, text=True, timeout=30,
+            encoding="utf-8", errors="replace",
+        )
+        return bool(out.stdout.strip()) if out.returncode == 0 else False
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
@@ -131,6 +151,7 @@ def run_test(
 
     base_repro = {
         "sw_revision": _git_revision(root),
+        "sw_dirty": _git_dirty(root),
         "model_revision": "",
         "hw_id": "",
         "calibration_state": "",

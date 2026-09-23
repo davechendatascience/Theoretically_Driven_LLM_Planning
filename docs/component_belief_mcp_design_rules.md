@@ -16,6 +16,7 @@
 4. Contracts must state the operating distribution or conditions under which their claims are intended to hold.
 5. Interface contracts must state what the producer guarantees and what the consumer assumes.
 6. Reject contracts that cannot be evaluated by a registered test or observable telemetry.
+7. Declare a deterministic procedure as a gate (`kind: gate`): its latest run passes or fails, and no rerun of the same result adds information. A rate contract is for a stochastic process.
 
 ## 3. Preserve Evidence Provenance
 
@@ -25,6 +26,7 @@
 4. Record enough metadata to distinguish non-comparable trials, including software revision, model/checkpoint revision, hardware identity, calibration state, environment, dataset revision, and random seed when applicable.
 5. Keep test definitions versioned. A changed test is not evidence from the same measurement process unless explicitly mapped.
 6. Mark evidence quality and validity separately from test outcome.
+7. Evidence is bound to the revision it measured. Once a code path its subject claims has changed since that revision, the evidence is stale: reported and cited, not counted, and unable to satisfy an adopt criterion until the test runs again. A run on a dirty working tree records that fact.
 
 ## 4. Separate Measurements, Beliefs, and Decisions
 
@@ -79,7 +81,7 @@
 3. Allow decisions to depend on capability, uncertainty, safety constraints, resource cost, and task impact.
 4. Do not collapse all criteria into a single score unless the utility function and weights are visible and editable.
 5. Return conditional recommendations when a component performs differently across conditions.
-6. Record each decision, its policy version, supporting evidence, assumptions, and unresolved risks.
+6. Record each decision, its policy version, supporting evidence, assumptions, unresolved risks, and the revision it was taken at.
 
 ## 10. Design for Auditing and Iteration
 

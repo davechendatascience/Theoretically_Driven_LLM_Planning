@@ -18,6 +18,7 @@ from .model import (
     STATE_CONTESTED,
     STATE_INSUFFICIENT,
     STATE_REFUTED,
+    STATE_STALE,
     STATE_SUPPORTED,
     Slice,
 )
@@ -101,10 +102,17 @@ def evaluate_policy(
                 states[sl.bucket] = sl.state
                 verdict.evidence_ids.extend(sl.evidence_ids)
 
-        if any(s == STATE_INSUFFICIENT for s in states.values()):
-            thin = [b for b, s in states.items() if s == STATE_INSUFFICIENT]
+        if any(s in (STATE_INSUFFICIENT, STATE_STALE) for s in states.values()):
+            thin = [b for b, s in states.items() if s in (STATE_INSUFFICIENT, STATE_STALE)]
             for bucket in thin:
                 match = next(s for s in contract_slices if s.bucket == bucket)
+                if match.state == STATE_STALE:
+                    # Evidence for a revision that no longer exists is not evidence for this
+                    # one. The remedy is named: the test that produced it, run again.
+                    tests = ", ".join(t.id for t in decl.tests_for(contract_id)) or "its test"
+                    why = match.stale_reasons[0] if match.stale_reasons else "its code changed"
+                    verdict.missing.append(f"{contract_id}[{bucket}]: stale -- {why}; re-run {tests}")
+                    continue
                 need = match.missing.get("trials_needed")
                 detail = f" (need {need} more trials)" if need else ""
                 verdict.missing.append(f"{contract_id}[{bucket}]{detail}")
@@ -131,7 +139,7 @@ def evaluate_policy(
         if failing_states == {STATE_REFUTED}:
             _weaken(verdict, REJECT)
             verdict.reasons.append(f"{contract_id}: refuted in every condition")
-        elif failing_states <= {STATE_CONTESTED, STATE_INSUFFICIENT}:
+        elif failing_states <= {STATE_CONTESTED, STATE_INSUFFICIENT, STATE_STALE}:
             # Not demonstrated, not disproved. More trials would resolve it,
             # which is what the status should say.
             _weaken(verdict, MORE_TESTING)
@@ -147,7 +155,7 @@ def evaluate_policy(
     if verdict.status == CONDITIONAL:
         verdict.conditions = conditional_envelope
     if verdict.status == MORE_TESTING and verdict.missing:
-        verdict.reasons.append("insufficient evidence cannot satisfy an adopt criterion")
+        verdict.reasons.append("insufficient or stale evidence cannot satisfy an adopt criterion")
 
     verdict.evidence_ids = sorted(set(verdict.evidence_ids))
     verdict.risks = _risks(decl, by_contract)
@@ -202,6 +210,9 @@ def _risks(decl: Declarations, by_contract: dict[str, list[Slice]]) -> list[str]
         for sl in contract_slices:
             if sl.state == STATE_CONTESTED:
                 risks.append(f"{contract_id}[{sl.bucket}] interval straddles the target rate")
+            if sl.n_stale and sl.state != STATE_STALE:
+                risks.append(f"{contract_id}[{sl.bucket}] {sl.n_stale} trial(s) predate a change to "
+                             f"the code and are not counted ({sl.stale_reasons[0]})")
             if sl.n_excluded:
                 reasons = ", ".join(f"{k}×{v}" for k, v in sorted(sl.exclusions.items()))
                 risks.append(f"{contract_id}[{sl.bucket}] excluded {sl.n_excluded} trials ({reasons})")

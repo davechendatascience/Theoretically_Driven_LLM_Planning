@@ -16,9 +16,8 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
-from .model import compute_slices
 from .render import basis_line, bullet, envelope
-from .runner import run_test as execute_test
+from .runner import _git_revision, run_test as execute_test
 from .store import VALIDITY, Store
 from .views import (
     view_artifacts,
@@ -140,7 +139,7 @@ def run_test(
     result = execute_test(root, ctx.store, ctx.decl, test, conditions, repro, actor=_actor())
 
     fresh = Context.build(root)
-    slices = compute_slices(fresh.decl, fresh.trials(), result["contracts"])
+    slices = fresh.slices(contract_ids=result["contracts"])
     lines = [
         f"{result['run_id']} {result['test']} exit={result['exit_code']} "
         f"trials={result['n_trials']} records={result['n_records']}",
@@ -224,8 +223,7 @@ def ingest(
     if rejected:
         lines += ["", "rejected:", bullet(rejected)]
     fresh = Context.build(root)
-    slices = compute_slices(fresh.decl, fresh.trials(),
-                            sorted({r["contract_id"] for r in accepted}) or None)
+    slices = fresh.slices(contract_ids=sorted({r["contract_id"] for r in accepted}) or None)
     return envelope("\n".join(lines), basis_line(slices))
 
 
@@ -298,7 +296,7 @@ def amend(
     }, actor=_actor())
 
     fresh = Context.build(project_root())
-    slices = compute_slices(fresh.decl, fresh.trials())
+    slices = fresh.slices()
     return envelope(
         f"amended {targets[0] if len(targets) == 1 else str(len(targets)) + ' records'}: "
         f"validity={validity or 'superseded'} — {reason}\n"
@@ -329,8 +327,9 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
         return ("no policy declared in belief.yaml at git HEAD; "
                 "a decision without visible criteria is not a decision")
 
-    slices = compute_slices(ctx.decl, ctx.trials())
+    slices = ctx.slices()
     verdict = evaluate_policy(ctx.decl, policy, slices)
+    head = _git_revision(root)
 
     needs_approval = verdict.status in (ADOPT, ROLLBACK)
     recorded = None
@@ -347,6 +346,7 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
             "policy_id": policy.id,
             "policy_weights": policy.weights,
             "approver": approver,
+            "head": head,
             "evidence_ids": verdict.evidence_ids,
             "reasons": verdict.reasons,
             "conditions": verdict.conditions,
@@ -355,9 +355,10 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
             "model_version": __import__("component_belief").MODEL_VERSION,
         })
         ctx.store.append_event("decide", {
-            "change_id": change_id, "status": verdict.status, "approver": approver,
+            "change_id": change_id, "status": verdict.status, "approver": approver, "head": head,
         }, actor=_actor())
-        body = f"{verdict.status.upper()} recorded as {recorded['id']} under policy {policy.id}"
+        body = (f"{verdict.status.upper()} recorded as {recorded['id']} under policy {policy.id} "
+                f"at HEAD {head or '?'}")
 
     lines = [body]
     if verdict.reasons:

@@ -12,7 +12,7 @@ from typing import Any, Iterable
 
 from . import MODEL_VERSION
 from .ids import set_hash
-from .model import STATE_INSUFFICIENT, Slice
+from .model import KIND_GATE, STATE_INSUFFICIENT, STATE_STALE, Slice
 
 
 def basis_line(
@@ -40,6 +40,15 @@ def basis_line(
 
 def slice_line(sl: Slice) -> str:
     label = sl.condition_label()
+    tail = ""
+    if sl.n_stale and sl.state != STATE_STALE:
+        tail += f" (+{sl.n_stale} stale)"
+    if sl.n_dirty:
+        tail += f" (dirty tree ×{sl.n_dirty})"
+    if sl.state == STATE_STALE:
+        why = sl.stale_reasons[0] if sl.stale_reasons else "its code changed since it was measured"
+        return (f"{sl.contract_id} [{label}] stale n={sl.n_stale} -- {why}; "
+                f"last estimate {sl.point:.2f}")
     if sl.state == STATE_INSUFFICIENT:
         need = sl.missing.get("trials_needed")
         detail = f"n={sl.n_valid}"
@@ -47,10 +56,13 @@ def slice_line(sl: Slice) -> str:
             detail += f" (need {need} more)"
         elif "ci_width" in sl.missing:
             detail += f" (interval {sl.missing['ci_width']} > {sl.missing['max_ci_width']})"
-        return f"{sl.contract_id} [{label}] insufficient {detail}"
+        return f"{sl.contract_id} [{label}] insufficient {detail}{tail}"
+    if sl.kind == KIND_GATE:
+        return (f"{sl.contract_id} [{label}] {sl.state} gate {sl.passes}/{sl.n_valid} passed "
+                f"in {sl.latest_run or '?'}{tail}")
     return (
         f"{sl.contract_id} [{label}] {sl.state} "
-        f"{sl.point:.2f} [{sl.lo:.2f},{sl.hi:.2f}] n={sl.n_valid}"
+        f"{sl.point:.2f} [{sl.lo:.2f},{sl.hi:.2f}] n={sl.n_valid}{tail}"
     )
 
 
@@ -79,6 +91,11 @@ def slice_dict(sl: Slice) -> dict[str, Any]:
         "evidence_ids": sl.evidence_ids,
         "set": sl.set_hash,
         "prior_id": sl.prior_id,
+        "kind": sl.kind,
+        "latest_run": sl.latest_run,
+        "n_stale": sl.n_stale,
+        "stale_reasons": sl.stale_reasons,
+        "n_dirty": sl.n_dirty,
         "model_version": MODEL_VERSION,
     }
 

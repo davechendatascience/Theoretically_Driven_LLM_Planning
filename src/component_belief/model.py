@@ -23,6 +23,10 @@ STATE_INSUFFICIENT = "insufficient_evidence"
 STATE_SUPPORTED = "supported"
 STATE_REFUTED = "refuted"
 STATE_CONTESTED = "contested"
+STATE_STALE = "stale"
+
+KIND_RATE = "rate"
+KIND_GATE = "gate"
 
 UNBUCKETED = "unbucketed"
 
@@ -49,6 +53,11 @@ class Slice:
     prior_id: str | None
     missing: dict[str, Any] = field(default_factory=dict)
     exclusions: dict[str, int] = field(default_factory=dict)
+    kind: str = KIND_RATE
+    n_stale: int = 0                 # valid, scored trials that predate a change to the subject's code
+    stale_reasons: list[str] = field(default_factory=list)
+    latest_run: str = ""             # gate contracts: the run the verdict is read from
+    n_dirty: int = 0                 # counted trials measured on a dirty working tree
 
     @property
     def ci_width(self) -> float:
@@ -143,7 +152,14 @@ def compute_slices(
     decl: Declarations,
     trials: Iterable[dict[str, Any]],
     contract_ids: Iterable[str] | None = None,
+    staleness: Any = None,
 ) -> list[Slice]:
+    """Every belief slice, from the evidence alone.
+
+    `staleness` (a CodeStaleness, or anything with `stale_reason(code_paths, trial)`) is how a
+    trial that measured an earlier revision of the subject's code is set aside: still on record,
+    cited, and not counted as evidence about the current revision.
+    """
     wanted = set(contract_ids) if contract_ids is not None else None
     grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
 
@@ -165,7 +181,9 @@ def compute_slices(
             "compat_fields": compat_fields,
             "passes": 0, "fails": 0,
             "n_invalid": 0, "n_excluded": 0,
-            "ids": [], "exclusions": {},
+            "ids": [], "exclusions": {}, "runs": {},
+            "stale": 0, "stale_passes": 0, "stale_fails": 0, "stale_ids": [], "stale_reasons": {},
+            "n_dirty": 0,
         })
 
         if trial.get("validity") != "valid":
@@ -178,11 +196,31 @@ def compute_slices(
             bundle["exclusions"][reason] = bundle["exclusions"].get(reason, 0) + 1
             continue
 
+        stale = (staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
+                 if staleness is not None else None)
+        if stale:
+            bundle["stale"] += 1
+            bundle["stale_reasons"][stale] = bundle["stale_reasons"].get(stale, 0) + 1
+            bundle["stale_ids"].append(trial["id"])
+            if verdict:
+                bundle["stale_passes"] += 1
+            else:
+                bundle["stale_fails"] += 1
+            continue
+
+        if (trial.get("repro") or {}).get("sw_dirty"):
+            bundle["n_dirty"] += 1
         bundle["ids"].append(trial["id"])
+        run = bundle["runs"].setdefault(str(trial.get("run_id") or ""),
+                                        {"ids": [], "passes": 0, "fails": 0, "at": ""})
+        run["ids"].append(trial["id"])
+        run["at"] = max(run["at"], str(trial.get("timestamp") or ""))
         if verdict:
             bundle["passes"] += 1
+            run["passes"] += 1
         else:
             bundle["fails"] += 1
+            run["fails"] += 1
 
     slices: list[Slice] = []
     for (contract_id, bucket, compat_group), bundle in grouped.items():
@@ -191,13 +229,35 @@ def compute_slices(
         a0 = prior.alpha if prior else 1.0
         b0 = prior.beta if prior else 1.0
 
-        passes, fails = bundle["passes"], bundle["fails"]
+        latest_run = ""
+        if contract.kind == KIND_GATE and bundle["runs"]:
+            # A gate is read from its latest run. Earlier runs measured earlier states of the same
+            # deterministic procedure, and pooling them would let an old pass outvote a new fail.
+            latest_run, run = max(bundle["runs"].items(), key=lambda kv: (kv[1]["at"], kv[0]))
+            passes, fails, ids = run["passes"], run["fails"], run["ids"]
+        else:
+            passes, fails, ids = bundle["passes"], bundle["fails"], bundle["ids"]
         n_valid = passes + fails
         alpha, beta = a0 + passes, b0 + fails
-        point = beta_mean(alpha, beta)
-        lo, hi = credible_interval(alpha, beta)
+        stale_reasons = sorted(bundle["stale_reasons"], key=lambda r: -bundle["stale_reasons"][r])
 
-        state, missing = _classify(contract, n_valid, lo, hi)
+        if n_valid == 0 and bundle["stale"]:
+            # Everything this slice knows predates a change to the code it measured. The last
+            # estimate is shown, labelled as such; the interval is the whole unit line, because
+            # that is what is known about the current revision.
+            point = beta_mean(a0 + bundle["stale_passes"], b0 + bundle["stale_fails"])
+            lo, hi = 0.0, 1.0
+            state, missing = STATE_STALE, {"stale": bundle["stale"], "reason": stale_reasons[0]}
+            ids = bundle["stale_ids"]
+        elif contract.kind == KIND_GATE:
+            point = passes / n_valid if n_valid else 0.0
+            lo, hi = point, point
+            state, missing = _classify_gate(n_valid, fails)
+        else:
+            point = beta_mean(alpha, beta)
+            lo, hi = credible_interval(alpha, beta)
+            state, missing = _classify(contract, n_valid, lo, hi)
+
         slices.append(Slice(
             contract_id=contract_id,
             bucket=bucket,
@@ -211,10 +271,15 @@ def compute_slices(
             passes=passes, fails=fails,
             alpha=alpha, beta=beta,
             target_rate=contract.target_rate,
-            evidence_ids=sorted(bundle["ids"]),
+            evidence_ids=sorted(ids),
             prior_id=prior.id if prior else None,
             missing=missing,
             exclusions=bundle["exclusions"],
+            kind=contract.kind,
+            n_stale=bundle["stale"],
+            stale_reasons=stale_reasons,
+            latest_run=latest_run,
+            n_dirty=bundle["n_dirty"],
         ))
 
     slices.sort(key=lambda s: (s.contract_id, s.bucket, s.compat_group))
@@ -241,6 +306,20 @@ def _classify(contract: Contract, n_valid: int, lo: float, hi: float) -> tuple[s
     if hi < contract.target_rate:
         return STATE_REFUTED, {}
     return STATE_CONTESTED, {}
+
+
+def _classify_gate(n_valid: int, fails: int) -> tuple[str, dict[str, Any]]:
+    """A gate is a procedure, not a rate: its latest run passed or it did not.
+
+    A deterministic suite declared as a rate contract stays `contested` until enough reruns of
+    the same result pile up -- reruns that carry no information. A gate needs one run: every case
+    passing is supported, any case failing is refuted, and there is no interval to straddle.
+    """
+    if n_valid == 0:
+        return STATE_INSUFFICIENT, {"trials_needed": 1}
+    if fails:
+        return STATE_REFUTED, {}
+    return STATE_SUPPORTED, {}
 
 
 def unobserved_contracts(decl: Declarations, slices: list[Slice]) -> list[str]:
