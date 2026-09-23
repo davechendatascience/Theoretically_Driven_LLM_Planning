@@ -210,10 +210,16 @@ def _citations(root: Path, store: Store, decl: Declarations) -> tuple[dict[str, 
     for trial in store.effective_trials():
         if trial.get("validity") != "valid" or trial.get("provenance") not in ("measured", "imported"):
             continue
-        for value in (trial.get("repro") or {}).values():
+        claims = list((trial.get("repro") or {}).values())
+        # ingest requires an artifact_uri, and a record's source often names the file it came
+        # from: both are claims on a path, and ignoring them made the evidence directory that
+        # every imported trial points at read as though nothing wanted it.
+        claims += [trial.get("artifact_uri"), trial.get("source")]
+        for value in claims:
             if not isinstance(value, str):
                 continue
-            head = value.split(":")[0].strip()
+            head = value.split(":")[0].strip().rstrip("/")
+            head = head.rsplit("/", 1)[-1] if "/" in head else head
             if _FILENAME.fullmatch(head):
                 names[head] = names.get(head, 0) + 1
 

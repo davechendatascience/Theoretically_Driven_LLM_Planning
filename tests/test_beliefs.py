@@ -371,3 +371,25 @@ def test_amend_reclassifies_many_in_one_pass(repo, monkeypatch):
     assert "amended 5 records" in out
     kept = {t["id"]: t for t in Store(repo).effective_trials()}
     assert all(kept[i]["validity"] == "quarantined" for i in ids)
+
+
+def test_an_ingested_artifact_uri_is_a_claim_on_the_file(repo, monkeypatch):
+    """ingest requires an artifact_uri; a directory every imported trial points at is not
+    unwanted just because no repro field repeats its name."""
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git, trial
+
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "round1.trials.json").write_text("[]", encoding="utf-8")
+    (repo / "belief.yaml").write_text(
+        (repo / "belief.yaml").read_text(encoding="utf-8") + "\nartifacts: [out]\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "an ingested artifact")
+
+    store = Store(repo)
+    store.append_trials([{**trial(), "provenance": "imported",
+                          "artifact_uri": str(repo / "out" / "round1.trials.json")}])
+    records = {s.path: s for s in collect(repo, load(repo), store)}
+    assert records["out/round1.trials.json"].artifact_verdict().startswith("kept")
