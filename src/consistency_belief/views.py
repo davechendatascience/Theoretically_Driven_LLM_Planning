@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .declarations import COMPONENT_ID, Declarations, load as load_declarations
+from .declarations import COMPONENT_ID, Declarations, contract_beliefs, load as load_declarations
 from .graph import ProofDAG, ProofNode
 from .model import PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice, compute_consistency
 from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
@@ -228,6 +229,8 @@ def view_coverage(ctx: Context) -> str:
         )
 
     slices = {s.target_id: s for s in ctx.slices}
+    beliefs = contract_beliefs(ctx.root)
+    cited = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9-]*\b")
     designs: dict[str, list[str]] = {}
     removed: list[str] = []          # subject was a component id; belief.yaml no longer declares it
     unattached: list[str] = []       # subject is prose: the design was never bound to a component
@@ -242,7 +245,16 @@ def view_coverage(ctx: Context) -> str:
             unattached.append(nid)
 
     def line(nid: str) -> str:
-        return f"      {nid} {slice_badge(slices.get(nid))}"
+        """The proof state, and the measurement standing behind it -- a claim is worth nothing
+        while nothing measures it, so the two are printed together."""
+        node = ctx.dag.nodes[nid]
+        head = f"      {nid} {slice_badge(slices.get(nid))}"
+        if node.kind != "branch":
+            return head
+        refs = sorted(set(cited.findall(node.derivation_rule or "")))
+        if not refs:
+            return head + "  · evidence: none cited"
+        return head + "  · " + "; ".join(f"{r} [{beliefs.get(r, 'not declared')}]" for r in refs)
 
     def declared_of(cid: str) -> list[str]:
         return [n for n in designs.get(cid, []) if not ctx.dag.nodes[n].staged]
@@ -303,7 +315,7 @@ def view_coverage(ctx: Context) -> str:
 
     issues = [i for i in decl.issues
               if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE",
-                            "REMOVED_COMPONENT", "UNLISTED_SUBJECT")]
+                            "REMOVED_COMPONENT", "UNLISTED_SUBJECT", "MISSING_EVIDENCE")]
     if issues:
         lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
 

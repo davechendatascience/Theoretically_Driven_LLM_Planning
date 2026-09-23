@@ -284,7 +284,46 @@ def validate_links(decl: Declarations) -> list[Issue]:
                 "UNKNOWN_EVIDENCE", bid,
                 f"derivation_rule cites {ref!r}, which belief.yaml does not declare",
             ))
+        if not any(ref.startswith("CTR-") for ref in cited):
+            issues.append(Issue(
+                "MISSING_EVIDENCE", bid,
+                "derivation_rule names no CTR- contract; a design claim states what must hold and "
+                "cites where the measurement lives, and is worth nothing while nothing measures it",
+            ))
     return issues
+
+
+def contract_beliefs(root: Path) -> dict[str, str]:
+    """Each contract's belief state from component-belief, as one short phrase per contract.
+
+    Read on demand, because it means loading the evidence ledger. A design claim that cites a
+    contract with no evidence is argued and unmeasured, and the coverage view says so.
+    """
+    try:
+        from component_belief.declarations import load as load_components
+        from component_belief.model import compute_slices
+        from component_belief.store import Store
+    except ImportError:
+        return {}
+    try:
+        decl = load_components(root)
+        if not decl.contracts:
+            return {}
+        slices = compute_slices(decl, Store(root).effective_trials())
+    except Exception:                                   # a ledger this server does not own
+        return {}
+
+    worst = {"unsupported": 0, "insufficient_evidence": 1, "insufficient": 1, "supported": 2}
+    out: dict[str, str] = {}
+    for sl in slices:
+        rank = worst.get(sl.state, 1)
+        seen = out.get(sl.contract_id)
+        if seen is None or rank <= seen[0]:
+            out[sl.contract_id] = (rank, f"{sl.state} n={sl.n_valid}")
+    summary = {cid: text for cid, (_, text) in out.items()}
+    for cid in decl.contracts:
+        summary.setdefault(cid, "no evidence")
+    return summary
 
 
 def _parse(text: str) -> Declarations:

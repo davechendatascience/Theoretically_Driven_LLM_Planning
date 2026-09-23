@@ -233,3 +233,18 @@ def test_a_subject_missing_from_the_list_is_reported(linked: Path):
 
     unlisted = [i for i in load(linked).issues if i.code == "UNLISTED_SUBJECT"]
     assert [i.subject for i in unlisted] == ["BRN-planner-regression"]
+
+
+# --- a claim cites the measurement behind it ---------------------------------------------------
+
+def test_a_branch_naming_no_contract_is_reported(linked: Path):
+    decl = load(linked)
+    missing = {i.subject for i in decl.issues if i.code == "MISSING_EVIDENCE"}
+    assert missing == {"BRN-planner-regression", "BRN-left-behind"}, \
+        "a branch citing a contract is not reported, even when that contract is unknown"
+
+
+def test_coverage_prints_the_contract_and_its_belief_state(linked: Path):
+    text = view_coverage(Context.build(linked))
+    assert "CTR-motion-clear [no evidence]" in text, "a cited contract with no trials says so"
+    assert "evidence: none cited" in text
