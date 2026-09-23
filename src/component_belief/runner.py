@@ -17,6 +17,7 @@ from typing import Any
 
 from . import readlog
 from .declarations import Declarations, Test
+from .staleness import Snapshot, write_stamp
 from .store import Store, utc_now
 
 RESULT_FILENAME = "result.json"
@@ -110,6 +111,9 @@ def run_test(
     env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log",
                                        store.dir / "cache" / "readhook")
     command = readlog.weave(_substitute_out(test.run, out_path), hook_dir)
+    # Before the command starts: the stamp is of what the run measured, not what it left behind.
+    claimed = sorted({entry for comp in decl.components.values() for entry in comp.code})
+    snapshot = Snapshot.take(root, claimed, test.run, test.reads)
 
     try:
         completed = subprocess.run(
@@ -130,7 +134,9 @@ def run_test(
     (artifact_dir / "command.txt").write_text(
         f"{command}\nexit={exit_code}\ntest={test.ref}\nat={utc_now()}\n", encoding="utf-8"
     )
-    readlog.write(artifact_dir, readlog.harvest(root, artifact_dir / "reads.log"))
+    opened = readlog.harvest(root, artifact_dir / "reads.log")
+    readlog.write(artifact_dir, opened)
+    stamp = write_stamp(artifact_dir, snapshot.stamp(opened)) if snapshot else ""
 
     raw_trials = _parse_result(out_path)
     synthesized = raw_trials is None
@@ -200,6 +206,7 @@ def run_test(
                 "validity": "valid",
                 "artifact_uri": artifact_uri,
                 "artifact_hash": artifact_hash,
+                "stamp": stamp,
             })
 
     ids = store.append_trials(records)
@@ -224,6 +231,7 @@ def run_test(
         "outcome_counts": outcome_counts,
         "artifact_uri": artifact_uri,
         "artifact_hash": artifact_hash,
+        "stamp": stamp,
         "synthesized_from_exit_code": synthesized,
         "stdout_tail": (stdout or "")[-800:],
     }

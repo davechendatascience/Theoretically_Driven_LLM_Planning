@@ -43,7 +43,7 @@ configuration control. Analysis stages live in `consistency-belief`, Test stages
 | Build | `code:` claims per component; `status(view="artifacts")` | Inspection |
 | Component, integration, system test | contracts and tests by `layer`; `run_test`; `.belief/` | Test |
 | Traceability | a branch's `subject` names a component and its derivation rule names the contract; `status(view="coverage")` on both sides | mechanical |
-| Configuration control | declarations from git HEAD; `sw_revision` on every trial; evidence goes stale once claimed code changes; every decision names its revision | mechanical |
+| Configuration control | declarations from git HEAD; a content stamp on every run; evidence goes stale once a file it rests on changes; every decision names its revision | mechanical |
 | Change control | `audit_change` (recorded), STALE on restatement, `amend`, `decide(approver=)` | mechanical, plus a human approver |
 | Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
 | Release gate | `POL-consistency-gate` requires each branch proven **and** its cited contract supported | both ledgers |
@@ -124,7 +124,7 @@ Evidence-grounded belief state for a system modeled as components and interfaces
 * **Every File Stamped**: `status(view="artifacts")` joins git (added, last changed), the run ledger (which runs invoked it, when), the declarations (what claims or names it) and the filesystem (generated output under the declared `artifacts:` roots). Each stamp carries its source, because "RUN-0140 invoked it at 04:44" is a fact and "its mtime is three weeks old" is a hint. A file nothing claims, nothing has run, and no belief-eligible evidence rests on is a prune candidate — pruning stops being a memory exercise.
 * **Runs Record What They Read**: every `run_test` installs an audit hook through `sitecustomize`, so the run itself reports each file it opened under the project root. A generated artifact then carries a verdict rather than a date: *kept* (live evidence or a declared test reads it), *prunable* (every run that opened it has superseded evidence), or *undecidable* (nothing instrumented ever opened it). Files a non-Python child opens are declared with `reads:` on the test; the hook narrows that gap and the view says which case it is reporting.
 * **Gate Contracts**: a deterministic procedure -- a pytest suite -- is declared `kind: gate`. Its belief is read from its latest run: every case passing is `supported`, any case failing is `refuted`, and there is no interval to straddle and no `n_min` that reruns of the same result must climb. A rate contract is for a stochastic process.
-* **Evidence Goes Stale With Its Code**: every measured trial carries the revision it ran at (`sw_revision`, plus `sw_dirty` when the tree had uncommitted edits), and every component claims its `code:`. Once a claimed path has changed since a trial's revision, that trial is `stale`: still on record and cited, not counted. A slice with nothing current reads `stale` with the change named, cannot satisfy an adopt criterion, and `diagnose` says which test to run again. This is the empirical counterpart of a `STALE` proof node.
+* **Evidence Goes Stale With Its Code**: every run writes a stamp -- the git blob id of each file its evidence could rest on (the components' claimed `code:`, the files the test names on its `run:` line or in `reads:`, and what the run opened), taken from the working tree as it actually stood -- and every trial carries the stamp's digest. A trial is `stale` once one of those files differs at HEAD: still on record and cited, not counted. Content rather than revision, so evidence from uncommitted edits that were later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and editing the test itself stales what it produced. Trials without a stamp (older runs, imports) fall back to `git diff <sw_revision> HEAD`. A slice with nothing current reads `stale` with the change named, cannot satisfy an adopt criterion, and `diagnose` says which test to run again. This is the empirical counterpart of a `STALE` proof node.
 
 ### The Loop
 ```
@@ -276,7 +276,7 @@ src/
   component_belief/                                    # Empirical MCP server
     declarations.py                                    # Git-HEAD loader, validation, code claims
     model.py                                           # Beta-Binomial belief slices; gate contracts
-    staleness.py                                       # Evidence goes stale when claimed code changes
+    staleness.py                                       # Content stamps; evidence goes stale when what it measured changes
     diagnose.py                                        # Bottleneck ranking & discriminating tests
     decide.py                                          # Policy evaluation & human approval gate
     planning.py                                        # Round test selection

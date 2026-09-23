@@ -191,6 +191,120 @@ class TestStaleness:
         assert [item["test_id"] for item in after["selected"]] == ["TST-grasp-ik"]
 
 
+# --- content stamps --------------------------------------------------------------------------
+
+CHECK_PY = (
+    "import json, sys\n"
+    "open('grasp.py').read()\n"
+    "json.dump([{'metrics': {'ik_success': True}} for _ in range(5)], open(sys.argv[1], 'w'))\n"
+)
+
+
+class TestContentStamps:
+    """A run stamps the content it measured; staleness compares that content with HEAD."""
+
+    @pytest.fixture
+    def run_repo(self, code_repo: Path) -> Path:
+        (code_repo / "check.py").write_text(CHECK_PY, encoding="utf-8")
+        (code_repo / "belief.yaml").write_text(
+            CLAIMED_YAML.replace('run: "echo ok"', 'run: "python check.py $OUT"'), encoding="utf-8")
+        git(code_repo, "add", "-A")
+        git(code_repo, "commit", "-q", "-m", "a test that reads the claimed code")
+        return code_repo
+
+    @staticmethod
+    def run(repo: Path) -> dict:
+        from component_belief.runner import run_test as execute
+        from component_belief.store import Store
+
+        decl = load(repo)
+        return execute(repo, Store(repo), decl, decl.tests["TST-grasp-ik"])
+
+    @staticmethod
+    def slice_now(repo: Path):
+        from component_belief.store import Store
+
+        return compute_slices(load(repo), Store(repo).effective_trials(),
+                              staleness=CodeStaleness(repo))[0]
+
+    def test_a_run_writes_the_stamp_its_trials_bind_to(self, run_repo):
+        import json
+
+        from component_belief.store import Store
+
+        result = self.run(run_repo)
+        stamp = json.loads((Store(run_repo).artifacts_dir / result["run_id"] / "stamp.json")
+                           .read_text(encoding="utf-8"))
+        assert {"grasp.py", "check.py"} <= set(stamp["files"])
+        assert stamp["named"] == ["check.py"], "the file on the run line is part of the test"
+        assert "grasp.py" in stamp["opened"]
+        assert all(t["stamp"] == result["stamp"] for t in Store(run_repo).effective_trials())
+        current = self.slice_now(run_repo)
+        assert current.state != STATE_STALE and current.n_stale == 0
+
+    def test_evidence_from_discarded_uncommitted_edits_is_stale(self, run_repo):
+        """The run measured an edit HEAD never received. Its revision is still HEAD, so only the
+        content can tell."""
+        (run_repo / "grasp.py").write_text("# a fix, never committed\n", encoding="utf-8")
+        self.run(run_repo)
+        git(run_repo, "checkout", "--", "grasp.py")
+        sl = self.slice_now(run_repo)
+        assert sl.state == STATE_STALE
+        assert "grasp.py was measured with uncommitted edits" in sl.stale_reasons[0]
+
+    def test_evidence_from_uncommitted_edits_is_current_once_they_are_committed(self, run_repo):
+        (run_repo / "grasp.py").write_text("# a fix\n", encoding="utf-8")
+        self.run(run_repo)
+        git(run_repo, "commit", "-qam", "commit the fix that was measured")
+        sl = self.slice_now(run_repo)
+        assert sl.state != STATE_STALE and sl.n_stale == 0
+
+    def test_rewritten_history_with_the_same_bytes_stays_current(self, run_repo):
+        """An amend, rebase or squash-merge renames the commit and keeps the content."""
+        self.run(run_repo)
+        git(run_repo, "commit", "-q", "--amend", "-m", "reworded, tree unchanged")
+        git(run_repo, "reflog", "expire", "--expire=now", "--all")
+        git(run_repo, "gc", "-q", "--prune=now")
+        sl = self.slice_now(run_repo)
+        assert sl.state != STATE_STALE and sl.n_stale == 0
+
+    def test_editing_the_test_itself_stales_its_evidence(self, run_repo):
+        """A gutted test produced its passes as a different test."""
+        self.run(run_repo)
+        (run_repo / "check.py").write_text(CHECK_PY + "# now asserts nothing\n", encoding="utf-8")
+        git(run_repo, "commit", "-qam", "weaken the test")
+        sl = self.slice_now(run_repo)
+        assert sl.state == STATE_STALE and "check.py changed since RUN-0001" in sl.stale_reasons[0]
+
+    def test_a_file_added_under_a_claimed_glob_stales_it(self, run_repo):
+        self.run(run_repo)
+        (run_repo / "grasp").mkdir()
+        (run_repo / "grasp" / "ik.py").write_text("# new solver\n", encoding="utf-8")
+        git(run_repo, "add", "-A")
+        git(run_repo, "commit", "-q", "-m", "add a module the component claims")
+        sl = self.slice_now(run_repo)
+        assert sl.state == STATE_STALE and "grasp/ik.py" in sl.stale_reasons[0]
+
+    def test_unrelated_and_uncommitted_changes_leave_it_current(self, run_repo):
+        self.run(run_repo)
+        (run_repo / "other.py").write_text("# unrelated\n", encoding="utf-8")
+        git(run_repo, "add", "-A")
+        git(run_repo, "commit", "-q", "-m", "unrelated")
+        (run_repo / "grasp.py").write_text("# edited after the run, not committed\n", encoding="utf-8")
+        sl = self.slice_now(run_repo)
+        assert sl.state != STATE_STALE and sl.n_stale == 0
+
+    def test_an_edited_stamp_is_not_trusted(self, run_repo):
+        from component_belief.store import Store
+
+        result = self.run(run_repo)
+        path = Store(run_repo).artifacts_dir / result["run_id"] / "stamp.json"
+        path.write_text(path.read_text(encoding="utf-8").replace('"version": 1', '"version": 2'),
+                        encoding="utf-8")
+        sl = self.slice_now(run_repo)
+        assert sl.state == STATE_STALE and "no longer matches the digest" in sl.stale_reasons[0]
+
+
 # --- through the server ----------------------------------------------------------------------
 
 class TestServerSurface:
