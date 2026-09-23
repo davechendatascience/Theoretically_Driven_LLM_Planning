@@ -157,16 +157,35 @@ class Store:
         return list(self._read(self.events_path))
 
     def staged_proposals(self) -> list[dict[str, Any]]:
-        """Every branch proposed through propose_branch, latest proposal per id, in the order
-        the ids were first proposed. They persist here until a declaration at git HEAD with
-        the same id takes their place."""
+        """Every branch proposed through propose_branch and not since withdrawn, latest proposal
+        per id, in the order the ids were first proposed. They persist here until a declaration
+        at git HEAD with the same id takes their place, or until withdraw retires one."""
         proposals: dict[str, dict[str, Any]] = {}
         for event in self.events():
+            payload = event.get("payload", {})
+            node_id = payload.get("id")
+            if not node_id:
+                continue
             if event.get("tool") == "propose_branch":
-                payload = event.get("payload", {})
-                if payload.get("id"):
-                    proposals[payload["id"]] = payload
+                proposals[node_id] = payload          # re-proposing revives a withdrawn id
+            elif event.get("tool") == "withdraw":
+                proposals.pop(node_id, None)
         return list(proposals.values())
+
+    def withdrawn(self) -> dict[str, str]:
+        """Staged proposals retired by withdraw, with the reason -- the event stays in the ledger,
+        and so do the trials recorded against it."""
+        out: dict[str, str] = {}
+        for event in self.events():
+            payload = event.get("payload", {})
+            node_id = payload.get("id")
+            if not node_id:
+                continue
+            if event.get("tool") == "withdraw":
+                out[node_id] = payload.get("reason", "")
+            elif event.get("tool") == "propose_branch":
+                out.pop(node_id, None)
+        return out
 
     # ---------- decisions ----------
 

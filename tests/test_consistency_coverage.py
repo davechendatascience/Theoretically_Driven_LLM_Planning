@@ -165,3 +165,39 @@ def test_code_paths_are_checked_against_the_repository(linked: Path):
     missing = [i for i in decl.issues if i.code == "MISSING_CODE_PATH"]
     assert [i.subject for i in missing] == ["CMP-gripper"]
     assert decl.components_for_path("motion.py") == ["CMP-motion"]
+
+
+# --- withdrawing a staged proposal ------------------------------------------------------------
+
+def test_withdraw_retires_a_staged_proposal_and_keeps_the_record(linked: Path, monkeypatch):
+    from consistency_belief import server
+
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(linked))
+    server.propose_branch(id="BRN-doomed", subject="CMP-motion", premises=["AXM-safety"],
+                          claim="A design nobody will build.", rationale="staged for the test")
+    assert "BRN-doomed" in Context.build(linked).dag.nodes
+
+    out = server.withdraw(id="BRN-doomed", reason="the approach was abandoned")
+    assert "withdrawn" in out
+    ctx = Context.build(linked)
+    assert "BRN-doomed" not in ctx.dag.nodes
+    assert ctx.store.withdrawn() == {"BRN-doomed": "the approach was abandoned"}
+    assert any(e.get("tool") == "propose_branch" and e["payload"]["id"] == "BRN-doomed"
+               for e in ctx.store.events()), "the ledger keeps what was proposed"
+
+    server.propose_branch(id="BRN-doomed", subject="CMP-motion", premises=["AXM-safety"],
+                          claim="A design nobody will build.", rationale="revived")
+    assert "BRN-doomed" in Context.build(linked).dag.nodes
+
+
+def test_withdraw_refuses_a_declaration_and_an_empty_reason(linked: Path, monkeypatch):
+    from consistency_belief import server
+
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(linked))
+    refused = server.withdraw(id="BRN-motion-gate", reason="not wanted")
+    assert "rejected" in refused and "consistency.yaml" in refused
+
+    server.propose_branch(id="BRN-staged", subject="CMP-motion", premises=["AXM-safety"],
+                          claim="Staged.", rationale="r")
+    assert "reason is empty" in server.withdraw(id="BRN-staged", reason="  ")
+    assert "unknown proposal" in server.withdraw(id="BRN-nothing", reason="r")

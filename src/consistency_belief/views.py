@@ -94,6 +94,10 @@ def view_tree(ctx: Context) -> str:
         + (f", {n_staged} staged -- proposed, not yet declared at git HEAD" if n_staged else "") + ")",
         f"Source: {ctx.decl.source}{' [PENDING UNCOMMITTED EDITS]' if ctx.decl.pending else ''}",
     ]
+    withdrawn = ctx.store.withdrawn()
+    if withdrawn:
+        header.append(f"Withdrawn: {len(withdrawn)} staged proposal(s) retired -- "
+                      + ", ".join(sorted(withdrawn)))
     if ctx.staged_issues:
         header += ["Staged proposals that do not resolve:", bullet(ctx.staged_issues)]
     header.append("")

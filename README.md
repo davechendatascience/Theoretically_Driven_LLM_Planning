@@ -59,11 +59,12 @@ Axiom-to-branch design consistency for architectures, specifications, and planni
 status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 ```
 
-### The Seven Tools
+### The Eight Tools
 * `status`: 8 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `coverage`, `audit`, `cycle`).
 * `propose_branch`: Stages new contracts or lemmas (declared or staged premises); validates acyclicity and premise validity; re-proposing a staged id restates it.
 * `verify_step`: Records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified.
 * `amend`: Reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending an amendment; the original record and the reason stay in the ledger.
+* `withdraw`: Retires a staged proposal -- a design that will not be built, or whose component is gone. Refused for a declaration (delete it from `consistency.yaml` and commit) and for anything a declared node cites. The proposal, its trials and the withdrawal stay in the ledger; re-proposing the id revives it.
 * `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
 * `note`: Qualitative annotation (inert channel, zero proof weight).
 * `decide`: Evaluates consistency policy; enforces human approval for `ADOPT`.
@@ -229,7 +230,7 @@ src/
     probes.py                                          # LLM verification probe generators & parsers
     decide.py                                          # Consistency policy evaluation & human approval gate
     render.py / views.py                               # ASCII proof tree, status and coverage views
-    server.py                                          # FastMCP server (7 tools)
+    server.py                                          # FastMCP server (8 tools)
     store.py                                           # Append-only JSONL ledger in .consistency/
   component_belief/                                    # Empirical MCP server
     declarations.py                                    # Git-HEAD loader, validation, code claims
@@ -242,7 +243,7 @@ src/
     server.py                                          # FastMCP server (6 tools)
     store.py                                           # Append-only JSONL ledger in .belief/
 tools/pytest_trials.py                                 # pytest -> trials JSON adapter
-tests/                                                 # 127 test cases asserting all epistemic invariants
+tests/                                                 # 129 test cases asserting all epistemic invariants
 ```
 
 ---
@@ -251,7 +252,7 @@ tests/                                                 # 127 test cases assertin
 
 ```bash
 PYTHONPATH=src python -m pytest tests -q
-# 127 passed
+# 129 passed
 ```
 
 The test suite asserts the core epistemic invariants across both systems:

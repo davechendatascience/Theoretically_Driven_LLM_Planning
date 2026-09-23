@@ -45,7 +45,8 @@ entailment gap. amend() reclassifies a mis-recorded trial without editing it.
 
 Proposals are staged, not lost: propose_branch persists a branch in the ledger, where it can be
 verified and cited as a premise by later proposals at once, but it supports decide() only once
-the same id is declared in consistency.yaml at git HEAD. Trials are bound to the statement they
+the same id is declared in consistency.yaml at git HEAD. withdraw() retires one that will not be
+built; a declaration is pruned instead by deleting it from consistency.yaml and committing. Trials are bound to the statement they
 verified: restating a node sets its earlier trials aside, and restating any premise upstream
 makes it STALE until it is re-verified.
 
@@ -232,6 +233,48 @@ def propose_branch(
         + measurement_hint(claim, "claim") + subject_note,
         basis_line(ctx.slices)
     )
+
+
+@mcp.tool()
+def withdraw(id: str, reason: str) -> str:
+    """Retire a staged proposal: a design that is not going to be built, or whose component is gone.
+
+    Pruning a declaration means deleting it from consistency.yaml and committing that. A staged
+    proposal has no such file, so this is how one is retired. The ledger is append-only: the
+    proposal, its trials and this withdrawal all stay recorded; the node simply stops being carried
+    into the graph, and re-proposing the same id revives it.
+
+    Refused for an id declared at git HEAD (prune it from consistency.yaml instead) and for one a
+    declared node cites as a premise. Staged nodes that cite it are named in the reply -- they lose
+    a premise and drop out of the graph until they are restated.
+    """
+    root = project_root()
+    ctx = Context.build(root)
+    node = ctx.dag.get(id)
+    if node is None and id not in {p["id"] for p in ctx.store.staged_proposals()}:
+        return f"unknown proposal {id!r}: nothing staged under that id"
+    if node is not None and not node.staged:
+        return (f"rejected withdrawal of {id!r}:\n" + bullet([
+            f"{id!r} is declared in consistency.yaml at git HEAD -- delete it there and commit; "
+            "a declaration is pruned by the human who committed it"]))
+    if not reason.strip():
+        return f"rejected withdrawal of {id!r}:\n" + bullet(["a withdrawal records why; reason is empty"])
+
+    dependents = sorted(ctx.dag.children.get(id, set()))
+    declared = [d for d in dependents if not ctx.dag.nodes[d].staged]
+    if declared:
+        return (f"rejected withdrawal of {id!r}:\n" + bullet([
+            f"declared node {d} cites it as a premise; repoint or prune {d} first" for d in declared]))
+
+    ctx.store.append_event("withdraw", {"id": id, "reason": reason}, actor=_actor())
+    ctx = Context.build(root)
+    lines = [f"Proposal {id} withdrawn: {reason}",
+             "The proposal, its trials and this withdrawal stay in the ledger; the node is no longer "
+             "carried into the graph. Re-proposing the same id revives it."]
+    if dependents:
+        lines.append(f"Staged nodes that cited it: {', '.join(dependents)} -- each has lost a "
+                     "premise and drops out of the graph until restated.")
+    return envelope("\n".join(lines), basis_line(ctx.slices))
 
 
 @mcp.tool()
