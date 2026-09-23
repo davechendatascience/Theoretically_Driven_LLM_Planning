@@ -178,6 +178,7 @@ def _git_show(root: Path, ref: str) -> str | None:
             ["git", "show", f"{ref}:{DECLARATION_FILE}"],
             cwd=root, capture_output=True, text=True, timeout=15,
             encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.SubprocessError):
         return None
@@ -191,6 +192,7 @@ def git_head(root: Path) -> str:
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=root, capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL,
         )
     except (OSError, subprocess.SubprocessError):
         return ""

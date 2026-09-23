@@ -24,15 +24,27 @@ import re
 from pathlib import Path
 
 HOOK = '''"""Written by component-belief: record what this process opens, under the project root."""
-import atexit, contextlib, os, sys
+import atexit, os, sys
 
 _ROOT = os.environ.get("BELIEF_READ_ROOT", "")
 _OUT = os.environ.get("BELIEF_READS", "")
 _seen = set()
 
 
+_WRITES = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+
+
+def _writes(mode, flags):
+    """A file the run writes is its output, not something it needed."""
+    if isinstance(mode, str):
+        return any(c in mode for c in "wax+")
+    return isinstance(flags, int) and bool(flags & _WRITES)
+
+
 def _audit(event, args):
     if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
+        if _writes(args[1] if len(args) > 1 else None, args[2] if len(args) > 2 else None):
+            return
         try:
             path = os.path.realpath(os.fspath(args[0]))
         except (TypeError, ValueError):
@@ -50,12 +62,27 @@ def _flush():
         pass
 
 
+def _chain():
+    """Run the sitecustomize this one shadows. Python imports only the first on the path, so
+    without this an environment that relies on its own (coverage, a conda activation) silently
+    loses it for every instrumented run."""
+    import importlib.machinery, importlib.util
+    here = os.path.dirname(os.path.abspath(__file__))
+    rest = [p for p in sys.path if os.path.abspath(p or os.curdir) != here]
+    spec = importlib.machinery.PathFinder.find_spec("sitecustomize", rest)
+    if spec is None or spec.loader is None:
+        return
+    try:
+        spec.loader.exec_module(importlib.util.module_from_spec(spec))
+    except Exception as exc:   # site.py reports a failing sitecustomize and carries on; so do we
+        sys.stderr.write(f"Error in sitecustomize {spec.origin}: {exc!r}\\n")
+
+
 if _ROOT and _OUT:
     sys.addaudithook(_audit)
     atexit.register(_flush)
 
-with contextlib.suppress(ImportError):   # keep any sitecustomize the environment already had
-    import sitecustomize_original  # noqa: F401
+_chain()
 '''
 
 
@@ -131,7 +158,8 @@ def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
         line = line.strip()
         if not line.startswith(base):
             continue
-        rel = os.path.relpath(line, base)
+        # posix form: everything downstream -- git paths, stamps, the environment filter -- uses `/`
+        rel = Path(os.path.relpath(line, base)).as_posix()
         if _is_environment(rel):
             continue
         seen.setdefault(rel, None)

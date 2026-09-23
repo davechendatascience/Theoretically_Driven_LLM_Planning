@@ -29,6 +29,7 @@ def _git_revision(root: Path) -> str:
             ["git", "rev-parse", "--short", "HEAD"],
             cwd=root, capture_output=True, text=True, timeout=10,
             encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL,
         )
         return out.stdout.strip() if out.returncode == 0 else ""
     except (OSError, subprocess.SubprocessError):
@@ -49,6 +50,7 @@ def _git_dirty(root: Path) -> bool:
              ".", ":(exclude).belief", ":(exclude).consistency"],
             cwd=root, capture_output=True, text=True, timeout=30,
             encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL,
         )
         return bool(out.stdout.strip()) if out.returncode == 0 else False
     except (OSError, subprocess.SubprocessError):
@@ -120,6 +122,10 @@ def run_test(
             command, cwd=root, env=env, shell=True,
             capture_output=True, text=True, timeout=test.timeout_s,
             encoding="utf-8", errors="replace",
+            # stdin MUST be closed. `capture_output` redirects stdout/stderr but leaves stdin
+            # inherited -- which, when this server runs over MCP stdio, is the JSON-RPC pipe the
+            # client holds open. Any child that touches stdin then blocks until the timeout.
+            stdin=subprocess.DEVNULL,
         )
         exit_code: int | None = completed.returncode
         stdout, stderr = completed.stdout, completed.stderr

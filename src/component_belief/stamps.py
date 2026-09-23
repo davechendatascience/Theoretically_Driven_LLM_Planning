@@ -78,7 +78,8 @@ class FileStamps:
 def _git(root: Path, *args: str) -> str:
     try:
         return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
-                              timeout=120).stdout
+                              timeout=120, encoding="utf-8", errors="replace",
+                              stdin=subprocess.DEVNULL).stdout
     except (OSError, subprocess.SubprocessError):
         return ""
 
@@ -196,7 +197,9 @@ def _citations(root: Path, store: Store, decl: Declarations) -> tuple[dict[str, 
         for value in claims:
             if not isinstance(value, str):
                 continue
-            head = value.split(":")[0].strip().rstrip("/")
+            # `name:revision` cites a revision; a drive letter (C:\...) is not one
+            value = re.sub(r"^[A-Za-z]:/", "/", value.replace("\\", "/").strip())
+            head = value.split(":")[0].rstrip("/")
             head = head.rsplit("/", 1)[-1] if "/" in head else head
             if _FILENAME.fullmatch(head):
                 names[head] = names.get(head, 0) + 1

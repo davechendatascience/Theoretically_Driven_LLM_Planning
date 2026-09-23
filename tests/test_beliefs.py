@@ -250,9 +250,12 @@ def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
     from component_belief.store import Store
     from conftest import git
 
+    import os
+
+    hook, sep = str(Path("/hook")), os.pathsep      # the platform's own spelling of both
     woven = readlog.weave("env PYTHONPATH=third_party:. python x.py", Path("/hook"))
-    assert woven.startswith("env PYTHONPATH=/hook:third_party:. ")
-    assert readlog.weave('PYTHONPATH="a:b" python x.py', Path("/hook")) == 'PYTHONPATH="/hook:a:b" python x.py'
+    assert woven.startswith(f"env PYTHONPATH={hook}{sep}third_party:. ")
+    assert readlog.weave('PYTHONPATH="a:b" python x.py', Path("/hook")) == f'PYTHONPATH="{hook}{sep}a:b" python x.py'
     assert readlog.weave("python x.py", Path("/hook")) == "python x.py"
 
     (repo / "lib").mkdir(exist_ok=True)
@@ -290,6 +293,58 @@ def test_the_read_log_drops_the_environments_own_files(tmp_path):
         "tools/run.py",
     )), encoding="utf-8")
     assert readlog.harvest(root, log) == ["lib/data.txt", "tools/run.py"]
+
+
+def _probe_test(repo, script: str) -> None:
+    """Declare TST-grasp-ik as `python probe.py`, with `script` as probe.py, and commit."""
+    from conftest import git
+
+    (repo / "probe.py").write_text(
+        script + "import os, json\njson.dump([{'metrics': {'ik_success': True}}], "
+                 "open(os.environ['OUT'], 'w'))\n", encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        '    run: "echo ok"', '    run: "python probe.py"')
+    (repo / "belief.yaml").write_text(belief, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a probe test")
+
+
+def test_the_hook_keeps_the_environments_own_sitecustomize(repo, monkeypatch):
+    """Python imports the first sitecustomize on the path and no other. The hook's must run the
+    one it shadows, or instrumenting a run quietly changes the environment it measures."""
+    from component_belief import server
+
+    (repo / "site_extra").mkdir()
+    (repo / "site_extra" / "sitecustomize.py").write_text(
+        "open('ENV_SITECUSTOMIZE_RAN', 'x').close()\n", encoding="utf-8")
+    _probe_test(repo, "")
+    monkeypatch.setenv("PYTHONPATH", str(repo / "site_extra"))
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    server.run_test(test_id="TST-grasp-ik")
+    assert (repo / "ENV_SITECUSTOMIZE_RAN").exists()
+
+
+def test_a_file_the_run_writes_is_not_a_file_it_read(repo, monkeypatch):
+    """Output is not a dependency: counting it would keep every artifact a live run produced."""
+    import json
+
+    from component_belief import readlog, server
+    from component_belief.store import Store
+
+    (repo / "lib").mkdir()
+    (repo / "lib" / "in.txt").write_text("input", encoding="utf-8")
+    (repo / "made").mkdir()
+    _probe_test(repo, "open('lib/in.txt').read()\nopen('made/out.txt', 'w').write('x')\n"
+                      "import os\nos.close(os.open('made/raw.bin', os.O_WRONLY | os.O_CREAT))\n")
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    server.run_test(test_id="TST-grasp-ik")
+
+    run_dir = Store(repo).artifacts_dir / "RUN-0001"
+    reads = readlog.read(run_dir)
+    assert "lib/in.txt" in reads, "project-relative and in posix form on every platform"
+    assert not any(p.startswith("made/") for p in reads), reads
+    stamp = json.loads((run_dir / "stamp.json").read_text(encoding="utf-8"))
+    assert "lib/in.txt" in stamp["opened"] and "lib/in.txt" in stamp["files"]
 
 
 def test_evidence_citations_keep_an_artifact_and_flag_the_missing(repo, monkeypatch):
