@@ -393,3 +393,11 @@ def test_an_ingested_artifact_uri_is_a_claim_on_the_file(repo, monkeypatch):
                           "artifact_uri": str(repo / "out" / "round1.trials.json")}])
     records = {s.path: s for s in collect(repo, load(repo), store)}
     assert records["out/round1.trials.json"].artifact_verdict().startswith("kept")
+
+    # and the directory holding it: trials name the file, never the folder
+    (repo / "out" / "round2").mkdir()
+    (repo / "out" / "round2" / "inner.trials.json").write_text("[]", encoding="utf-8")
+    store.append_trials([{**trial(), "provenance": "imported",
+                          "artifact_uri": str(repo / "out" / "round2" / "inner.trials.json")}])
+    records = {s.path: s for s in collect(repo, load(repo), store)}
+    assert records["out/round2"].artifact_verdict().startswith("kept")

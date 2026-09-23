@@ -181,6 +181,10 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
             aliases = [entry.name]
             if entry.is_symlink():                   # a trial cites the revision, not the alias
                 aliases.append(os.path.basename(os.path.realpath(entry)))
+            if entry.is_dir():
+                # a directory is cited through what is in it: trials name the trial file, not the
+                # folder, and a folder of cited files is not unwanted because its own name is not
+                aliases += [f.name for f in files]
             hit = next((a for a in aliases if a in cited), None)
             if hit:
                 stamps.append({"kind": "cited", "source": "evidence", "trials": cited[hit],
