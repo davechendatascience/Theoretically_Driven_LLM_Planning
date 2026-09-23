@@ -133,3 +133,14 @@ def test_model_state_transitions(mini_dag: ProofDAG):
     # Stale ancestor -> STALE
     slices_stale = compute_consistency(mini_dag, trials[:2], targets=["LMA-1"], stale_ancestors={"AXM-1"})
     assert slices_stale[0].state == STALE
+
+
+def test_source_citations_finds_files_not_prose():
+    from consistency_belief.probes import source_citations
+
+    assert source_citations("skills.py:482 calls choose() without strict=True") == ["skills.py:482"]
+    assert source_citations("reach.py:186 returns lo; see reach.py:99-103 and contacts.py") == [
+        "reach.py:186", "reach.py:99-103", "contacts.py"]
+    # prose about the design names no file, whatever it says about functions
+    assert source_citations("The jaws hold a handle when both finger groups touch its geometry.") == []
+    assert source_citations("A query answers for the stations it names and nothing between them.") == []

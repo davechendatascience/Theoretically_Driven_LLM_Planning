@@ -14,6 +14,21 @@ from typing import Any
 from .graph import ProofDAG
 from .ids import content_hash
 
+
+#: A path to a source file, with or without a line number. Deliberately narrow: a bare function
+#: name is too common in prose to flag, and an axiom naming a third-party file is citing the fact
+#: it records rather than making a claim about our code.
+SOURCE_CITATION = re.compile(
+    r"\b[\w./-]+\.(?:py|pyx|cpp|cc|c|h|hpp|rs|go|ts|tsx|js|java)\b(?::\d+(?:-\d+)?)?")
+
+
+def source_citations(text: str) -> list[str]:
+    """Source files a piece of prose names, in order, without duplicates."""
+    seen: dict[str, None] = {}
+    for m in SOURCE_CITATION.findall(text or ""):
+        seen.setdefault(m, None)
+    return list(seen)
+
 STRATEGY_COUNTEREXAMPLE = "counterexample"
 STRATEGY_ENTAILMENT = "entailment"
 STRATEGY_NEGATION = "negation"

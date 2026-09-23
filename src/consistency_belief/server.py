@@ -13,7 +13,7 @@ from mcp.server.fastmcp import FastMCP
 from .decide import ADOPT, active_policy, evaluate_consistency_policy
 from .graph import ProofNode
 from .model import compute_consistency
-from .probes import STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, parse_probe_result
+from .probes import source_citations, STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, parse_probe_result
 from .declarations import COMPONENT_ID
 from .render import basis_line, bullet, envelope
 from .store import VALIDITY, Store
@@ -58,7 +58,10 @@ Five rules:
    not run it: no source files, no simulations, no benchmarks. Its counterexamples are constructed,
    not observed. A clause that cannot be judged without opening the code is itself the finding: the
    claim leans on an undischarged premise, and the verdict is a gap naming the fact it assumes but
-   does not cite.
+   does not cite. verify_step enforces this: a falsification whose counterexample or rationale
+   names a source file is refused, because that is an audit of the code and not a judgement of the
+   claim. A branch written as a description of what a function returns invites exactly that, so
+   propose_branch warns when a claim names one.
 4. Mutating an upstream node invalidates its downstream blast radius as STALE until re-verified.
 5. Escalate to the human for decide(), never approve on their behalf.
 
@@ -191,6 +194,15 @@ def propose_branch(
     once the same id is declared in consistency.yaml at git HEAD. Proposing an id
     that is already staged restates it; trials of the earlier claim stop counting.
     """
+    cited = source_citations(f"{claim} {rationale}")
+    warning = ""
+    if cited:
+        warning = (
+            f"\nwarning: this claim names {', '.join(cited[:4])}. A branch that describes what a "
+            "function returns can be falsified by reading that function, which is not what a "
+            "verifier does and not what the claim is for. State what must hold of any "
+            "implementation, and leave the file to the contract that measures it."
+        )
     root = project_root()
     ctx = Context.build(root)
     if id in ctx.dag.nodes and not ctx.dag.nodes[id].staged:
@@ -233,7 +245,7 @@ def propose_branch(
         + ("Trials of the earlier claim no longer count.\n" if restating else "")
         + f"Staged: verify_step({id!r}) and later proposals can use it now; it supports decide() once "
         f"{id!r} is declared in consistency.yaml at git HEAD."
-        + measurement_hint(claim, "claim") + subject_note,
+        + measurement_hint(claim, "claim") + subject_note + warning,
         basis_line(ctx.slices)
     )
 
@@ -315,12 +327,29 @@ def verify_step(
     if strategy not in STRATEGIES:
         return f"unknown strategy {strategy!r}; expected one of {', '.join(STRATEGIES)}"
 
+    cited = source_citations(f"{counterexample or ''} {rationale}")
+    if cited and outcome == "falsified":
+        return (
+            f"refused: this falsification argues from the implementation, naming {', '.join(cited[:4])}. "
+            "A trial verifies entailment from the declarations alone -- the axioms, definitions and "
+            "premises the claim cites -- and its counterexamples are constructed, not read off the "
+            "code. A clause you cannot judge without opening a file is itself the finding: record it "
+            "as outcome='gap' naming the fact the claim assumes and does not cite. If the "
+            "declarations are right and the code does not match them, that is implementation "
+            "fidelity, which belongs in component-belief as a contract and a test, cited here by id. "
+            "Thirteen refutations in this ledger were recorded this way and had to be amended."
+        )
+
     # Normalize passed flag
     parsed = parse_probe_result({
         "outcome": outcome,
         "counterexample": counterexample,
         "reasoning": rationale,
     })
+    note = ""
+    if cited:
+        note = (f"\nnote: this trial names {', '.join(cited[:4])}. A gap is judged from the "
+                "declarations; naming a file is a pointer for the implementer, never the reason.")
 
     trial_record = {
         "target_id": target_id,
@@ -358,6 +387,8 @@ def verify_step(
                      "the same statement is declared at git HEAD.")
     if parsed["counterexample"]:
         lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
+    if note:
+        lines.append(note.lstrip("\n"))
     hint = measurement_hint(f"{rationale} {counterexample or ''}", "trial")
     if hint:
         lines.append(hint.lstrip("\n"))

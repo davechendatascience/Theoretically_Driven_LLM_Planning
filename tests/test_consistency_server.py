@@ -342,3 +342,43 @@ def test_measurement_hint_points_numbers_at_component_belief():
     assert measurement_hint("118.7 mm and 261 steps over 40 episodes, measured in CTR-teacher-reliable",
                             "claim") == ""
     assert measurement_hint("the release is gentle exactly when DEF-gentle-placement holds", "claim") == ""
+
+
+def test_verify_step_refuses_a_falsification_argued_from_source(committed_repo: Path):
+    """Rule 3: a clause you cannot judge without opening a file is a gap, never a falsification.
+
+    Thirteen refutations in the embodied_ai ledger were recorded as counterexamples citing source
+    lines, and every one had to be amended. The tool refuses the shape rather than restating the
+    rule in prose that gets read once.
+    """
+    out = verify_step(
+        "LMA-compute-cap", strategy="counterexample", outcome="falsified",
+        rationale="The implementation disagrees",
+        counterexample="scheduler.py:482 returns the first candidate unchecked when none passes.")
+    assert out.startswith("refused:")
+    assert "scheduler.py:482" in out
+    assert "outcome='gap'" in out
+    assert "component-belief" in out
+    # and nothing was recorded
+    assert "TRL-" not in out
+
+
+def test_verify_step_allows_a_gap_that_points_at_source(committed_repo: Path):
+    """A gap may name a file as a pointer for the implementer; it just may not be the reason."""
+    out = verify_step(
+        "LMA-compute-cap", strategy="entailment", outcome="gap",
+        rationale="The claim assumes the scheduler bounds its queue, which no premise states.",
+        counterexample="unstated premise; see scheduler.py for where it would be enforced")
+    assert not out.startswith("refused:")
+    assert "Trial TRL-" in out
+    assert "never the reason" in out
+
+
+def test_propose_branch_warns_when_a_claim_describes_code(committed_repo: Path):
+    out = propose_branch(
+        id="BRN-queue-bounded", subject="CMP-scheduler", premises=["AXM-energy-budget"],
+        claim="Scheduler.enqueue in scheduler.py returns False once the queue holds 64 items.",
+        rationale="bounded queue")
+    assert "warning:" in out
+    assert "scheduler.py" in out
+    assert "any implementation" in out
