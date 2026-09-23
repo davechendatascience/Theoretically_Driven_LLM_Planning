@@ -350,14 +350,20 @@ def contract_beliefs(root: Path) -> dict[str, str]:
     except Exception:                                   # a ledger this server does not own
         return {}
 
-    worst = {"unsupported": 0, "insufficient_evidence": 1, "insufficient": 1, "supported": 2}
-    out: dict[str, str] = {}
+    worst = {"unsupported": 0, "refuted": 0, "contested": 1, "insufficient_evidence": 2,
+             "insufficient": 2, "supported": 3}
+    out: dict[str, tuple[int, str]] = {}
+    counts: dict[str, int] = {}
     for sl in slices:
-        rank = worst.get(sl.state, 1)
+        counts[sl.contract_id] = counts.get(sl.contract_id, 0) + 1
+        rank = worst.get(sl.state, 2)
         seen = out.get(sl.contract_id)
-        if seen is None or rank <= seen[0]:
-            out[sl.contract_id] = (rank, f"{sl.state} n={sl.n_valid}")
-    summary = {cid: text for cid, (_, text) in out.items()}
+        if seen is None or rank < seen[0]:
+            # the weakest slice, named: a contract supported at one revision and thin at another
+            # reads as thin, and a reader must be able to see which one that is
+            out[sl.contract_id] = (rank, f"{sl.state} n={sl.n_valid} [{sl.condition_label()}]")
+    summary = {cid: (text if counts[cid] == 1 else f"{text}, weakest of {counts[cid]} slices")
+               for cid, (_, text) in out.items()}
     for cid in decl.contracts:
         summary.setdefault(cid, "no evidence")
     return summary
