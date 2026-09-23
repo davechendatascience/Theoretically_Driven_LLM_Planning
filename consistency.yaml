@@ -407,17 +407,18 @@ branches:
     derivation_rule: >-
       By DEF-premise-graph a build admits nothing but the head revision's
       declarations and the ledger's staged proposals. By AXM-commit-is-approval
-      a declaration takes effect only from the committed revision, so a
-      proposal that is only staged takes no effect as one. By
-      AXM-no-silent-failure a declared or staged node that cannot take its
-      place in the premise graph, and a declared or staged branch whose subject
-      belief.yaml no longer declares, are reported rather than dropped. By
-      DEF-proof-state a node's proof state is computed from its place in the
-      graph and the trials on it alone, its subject excluded; a subject is
-      neither a premise, by DEF-premise-graph, nor part of a fingerprint, by
-      DEF-current-trial, so losing it changes neither the branch's place in
-      the graph nor which of its trials are current, and its proof state
-      stands. evidence: CTR-consistency-declarations-gate
+      a declaration takes effect only from the committed revision, so a proposal
+      that is only staged takes no effect as one. By AXM-no-silent-failure a
+      declared or staged node that cannot take its place in the premise graph,
+      and a declared or staged branch whose subject belief.yaml no longer
+      declares, are reported rather than dropped. By DEF-proof-state a node's
+      proof state is computed from its place in the graph, its own declaration
+      or staged proposal -- its statement, the premises it cites and its
+      declared sufficiency -- and the trials on it, its subject excluded; a
+      subject is neither a premise, by DEF-premise-graph, nor part of a
+      fingerprint, by DEF-current-trial, so losing it changes neither the
+      branch's place in the graph nor which of its trials are current, and its
+      proof state stands. evidence: CTR-consistency-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-model-honest
@@ -501,17 +502,19 @@ branches:
       AXM-no-belief-write-path, under which a measured belief changes only
       through belief-eligible evidence, no measured belief moves. Proof states:
       by DEF-proof-state a node's proof state is computed from its place in the
-      premise graph and the trials recorded on it alone. By DEF-premise-graph
-      the graph is built from the axioms, definitions, lemmas and branches
-      declared at the head revision and the proposals staged in the ledger; a
-      report changes no declaration and appends no record, so it stages no
-      proposal and the graph is unchanged, whatever else it reads or writes. By
-      DEF-current-trial whether a trial is current depends on its validity after
-      amendments, its target being in the premise graph, and the fingerprints it
-      recorded; a report appends no trial and no amendment and leaves the graph
-      unchanged, so the trials recorded on each node, and which of them are
-      current, are unchanged. So no proof state changes. evidence:
-      CTR-monitor-read-only
+      premise graph, its own declaration or staged proposal, and the trials
+      recorded on it; a report changes no declaration and, appending no record,
+      stages or restates no proposal, so no node's own declaration or staged
+      proposal changes. By DEF-premise-graph the graph is built from the axioms,
+      definitions, lemmas and branches declared at the head revision and the
+      proposals staged in the ledger; a report changes no declaration and
+      appends no record, so it stages no proposal and the graph is unchanged,
+      whatever else it reads or writes. By DEF-current-trial whether a trial is
+      current depends on its validity after amendments, its target being in the
+      premise graph, and the fingerprints it recorded; a report appends no trial
+      and no amendment and leaves the graph unchanged, so the trials recorded on
+      each node, and which of them are current, are unchanged. So no proof state
+      changes. evidence: CTR-monitor-read-only
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
