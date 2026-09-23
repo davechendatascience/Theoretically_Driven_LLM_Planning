@@ -250,12 +250,17 @@ def note(subject: str, text: str) -> str:
 
 @mcp.tool()
 def amend(
-    evidence_id: str,
+    evidence_id: str = "",
     validity: str | None = None,
     supersede_with: str | None = None,
     reason: str = "",
+    evidence_ids: list[str] | None = None,
 ) -> str:
     """Correct an evidence record without editing it.
+
+    `evidence_ids` reclassifies many at once under one reason, reading the ledger once instead of
+    once per record. A correction that takes hours does not get made, and evidence that should
+    have been set aside goes on supporting decisions.
 
     Appends an amendment that folds over the original (3.3); the trial as first
     recorded stays in the ledger with the reason it was reclassified. Validity
@@ -270,23 +275,34 @@ def amend(
         return "supply validity= or supersede_with="
     if not reason:
         return "reason is required: an unexplained reclassification is not auditable"
+    targets = list(evidence_ids or ([evidence_id] if evidence_id else []))
+    if not targets:
+        return "supply evidence_id= or evidence_ids="
     known = {t.get("id") for t in ctx.store.effective_trials()}
-    if evidence_id not in known:
+    unknown = [e for e in targets if e not in known]
+    if len(targets) > 1 and unknown:
+        return (f"rejected: {len(unknown)} of {len(targets)} ids are not in the ledger, "
+                f"starting with {', '.join(unknown[:3])}")
+    if evidence_id and evidence_id not in known:
         return f"unknown evidence id {evidence_id!r}"
 
-    ctx.store.append_amendment(
-        evidence_id, validity=validity, supersede_with=supersede_with,
-        reason=reason, actor=_actor(),
-    )
+    for target in targets:
+        ctx.store.append_amendment(
+            target, validity=validity, supersede_with=supersede_with,
+            reason=reason, actor=_actor(),
+        )
     ctx.store.append_event("amend", {
-        "target": evidence_id, "validity": validity, "supersede_with": supersede_with,
+        "target": targets[0] if len(targets) == 1 else f"{len(targets)} records",
+        "targets": len(targets), "validity": validity, "supersede_with": supersede_with,
     }, actor=_actor())
 
     fresh = Context.build(project_root())
     slices = compute_slices(fresh.decl, fresh.trials())
     return envelope(
-        f"amended {evidence_id}: validity={validity or 'superseded'} — {reason}\n"
-        f"the original record is retained; this appended an amendment",
+        f"amended {targets[0] if len(targets) == 1 else str(len(targets)) + ' records'}: "
+        f"validity={validity or 'superseded'} — {reason}\n"
+        f"the original record{'' if len(targets) == 1 else 's are'} retained; this appended an "
+        f"amendment{'' if len(targets) == 1 else ' each'}",
         basis_line(slices),
     )
 

@@ -322,3 +322,52 @@ def test_evidence_citations_keep_an_artifact_and_flag_the_missing(repo, monkeypa
     monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
     text = server.status(view="artifacts")
     assert "model_gone.pt" in text.split("GONE FROM DISK")[1]
+
+
+def test_a_settings_string_is_not_a_filename_and_a_symlink_answers_for_its_target(repo, monkeypatch):
+    """Two heuristics the view got wrong on a real project: a repro value with dots in it is not
+    a file, and a trial cites the revision a symlink points at rather than the symlink."""
+    from component_belief.declarations import load
+    from component_belief.stamps import _FILENAME, collect
+    from component_belief.store import Store
+    from conftest import git, trial
+
+    assert _FILENAME.fullmatch("vla_gc_r2.pt")
+    assert not _FILENAME.fullmatch("layout0.08_xy0.1_z0.05_yaw30_tilt10_null0.3_h400")
+    assert not _FILENAME.fullmatch("samples=48,horizon=12,segments=4")
+
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "model_r3.pt").write_text("weights", encoding="utf-8")
+    (repo / "out" / "current.pt").symlink_to("model_r3.pt")
+    (repo / "belief.yaml").write_text(
+        (repo / "belief.yaml").read_text(encoding="utf-8") + "\nartifacts: [out]\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a symlink to the current revision")
+
+    store = Store(repo)
+    store.append_trials([{**trial(), "repro": {"model_revision": "model_r3.pt:abc"}}])
+    records = {s.path: s for s in collect(repo, load(repo), store)}
+    assert records["out/current.pt"].artifact_verdict().startswith("kept"), \
+        "the alias is kept by what its target's trials cite"
+
+
+def test_amend_reclassifies_many_in_one_pass(repo, monkeypatch):
+    """A correction that takes hours does not get made: amend reads the whole ledger per record,
+    which is fine for one and impossible for thousands."""
+    from component_belief import server
+    from component_belief.store import Store
+    from conftest import trial
+
+    store = Store(repo)
+    ids = store.append_trials([trial() for _ in range(5)])   # the store mints the ids
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    assert "reason is required" in server.amend(evidence_ids=ids, validity="quarantined")
+    assert "not in the ledger" in server.amend(
+        evidence_ids=[*ids, "EV-nope"], validity="quarantined", reason="r")
+
+    out = server.amend(evidence_ids=ids, validity="quarantined",
+                       reason="the checkpoint these measured is gone")
+    assert "amended 5 records" in out
+    kept = {t["id"]: t for t in Store(repo).effective_trials()}
+    assert all(kept[i]["validity"] == "quarantined" for i in ids)

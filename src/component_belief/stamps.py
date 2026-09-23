@@ -20,6 +20,7 @@ generated roots from belief.yaml's optional top-level `artifacts:` list.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -33,6 +34,9 @@ from .declarations import Declarations
 from .store import Store
 
 CODE_SUFFIXES = (".py", ".sh", ".js", ".ts", ".rb", ".go", ".rs")
+#: A trial cites what it measured by name; a settings string is not a file, however
+#: many dots it carries.
+_FILENAME = re.compile(r"[\w.-]{1,100}\.[A-Za-z][A-Za-z0-9]{0,7}")
 
 
 @dataclass
@@ -174,12 +178,17 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
                        "bytes": sum(p.stat().st_size for p in files)}]
             stamps += _opened_stamps(hits)
             stamps += [{"kind": "named", "source": "declared test", "by": tid} for tid in declared]
-            if entry.name in cited:
-                stamps.append({"kind": "cited", "source": "evidence", "trials": cited[entry.name],
+            aliases = [entry.name]
+            if entry.is_symlink():                   # a trial cites the revision, not the alias
+                aliases.append(os.path.basename(os.path.realpath(entry)))
+            hit = next((a for a in aliases if a in cited), None)
+            if hit:
+                stamps.append({"kind": "cited", "source": "evidence", "trials": cited[hit],
+                               "as": hit,
                                "note": "belief-eligible trials name it in their reproduction data"})
-            if entry.name in cited:
+            if hit:
                 stamps.append({"kind": "supports", "source": "evidence",
-                               "runs": [], "note": f"{cited[entry.name]} live trials cite it"})
+                               "runs": [], "note": f"{cited[hit]} live trials cite it"})
             elif any(s.get("live") for s in hits):
                 stamps.append({"kind": "supports", "source": "evidence",
                                "runs": sorted({s["run"] for s in hits if s.get("live")})[:4],
@@ -205,12 +214,20 @@ def _citations(root: Path, store: Store, decl: Declarations) -> tuple[dict[str, 
             if not isinstance(value, str):
                 continue
             head = value.split(":")[0].strip()
-            if "." in head and "/" not in head and len(head) < 120:
+            if _FILENAME.fullmatch(head):
                 names[head] = names.get(head, 0) + 1
 
     present = {p.name for name in decl.artifacts for p in (root / name).glob("**/*")
                if (root / name).exists()}
     present |= {Path(f).name for f in _git(root, "ls-files").split("\n") if f}
+    # a symlink's name is not what a trial records: it cites the revision it measured, which is
+    # the target. Both names stand for the same bytes, so each answers for the other.
+    for name in decl.artifacts:
+        base = root / name
+        if base.exists():
+            for entry in base.iterdir():
+                if entry.is_symlink():
+                    present.add(os.path.basename(os.path.realpath(entry)))
     dangling = {n: c for n, c in names.items() if n not in present}
     return {n: c for n, c in names.items() if n in present}, dangling
 
