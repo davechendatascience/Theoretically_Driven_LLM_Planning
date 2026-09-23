@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .declarations import Declarations, load as load_declarations
+from .declarations import COMPONENT_ID, Declarations, load as load_declarations
 from .graph import ProofDAG, ProofNode
 from .model import PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice, compute_consistency
 from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
 from .store import Store
 
-VIEWS = ("tree", "branches", "axioms", "obligations", "contradictions", "audit", "cycle")
+VIEWS = ("tree", "branches", "axioms", "obligations", "contradictions", "coverage", "audit", "cycle")
 
 
 @dataclass
@@ -202,6 +202,110 @@ def view_contradictions(ctx: Context) -> str:
         lines.append("")
 
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
+def view_coverage(ctx: Context) -> str:
+    """Where the two ledgers meet: per component, the design declared over it.
+
+    A component the repository implements with no declared branch is the prune-or-declare case;
+    a component with a branch and no code is design running ahead of implementation, which is
+    allowed and is reported as planned rather than as a gap.
+    """
+    decl = ctx.decl
+    if decl.components_source != "git-HEAD":
+        reason = {
+            "none": "no belief.yaml at git HEAD in this repository",
+            "unavailable": "component-belief is not installed alongside this server",
+        }.get(decl.components_source, decl.components_source)
+        return envelope(
+            "Design coverage needs the component ledger, and it is not readable: " + reason + ".\n"
+            "Declare components in belief.yaml and commit it; each branch's subject then names one.",
+            "basis: consistency.yaml@" + decl.source + " × belief.yaml@none",
+        )
+
+    slices = {s.target_id: s for s in ctx.slices}
+    designs: dict[str, list[str]] = {}
+    removed: list[str] = []          # subject was a component id; belief.yaml no longer declares it
+    unattached: list[str] = []       # subject is prose: the design was never bound to a component
+    for nid, node in ctx.dag.nodes.items():
+        if node.kind not in ("branch", "lemma") or not node.subject:
+            continue
+        if node.subject in decl.components:
+            designs.setdefault(node.subject, []).append(nid)
+        elif COMPONENT_ID.fullmatch(node.subject):
+            removed.append(nid)
+        else:
+            unattached.append(nid)
+
+    def line(nid: str) -> str:
+        return f"      {nid} {slice_badge(slices.get(nid))}"
+
+    def declared_of(cid: str) -> list[str]:
+        return [n for n in designs.get(cid, []) if not ctx.dag.nodes[n].staged]
+
+    governed, undeclared, planned, bare = [], [], [], []
+    for cid, comp in sorted(decl.components.items()):
+        bucket = (governed if declared_of(cid) else undeclared) if comp.implemented else (
+            planned if designs.get(cid) else bare)
+        bucket.append(cid)
+
+    def block(title: str, cids: list[str], *, show_code: bool) -> list[str]:
+        if not cids:
+            return []
+        out = [f"{title} ({len(cids)}):"]
+        for cid in cids:
+            comp = decl.components[cid]
+            facts = []
+            if show_code:
+                facts.append(f"{len(comp.code)} code path{'s' if len(comp.code) != 1 else ''}")
+            if comp.contracts:
+                facts.append(", ".join(comp.contracts))
+            out.append(f"  {cid}" + (f"  [{' · '.join(facts)}]" if facts else ""))
+            out += [line(n) for n in sorted(designs.get(cid, []))]
+        out.append("")
+        return out
+
+    lines = [
+        f"Design coverage: {len(decl.branches)} declared branches over "
+        f"{len(decl.components)} components ({sum(1 for c in decl.components.values() if c.implemented)} implemented)",
+        f"Source: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source}",
+        "",
+    ]
+    lines += block("governed -- code exists and a declared branch says why", governed, show_code=True)
+    lines += block("undeclared design -- code exists, no declared branch (prune it, or declare the design)",
+                   undeclared, show_code=True)
+    lines += block("planned -- design declared, nothing implemented yet", planned, show_code=False)
+    if bare:
+        lines += [f"no design, no code ({len(bare)}):", "  " + ", ".join(bare), ""]
+    def subject_block(title: str, ids: list[str]) -> list[str]:
+        if not ids:
+            return []
+        out = [f"{title} ({len(ids)}):"]
+        by_subject: dict[str, list[str]] = {}
+        for nid in ids:
+            by_subject.setdefault(ctx.dag.nodes[nid].subject, []).append(nid)
+        for subject, nodes in sorted(by_subject.items()):
+            out.append(f"  {subject[:70]}")
+            out += [line(n) for n in sorted(nodes)]
+        out.append("")
+        return out
+
+    lines += subject_block(
+        "BROKEN -- the component is gone from belief.yaml; these designs govern nothing", removed)
+    lines += subject_block(
+        "unattached -- the subject is prose, not a component id", unattached)
+
+    issues = [i for i in decl.issues
+              if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE")]
+    if issues:
+        lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
+
+    nxt = ("repoint or prune the designs whose component is gone" if removed else
+           "declare or prune the undeclared designs" if undeclared else
+           "attach every design to a component" if unattached else
+           "every implemented component has a declared design")
+    return envelope("\n".join(lines).rstrip(),
+                    f"basis: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source} · next: {nxt}")
 
 
 def view_audit(ctx: Context, subject: str | None = None) -> str:

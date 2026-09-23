@@ -1,6 +1,9 @@
 # Theoretically Driven LLM Planning
 
-A dual-MCP epistemic architecture for rigorous software architecture, system planning, and capability verification.
+Two MCP servers that hold an LLM agent's design work to account: one asks whether the reasons
+for a design **follow**, the other whether the built thing **works**. They are paired — a branch
+in the design ledger names the component it governs in the component ledger — so neither a proof
+about nothing nor code nobody justified can hide.
 
 ```
                          THEORETICALLY DRIVEN LLM PLANNING
@@ -14,6 +17,8 @@ A dual-MCP epistemic architecture for rigorous software architecture, system pla
     (counterexample search, gap detection)          (exit codes, captured artifacts, hashes)
   • Model: Lean-style Proof Obligations           • Model: Beta-Binomial Credible Intervals
   • Storage: .consistency/ (append-only)          • Storage: .belief/ (append-only)
+                 └──────────────► subject ◄──────────────┘
+                     a branch governs a declared component
 ```
 
 ## The Commitment
@@ -47,6 +52,7 @@ Axiom-to-branch design consistency for architectures, specifications, and planni
 * **Staged Proposals**: `propose_branch` stages a branch in the ledger. It persists across calls, `verify_step` can target it and later proposals can cite it as a premise at once, and it shows as `· STAGED` in every view. It supports `decide()` only once the same id is declared in `consistency.yaml` at git HEAD; trials recorded while staged carry over if the declared statement is the same.
 * **LLM Measurement via Falsification Probes**: The LLM measures consistency through adversarial probes (`verify_step`), searching for concrete counterexamples or unstated assumptions rather than merely affirming belief.
 * **Only a Counterexample Refutes**: A probe with outcome `falsified` makes a node `REFUTED`. A `gap` -- a missing premise, an unproven step -- leaves it unproven: it counts against consensus (so the node reads `DOUBTED` once it has enough trials) and is listed under *Entailment Gaps* in `status(view="contradictions")`, whatever evidence text it carries.
+* **The Verifier Reasons From Declarations Alone**: A trial establishes entailment from the axioms, definitions, premises and claims — never from the source. A clause that cannot be judged without opening the code *is* the finding: the claim leans on a fact it does not cite. Implementation fidelity is the implementer's duty and lands in component-belief, cited here by id.
 
 ### The Loop
 ```
@@ -54,9 +60,9 @@ status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 ```
 
 ### The Seven Tools
-* `status`: 7 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `audit`, `cycle`).
+* `status`: 8 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `coverage`, `audit`, `cycle`).
 * `propose_branch`: Stages new contracts or lemmas (declared or staged premises); validates acyclicity and premise validity; re-proposing a staged id restates it.
-* `verify_step`: Records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified. A trial establishes entailment **from the declarations alone** — a verifier reads the axioms, definitions, premises and claims, never the implementation, and never runs it. A clause that cannot be judged without opening the code is a gap: the claim leans on a fact it does not cite. Implementation fidelity and measurement are the implementer's duty and belong in component-belief, cited here by id.
+* `verify_step`: Records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified.
 * `amend`: Reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending an amendment; the original record and the reason stay in the ledger.
 * `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
 * `note`: Qualitative annotation (inert channel, zero proof weight).
@@ -83,6 +89,7 @@ Evidence-grounded belief state for a system modeled as components and interfaces
 * **Trial-Level Granularity**: Stores individual trials from pytest or telemetry into `.belief/`.
 * **Beta-Binomial Statistics**: Computes uncertainty intervals; rejects premature verdicts on sparse data (`insufficient_evidence`).
 * **Regressions & Bottlenecks**: Surfaces regressions and ranks bottlenecks by decision relevance without blaming unobserved components.
+* **Components Claim Their Code**: `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` at all is *planned*.
 
 ### The Loop
 ```
@@ -106,6 +113,47 @@ next: run_test TST-grasp-ik conditions={low}  # closes the thin slice
 
 ---
 
+## 3. The Join: `subject`
+
+A branch declares the component it governs:
+
+```yaml
+# consistency.yaml                     # belief.yaml
+- id: BRN-motion-gate                  - id: CMP-motion
+  subject: CMP-motion          ───────►  purpose: Plan motion
+  premises: [AXM-safety]                 code: [motion.py]
+  derivation_rule: "motion.py,           ...
+    evidence: CTR-motion-clear" ──────► - id: CTR-motion-clear
+                                          subject: CMP-motion
+```
+
+consistency-belief reads `belief.yaml` at git HEAD — one way, read-only — and checks both ends of
+that arrow. `status(view="coverage")` then sorts every component by what each ledger knows:
+
+| | a declared branch | no declared branch |
+|---|---|---|
+| **has `code:`** | **governed** — built, and the design says why | **undeclared design** — prune the code, or declare the design |
+| **no `code:`** | **planned** — design ahead of implementation, which is allowed | a name in `belief.yaml`, nothing more |
+
+Two faults are reported separately, because they are different mistakes:
+
+* **BROKEN** (`REMOVED_SUBJECT`) — the subject *is* a `CMP-` id and `belief.yaml` no longer declares
+  it: the component was removed or renamed and its designs now govern nothing. Repoint them,
+  re-declare the component, or prune the branches.
+* **unattached** (`UNATTACHED_SUBJECT`) — the subject is prose, so the design was never bound to a
+  component at all.
+* `UNKNOWN_EVIDENCE` — a `derivation_rule` citing a `CMP-`/`CTR-` id that `belief.yaml` does not
+  declare.
+
+All three are advisory: a design keeps its place in the proof DAG, because whether a claim follows
+from its premises has nothing to do with whether anyone built it. `propose_branch` says the same
+thing at staging time rather than letting a stale subject through in silence.
+
+A project with no `belief.yaml` keeps working — subjects simply go unchecked, and the coverage
+view says so instead of reporting an empty graph.
+
+---
+
 ## Declarations Live in Git, Not in Tools
 
 Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not the working tree**:
@@ -124,7 +172,8 @@ Declarations (`consistency.yaml` and `belief.yaml`) load from **git HEAD, not th
 pip install -e .
 ```
 
-Register both servers with Claude Code or Antigravity via `.mcp.json`:
+Register both servers with Claude Code or Antigravity via `.mcp.json`. Point both at the **same**
+project root: the join is only available when the two ledgers describe one repository.
 
 ```json
 {
@@ -136,7 +185,7 @@ Register both servers with Claude Code or Antigravity via `.mcp.json`:
         "run", "consistency-belief-mcp"
       ],
       "env": {
-        "CONSISTENCY_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "CONSISTENCY_PROJECT_ROOT": "/path/to/your/project",
         "CONSISTENCY_ACTOR": "agent"
       }
     },
@@ -147,7 +196,7 @@ Register both servers with Claude Code or Antigravity via `.mcp.json`:
         "run", "component-belief-mcp"
       ],
       "env": {
-        "BELIEF_PROJECT_ROOT": "/home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning",
+        "BELIEF_PROJECT_ROOT": "/path/to/your/project",
         "BELIEF_ACTOR": "agent"
       }
     }
@@ -174,16 +223,16 @@ docs/
   component_belief_mcp_design.md                       # Empirical model & architecture specification
 src/
   consistency_belief/                                  # Deductive MCP server
-    declarations.py                                    # Git-HEAD loader and schema validator
+    declarations.py                                    # Git-HEAD loader, schema validator, component join
     graph.py                                           # Proof DAG kernel (acyclicity, grounding, blast radius)
     model.py                                           # Verification state (PROVEN, REFUTED, OBLIGATION, STALE)
     probes.py                                          # LLM verification probe generators & parsers
     decide.py                                          # Consistency policy evaluation & human approval gate
-    render.py / views.py                               # ASCII proof tree and status views
-    server.py                                          # FastMCP server (6 tools)
+    render.py / views.py                               # ASCII proof tree, status and coverage views
+    server.py                                          # FastMCP server (7 tools)
     store.py                                           # Append-only JSONL ledger in .consistency/
   component_belief/                                    # Empirical MCP server
-    declarations.py                                    # Git-HEAD loader and validation
+    declarations.py                                    # Git-HEAD loader, validation, code claims
     model.py                                           # Beta-Binomial belief slices
     diagnose.py                                        # Bottleneck ranking & discriminating tests
     decide.py                                          # Policy evaluation & human approval gate
@@ -193,7 +242,7 @@ src/
     server.py                                          # FastMCP server (6 tools)
     store.py                                           # Append-only JSONL ledger in .belief/
 tools/pytest_trials.py                                 # pytest -> trials JSON adapter
-tests/                                                 # 109 test cases asserting all epistemic invariants
+tests/                                                 # 127 test cases asserting all epistemic invariants
 ```
 
 ---
@@ -202,7 +251,7 @@ tests/                                                 # 109 test cases assertin
 
 ```bash
 PYTHONPATH=src python -m pytest tests -q
-# 109 passed in 1.73s
+# 127 passed
 ```
 
 The test suite asserts the core epistemic invariants across both systems:
@@ -212,3 +261,4 @@ The test suite asserts the core epistemic invariants across both systems:
 4. Upstream mutations trigger exact topological blast radius invalidation.
 5. Falsification probes capturing counterexamples immediately transition claims to `REFUTED`.
 6. Final adoption decisions refuse to self-approve without a human approver.
+7. A component removed from `belief.yaml` leaves its designs reported as broken, not as proven.

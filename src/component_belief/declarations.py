@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass, field
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +46,16 @@ class Component:
     testable_capability: str = ""
     failure_modes: list[dict[str, Any]] = field(default_factory=list)
     remediation: str = ""
+    code: list[str] = field(default_factory=list)
+
+    @property
+    def implemented(self) -> bool:
+        """A component with no code is a planned one: declared, designed against, not built.
+
+        The distinction is what lets the design ledger tell a component whose design was never
+        declared (prune it or declare it) from one whose design runs ahead of its code.
+        """
+        return bool(self.code)
 
 
 @dataclass
@@ -175,6 +186,13 @@ class Declarations:
     def contracts_for_subject(self, subject_id: str) -> list[Contract]:
         return [c for c in self.contracts.values() if c.subject == subject_id]
 
+    def components_for_path(self, path: str) -> list[str]:
+        """Which components claim this file (by exact path or by a glob they declare)."""
+        return sorted(
+            cid for cid, comp in self.components.items()
+            if any(path == entry or fnmatch(path, entry) for entry in comp.code)
+        )
+
 
 def _git_show(root: Path, ref: str) -> str | None:
     try:
@@ -213,7 +231,22 @@ def load(root: Path) -> Declarations:
             "PENDING", DECLARATION_FILE,
             "working tree differs from HEAD; the uncommitted edits are not in effect",
         ))
+    decl.issues.extend(check_code_paths(decl, root))
     return decl
+
+
+def check_code_paths(decl: Declarations, root: Path) -> list[Issue]:
+    """A component's `code:` entries name files in this repository. Advisory: a path that has
+    moved or been pruned is worth reporting, never a reason to stop scoring the component."""
+    issues: list[Issue] = []
+    for cid, comp in decl.components.items():
+        for entry in comp.code:
+            if any(ch in entry for ch in "*?["):
+                if not list(root.glob(entry)):
+                    issues.append(Issue("MISSING_CODE_PATH", cid, f"code pattern {entry!r} matches no file"))
+            elif not (root / entry).exists():
+                issues.append(Issue("MISSING_CODE_PATH", cid, f"code path {entry!r} does not exist"))
+    return issues
 
 
 def _parse(text: str) -> Declarations:

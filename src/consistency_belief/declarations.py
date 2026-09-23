@@ -8,6 +8,7 @@ Uncommitted edits show as PENDING in status.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,9 @@ import yaml
 from .ids import content_hash
 
 DECLARATION_FILE = "consistency.yaml"
+
+_EVIDENCE_ID = re.compile(r"\b(?:CMP|CTR)-[A-Za-z0-9][A-Za-z0-9-]*\b")
+COMPONENT_ID = re.compile(r"CMP-[A-Za-z0-9][A-Za-z0-9-]*")
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,26 @@ class Policy:
 
 
 @dataclass
+class ComponentRef:
+    """A component as component-belief declares it, seen from the design side.
+
+    consistency.yaml says why a design follows; belief.yaml says what is built and whether it
+    works. A branch's `subject` is the join between them: it names the component the design
+    governs. A component with no `code:` is planned -- declared and designed against before it
+    is written -- which is a different thing from a component whose design was never declared.
+    """
+
+    id: str
+    purpose: str = ""
+    code: list[str] = field(default_factory=list)
+    contracts: list[str] = field(default_factory=list)
+
+    @property
+    def implemented(self) -> bool:
+        return bool(self.code)
+
+
+@dataclass
 class Declarations:
     axioms: dict[str, Axiom] = field(default_factory=dict)
     definitions: dict[str, Definition] = field(default_factory=dict)
@@ -103,6 +127,8 @@ class Declarations:
     source: str = "none"            # git-HEAD | none
     pending: bool = False           # working tree differs from HEAD
     raw_present: bool = False
+    components: dict[str, ComponentRef] = field(default_factory=dict)
+    components_source: str = "none"  # git-HEAD | none | unavailable
 
     def issues_for(self, subject: str) -> list[Issue]:
         return [i for i in self.issues if i.subject == subject]
@@ -121,6 +147,9 @@ class Declarations:
 
     def all_node_ids(self) -> set[str]:
         return set(self.axioms) | set(self.definitions) | set(self.lemmas) | set(self.branches)
+
+    def branches_for_subject(self, component_id: str) -> list[str]:
+        return sorted(bid for bid, b in self.branches.items() if b.subject == component_id)
 
 
 def _git_show(root: Path, ref: str) -> str | None:
@@ -160,7 +189,74 @@ def load(root: Path) -> Declarations:
             "PENDING", DECLARATION_FILE,
             "working tree differs from HEAD; the uncommitted edits are not in effect",
         ))
+    decl.components, decl.components_source = load_components(root)
+    decl.issues.extend(validate_links(decl))
     return decl
+
+
+def load_components(root: Path) -> tuple[dict[str, ComponentRef], str]:
+    """Read the components component-belief declares in the same repository, at git HEAD.
+
+    One-way and read-only: the design ledger needs to know which components exist and which are
+    built, and it asks the ledger that owns that fact. A project with no belief.yaml keeps working
+    -- the subject of a branch is then simply unchecked.
+    """
+    try:
+        from component_belief import declarations as components
+    except ImportError:                                     # component-belief not installed
+        return {}, "unavailable"
+
+    decl = components.load(root)
+    if decl.source == "none":
+        return {}, "none"
+    refs = {
+        cid: ComponentRef(
+            id=cid,
+            purpose=comp.purpose,
+            code=list(comp.code),
+            contracts=sorted(c.id for c in decl.contracts_for_subject(cid)),
+        )
+        for cid, comp in decl.components.items()
+    }
+    return refs, decl.source
+
+
+def validate_links(decl: Declarations) -> list[Issue]:
+    """Check each branch against the component ledger: the subject names a component, and every
+    component, contract or test id the derivation_rule cites is one that exists.
+
+    Advisory, never fatal. A design may be declared before belief.yaml catches up; what must not
+    happen silently is a branch governing a component that no longer exists.
+    """
+    if not decl.components:
+        return []
+    issues: list[Issue] = []
+    known = set(decl.components) | {c for ref in decl.components.values() for c in ref.contracts}
+    for bid, brn in decl.branches.items():
+        if not brn.subject:
+            issues.append(Issue("UNATTACHED_SUBJECT", bid, "branch declares no subject component"))
+        elif brn.subject not in decl.components:
+            if COMPONENT_ID.fullmatch(brn.subject):
+                # It was a component id once. Say so loudly: the design now governs nothing.
+                issues.append(Issue(
+                    "REMOVED_SUBJECT", bid,
+                    f"subject {brn.subject!r} is not declared in belief.yaml any more -- the "
+                    "component was removed or renamed, so this design governs nothing; repoint it, "
+                    "re-declare the component, or prune the branch",
+                ))
+            else:
+                issues.append(Issue(
+                    "UNATTACHED_SUBJECT", bid,
+                    f"subject {brn.subject!r} is prose, not a component id; name the component this "
+                    "design governs, or declare it in belief.yaml (one with no code: is planned)",
+                ))
+        cited = {m for m in _EVIDENCE_ID.findall(brn.derivation_rule or "")}
+        for ref in sorted(cited - known):
+            issues.append(Issue(
+                "UNKNOWN_EVIDENCE", bid,
+                f"derivation_rule cites {ref!r}, which belief.yaml does not declare",
+            ))
+    return issues
 
 
 def _parse(text: str) -> Declarations:

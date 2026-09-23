@@ -64,6 +64,8 @@ components:
       - {id: FM-unreachable, observable: IK solver returns no solution}
       - {id: FM-collision,   observable: planned pose intersects scene mesh}
     remediation: Retune approach-vector sampling; fall back to top-down grasp
+    code: [src/grasp_planner.py, src/grasp/*.py]   # the files this component claims;
+                                                   # none at all means planned, not built
 
 interfaces:
   - id: IFC-perception__grasp
@@ -111,6 +113,12 @@ Validation runs on load, once, and reports to `status`:
 
 - A component missing `testable_capability`, `failure_modes`, or `remediation`
   is `NOT_A_NODE` and is dropped from the graph (1.4).
+- A `code:` entry matching no file in the repository is `MISSING_CODE_PATH`,
+  advisory: the file moved or was pruned, which is worth reporting and is no
+  reason to stop scoring the component. A component with no `code:` at all is
+  *planned* — declared and designed against before it is written. That is what
+  lets consistency-belief tell a design running ahead of its implementation from
+  code whose design was never declared.
 - A contract with empty `evaluable_by`, or naming a test that does not produce
   the metrics its acceptance rule references, is `NOT_EVALUABLE` and accepts no
   evidence (2.6). A contract nobody can measure is not a contract; it's a wish.

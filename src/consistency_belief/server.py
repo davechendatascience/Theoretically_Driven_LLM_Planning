@@ -14,6 +14,7 @@ from .decide import ADOPT, active_policy, evaluate_consistency_policy
 from .graph import ProofNode
 from .model import compute_consistency
 from .probes import STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, parse_probe_result
+from .declarations import COMPONENT_ID
 from .render import basis_line, bullet, envelope
 from .store import VALIDITY, Store
 from .views import (
@@ -24,6 +25,7 @@ from .views import (
     view_axioms,
     view_branches,
     view_contradictions,
+    view_coverage,
     view_cycle,
     view_no_declarations,
     view_obligations,
@@ -68,6 +70,15 @@ if a claim is only true because of something in the source, the graph does not y
 So a claim states what must be true and cites where a measured fact lives; it does not carry the
 number. Numbers written into claims rot: restating a claim invalidates trials that measured
 the old wording, and a figure measured under one configuration is silently wrong under the next.
+
+A branch's `subject` is the join between the two ledgers: it names a component declared in
+belief.yaml, where that component's code paths, contracts and measurements live. status(view=
+"coverage") reads both at git HEAD and sorts every component into governed (code, and a declared
+branch saying why), undeclared design (code with no declared branch -- prune it or declare it),
+planned (a design declared before anything is built, which is allowed) and broken (the subject was
+a component that belief.yaml no longer declares, so the design governs nothing). Design may precede
+implementation; what may not happen silently is a design left behind by a component that was
+removed or renamed.
 """
 
 mcp = FastMCP("consistency-belief", instructions=INSTRUCTIONS)
@@ -86,6 +97,21 @@ def measurement_hint(text: str, where: str) -> str:
     return (f"\nnote: this {where} carries {len(found)} measurements and cites no evidence id. "
             "A trial verifies entailment; measured facts belong in component-belief and are cited "
             "by id, so restating this claim will not silently invalidate them.")
+
+
+def subject_hint(ctx: Any, subject: str) -> str:
+    """A branch governs a component. Advisory, because a design may legitimately precede its
+    component: say where the component is declared and that a planned one carries no code."""
+    decl = ctx.decl
+    if decl.components_source != "git-HEAD" or subject in decl.components:
+        return ""
+    if COMPONENT_ID.fullmatch(subject):
+        return (f"\nnote: belief.yaml at git HEAD declares no component {subject!r} -- it was removed "
+                "or renamed, so this design would govern nothing. Repoint it, or re-declare the "
+                "component there. status(view=\"coverage\") shows both ledgers side by side.")
+    return (f"\nnote: subject {subject!r} is prose, not a component id. Name the component this "
+            "design governs, or declare it in belief.yaml -- a component with no code: is a planned "
+            "one. status(view=\"coverage\") shows both ledgers side by side.")
 
 
 def project_root() -> Path:
@@ -110,6 +136,9 @@ def status(
       axioms         - root axioms, domains, and lists of all downstream dependents
       obligations    - open proof obligations (Lean-style `sorry`s) needing verification
       contradictions - refuted claims, discovered counterexamples, or ungrounded branches
+      coverage       - components (belief.yaml) against the designs declared over them:
+                       governed, undeclared design, planned, and the broken ones whose
+                       component was removed
       audit          - blast radius report for a given subject (nodes invalidated if modified)
       cycle          - full state as structured JSON
     """
@@ -130,6 +159,8 @@ def status(
         return view_obligations(ctx)
     if view == "contradictions":
         return view_contradictions(ctx)
+    if view == "coverage":
+        return view_coverage(ctx)
     if view == "audit":
         return view_audit(ctx, subject)
     if view == "cycle":
@@ -189,6 +220,7 @@ def propose_branch(
     ctx = Context.build(root)
     grounded, ground_issues = ctx.dag.is_grounded(id)
     ground_status = "GROUNDED" if grounded else f"UNGROUNDED ({'; '.join(ground_issues)})"
+    subject_note = subject_hint(ctx, subject)
 
     return envelope(
         f"Branch {id} {'restated' if restating else 'staged'} on subject {subject!r} [{ground_status}].\n"
@@ -197,7 +229,7 @@ def propose_branch(
         + ("Trials of the earlier claim no longer count.\n" if restating else "")
         + f"Staged: verify_step({id!r}) and later proposals can use it now; it supports decide() once "
         f"{id!r} is declared in consistency.yaml at git HEAD."
-        + measurement_hint(claim, "claim"),
+        + measurement_hint(claim, "claim") + subject_note,
         basis_line(ctx.slices)
     )
 
