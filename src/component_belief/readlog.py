@@ -98,11 +98,26 @@ def weave(command: str, hook_dir: Path) -> str:
 _ASSIGNMENT = re.compile(r"PYTHONPATH=(?P<q>['\"]?)(?P<v>[^'\"\s]*)(?P=q)")
 
 
-def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
-    """The distinct project-relative paths the run opened, newest-first by nothing in particular.
+#: Not the project's own files: the interpreter's environment, its caches, and the ledger itself.
+#: A run opens hundreds of these and they say nothing about what the repository needs, so leaving
+#: them in would crowd out the handful of paths the question is actually about.
+ENVIRONMENT = ("__pycache__/", "site-packages/", "dist-packages/", "node_modules/",
+               ".git/", ".belief/", ".stamps/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/")
 
-    Paths under the ledger's own directory are dropped: a run reading its own artifact directory
-    says nothing about what the project needs.
+
+def _is_environment(rel: str) -> bool:
+    head = rel.split("/", 1)[0]
+    if head.startswith((".venv", "venv", "env-")) or head in ("site-packages", "node_modules"):
+        return True
+    return any(part in rel for part in ENVIRONMENT) or rel.endswith("sitecustomize.py")
+
+
+def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
+    """The distinct project-relative paths the run opened, the environment's own files aside.
+
+    A virtualenv's library, the bytecode caches and the ledger's own directory are dropped: the
+    question this answers is which of the project's files a run needed, and an interpreter reading
+    its own standard library is not evidence about that.
     """
     if not log.exists():
         return []
@@ -113,7 +128,7 @@ def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
         if not line.startswith(base):
             continue
         rel = os.path.relpath(line, base)
-        if rel.startswith((".belief/", ".git/")) or rel.endswith("sitecustomize.py"):
+        if _is_environment(rel):
             continue
         seen.setdefault(rel, None)
     return list(seen)[:limit]

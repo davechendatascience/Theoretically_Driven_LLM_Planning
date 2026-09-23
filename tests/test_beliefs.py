@@ -272,3 +272,21 @@ def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
     server.run_test(test_id="TST-grasp-ik")
     reads = readlog.read(Store(repo).artifacts_dir / "RUN-0001")
     assert "lib/data.txt" in reads, reads
+
+
+def test_the_read_log_drops_the_environments_own_files(tmp_path):
+    """A run opens hundreds of library files; they say nothing about what the project needs."""
+    from component_belief import readlog
+
+    log = tmp_path / "reads.log"
+    root = tmp_path / "proj"
+    (root / "lib").mkdir(parents=True)
+    log.write_text("\n".join(str(root / p) for p in (
+        ".venv/lib/python3.12/site-packages/numpy/__init__.py",
+        "__pycache__/x.cpython-312.pyc",
+        ".pytest_cache/v/cache/lastfailed",
+        ".belief/artifacts/RUN-0001/stdout.txt",
+        "lib/data.txt",
+        "tools/run.py",
+    )), encoding="utf-8")
+    assert readlog.harvest(root, log) == ["lib/data.txt", "tools/run.py"]
