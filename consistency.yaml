@@ -158,18 +158,21 @@ definitions:
     meaning: >-
       The directed graph the proof kernel builds afresh on every read, from the
       axioms, definitions, lemmas and branches declared at the head revision and
-      the proposals staged in the ledger. A node is identified by its id. For an
-      id declared at the head revision the declaration is its only candidate for
-      admission, whether or not it can be admitted; a staged proposal is a
-      candidate only for an id not declared there. A build starts from the empty
-      graph and admits nodes one at a time, each at most once, and never removes
-      one. A node is admitted only once every premise it cites is already in the
-      graph, and a build ends only when every candidate left out cites a premise
-      that is not in it. Admitting a node adds it together with an edge from
-      each premise it cites to it; no other step adds a node or an edge. A node
-      depends on another when a path of edges leads from the other to it. Only a
-      citation is an edge: an assumption a derivation relies on without citing
-      it is not in the graph, and a cycle is a cycle among these edges.
+      the proposals staged in the ledger. A node is identified by its id, and an
+      id has at most one staged proposal: the one most recently proposed for it
+      and not withdrawn since. For an id declared at the head revision the
+      declaration is its only candidate for admission, whether or not it can be
+      admitted; for any other id with a staged proposal, that proposal is its
+      only candidate. A node's statement and the premises it cites are its
+      candidate's. A build starts from the empty graph and admits nodes one at a
+      time, each at most once, and never removes one. A node is admitted only
+      once every premise it cites is already in the graph, and a build ends only
+      when every candidate left out cites a premise that is not in it. Admitting
+      a node adds it together with an edge from each premise it cites to it; no
+      other step adds a node or an edge. A node depends on another when a path
+      of edges leads from the other to it. Only a citation is an edge: an
+      assumption a derivation relies on without citing it is not in the graph,
+      and a cycle is a cycle among these edges.
 
   - id: DEF-current-trial
     term: Current trial
@@ -230,10 +233,14 @@ definitions:
   - id: DEF-restatement
     term: Restatement
     meaning: >-
-      A node is restated when its statement or the premises it cites change
-      while it stays declared at the head revision or staged in the ledger. It
-      is removed when it is neither declared at the head revision nor staged
-      in the ledger.
+      A node's statement and the premises it cites are those of its candidate,
+      as DEF-premise-graph defines it. A node is restated when its statement or
+      the premises it cites change while its id stays declared at the head
+      revision or staged in the ledger -- whether its candidate's own content
+      changes, or its candidate becomes another record with different content,
+      as when a declaration appears or disappears beside a staged proposal with
+      the same id. It is removed when its id is neither declared at the head
+      revision nor staged in the ledger.
 
   - id: DEF-report
     term: Report
@@ -358,25 +365,29 @@ branches:
       target's claim does not follow from them.
     premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger, DEF-premise-graph, DEF-restatement]
     derivation_rule: >-
-      By DEF-ledger a trial is an entry in an append-only record, so it is
-      never edited or removed, and by AXM-falsifiable-measurement it is a
-      captured measurement, so a correction is an amendment appended beside it
-      with its reason. By DEF-current-trial whether a trial is current turns on
-      nothing but its validity after amendments, its target's place in the
-      graph, and the fingerprints of its target and of the nodes it depends on;
-      validity changes only by an appended amendment, and a fingerprint only
-      when a statement or the premises cited change, which DEF-restatement
-      calls restating. By DEF-premise-graph the graph is built from the
-      declared and staged nodes and their citations alone, so it changes only
-      when a node is declared, restated or removed. Declaring a new node makes
-      no trial stop being current, since a node in the graph cites only nodes
-      already in it; and by LMA-blast-radius-propagation a restatement or
-      removal of a node r makes a trial stop being current only when its
-      target is r or depends on r in the build before or after the change. A
-      counterexample meeting DEF-counterexample against the target as it now
-      stands is a scenario in which every present premise holds and the
-      present claim fails, so that claim does not follow from those premises.
-      evidence: CTR-trial-ledger-replay
+      By DEF-ledger a trial is an entry in an append-only record, so it is never
+      edited or removed, and by AXM-falsifiable-measurement it is a captured
+      measurement, so a correction is an amendment appended beside it with its
+      reason. By DEF-current-trial whether a trial is current turns on nothing
+      but its validity after amendments, its target's place in the graph, and
+      the fingerprints of its target and of the nodes it depends on; validity
+      changes only by an appended amendment, and a fingerprint only when a
+      statement or the premises cited change, which DEF-restatement calls
+      restating. By DEF-premise-graph the graph is built from the declared and
+      staged nodes and their citations alone, so it changes only when a node is
+      declared, restated or removed. Declaring an id with no staged proposal
+      makes no trial stop being current, since a node in the graph cites only
+      nodes already in it; declaring an id that is staged, or deleting a
+      declaration beside a staged proposal with the same id, changes that node's
+      candidate, which by DEF-restatement restates it when the two differ in
+      statement or cited premises and changes nothing a trial depends on when
+      they do not; and by LMA-blast-radius-propagation a restatement or removal
+      of a node r makes a trial stop being current only when its target is r or
+      depends on r in the build before or after the change. A counterexample
+      meeting DEF-counterexample against the target as it now stands is a
+      scenario in which every present premise holds and the present claim fails,
+      so that claim does not follow from those premises. evidence:
+      CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-declarations-gate
