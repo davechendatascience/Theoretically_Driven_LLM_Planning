@@ -565,9 +565,11 @@ def decide(
 
     # The joint gate reads the component ledger only when a criterion asks for it.
     beliefs = contract_states(root) if any(c.get("evidence") for c in policy.criteria) else None
-    verdict = evaluate_consistency_policy(
-        ctx.dag, policy, ctx.slices,
-        target_id=change_id if ctx.dag.get(change_id) else None, beliefs=beliefs)
+    # A change id that names a declared or staged node is a decision about that node, whether or
+    # not it made it into the graph; any other id is a decision over the whole policy.
+    node_ids = ctx.decl.all_node_ids() | {p["id"] for p in ctx.store.staged_proposals()}
+    target = change_id if (ctx.dag.get(change_id) or change_id in node_ids) else None
+    verdict = evaluate_consistency_policy(ctx.dag, policy, ctx.slices, target_id=target, beliefs=beliefs)
     head = git_head(root)
 
     needs_approval = verdict.status == ADOPT

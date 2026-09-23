@@ -90,3 +90,32 @@ def test_declarations_join_in_dependency_order_not_file_order():
     dag = ProofDAG.from_declarations(decl)
     assert set(dag.nodes) == {"AXM-root", "BRN-parent", "BRN-child"}
     assert dag.ancestors("BRN-child") == {"BRN-parent", "AXM-root"}
+
+
+def test_a_node_citing_itself_is_refused(sample_dag: ProofDAG):
+    """A new node that cites itself cites a node not yet in the graph; a restated node that cites
+    itself would be a self-loop. Both are refused, so no edge is ever a self-loop."""
+    new = sample_dag.add_node(ProofNode("LMA-self", kind="lemma", premises=["AXM-1", "LMA-self"]))
+    assert any("unknown premise 'LMA-self'" in e for e in new)
+    assert "LMA-self" not in sample_dag.nodes
+
+    restated = sample_dag.add_node(ProofNode("LMA-1", kind="lemma", premises=["AXM-1", "LMA-1"]))
+    assert any("cycle" in e for e in restated)
+    assert sample_dag.parents["LMA-1"] == {"AXM-1", "DEF-1"}, "a refused restatement changes nothing"
+
+
+def test_a_node_stays_in_the_graph_only_while_its_premises_do():
+    """Remove a declaration and every node that depends on it stays out of the graph, however
+    deep; a node that does not depend on it is untouched."""
+    from consistency_belief.declarations import Axiom, Branch, Declarations, Lemma
+
+    decl = Declarations()
+    decl.axioms["AXM-kept"] = Axiom(id="AXM-kept", statement="kept", rationale="r")
+    decl.lemmas["LMA-orphan"] = Lemma(id="LMA-orphan", statement="o",
+                                      premises=["AXM-kept", "AXM-removed"], derivation_rule="d")
+    decl.branches["BRN-deep"] = Branch(id="BRN-deep", statement="b", premises=["LMA-orphan"],
+                                       derivation_rule="d", subject="CMP-x")
+    decl.branches["BRN-fine"] = Branch(id="BRN-fine", statement="f", premises=["AXM-kept"],
+                                       derivation_rule="d", subject="CMP-x")
+    dag = ProofDAG.from_declarations(decl)
+    assert set(dag.nodes) == {"AXM-kept", "BRN-fine"}

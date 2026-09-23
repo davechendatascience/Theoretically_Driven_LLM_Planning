@@ -116,6 +116,14 @@ class TestStaleness:
         assert after[0].evidence_ids, "stale evidence is still cited"
         assert (after[0].lo, after[0].hi) == (0.0, 1.0), "nothing is known about the current revision"
 
+    def test_an_uncommitted_edit_to_claimed_code_does_not_stale_it(self, code_repo):
+        """Staleness reads committed history only. An edit in the working tree is not a change
+        to the revision evidence is compared against until someone commits it."""
+        trials = measured_at(code_repo)
+        (code_repo / "grasp.py").write_text("# edited, not committed\n", encoding="utf-8")
+        slices = compute_slices(load(code_repo), trials, staleness=CodeStaleness(code_repo))
+        assert slices[0].state == STATE_SUPPORTED and slices[0].n_stale == 0
+
     def test_a_change_to_unclaimed_code_does_not_stale_it(self, code_repo):
         trials = measured_at(code_repo)
         (code_repo / "other.py").write_text("# unrelated\n", encoding="utf-8")

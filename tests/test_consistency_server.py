@@ -298,6 +298,9 @@ def test_a_gap_with_evidence_leaves_a_claim_unproven_not_refuted(committed_repo:
     contradictions = status("contradictions")
     assert "Entailment Gaps -- unproven, not refuted (1):" in contradictions
     assert "Refuted Claims" not in contradictions
+    obligations = status("obligations")
+    assert "BRN-gpu-throttling [DOUBTED]" in obligations, "a doubted claim is still an open goal"
+    assert "consensus rate" in obligations
     verdict = decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
     assert "MORE_TESTING" in verdict and "REJECT" not in verdict
 
@@ -595,3 +598,31 @@ def test_a_bad_evidence_criterion_is_reported(committed_repo: Path):
         "      - {target: BRN-gpu-throttling, require: proven}",
         "      - {target: BRN-gpu-throttling, require: proven, evidence: green}"), "bad criterion")
     assert any(i.code == "BAD_CRITERION" for i in load(committed_repo).issues)
+
+
+# ---------- a node that left the graph cannot be decided on ----------
+
+def test_a_policy_target_that_left_the_graph_blocks_adoption(committed_repo: Path):
+    """A node stays in the premise graph only while every premise it cites does. Remove a
+    declaration and everything citing it leaves too; a policy that names one of those nodes must
+    not adopt on what is left, because a target with no slice is not a proven one."""
+    for node in ("LMA-compute-cap", "BRN-gpu-throttling"):
+        verify_step(node, trials=[{"strategy": "counterexample", "outcome": "sound", "rationale": "ok"},
+                                  {"strategy": "entailment", "outcome": "sound", "rationale": "ok"}])
+    assert "ADOPT — NOT RECORDED" in decide("CHG-1", policy_id="POL-energy-gate")
+
+    lemma = "lemmas:" + SAMPLE_CONSISTENCY_YAML.split("lemmas:")[1].split("branches:")[0]
+    _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML.replace(lemma, ""), "remove the lemma")
+
+    tree = status("tree")
+    assert "Declared, not admitted" in tree
+    assert "BRN-gpu-throttling: cites LMA-compute-cap" in tree
+
+    verdict = decide("CHG-1", policy_id="POL-energy-gate")
+    assert "ADOPT" not in verdict and "MORE_TESTING" in verdict
+    assert "BRN-gpu-throttling: the policy requires it, and it is not in the proof graph" in verdict
+
+    on_it = decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
+    assert "ADOPT" not in on_it
+    assert "BRN-gpu-throttling is declared but not in the proof graph" in on_it
+    assert on_it.count("not in the proof graph") == 1, "one absence, reported once"

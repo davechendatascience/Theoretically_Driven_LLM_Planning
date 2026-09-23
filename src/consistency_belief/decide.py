@@ -64,11 +64,20 @@ def evaluate_consistency_policy(
     refutations: list[str] = []
     all_trials: list[str] = []
     evidence: list[str] = []
+    absent: set[str] = set()      # named by the decision or the policy, and not in the graph
 
-    # If target_id specified, evaluate target and its full transitive premise chain
+    # If target_id specified, evaluate target and its full transitive premise chain. A target that
+    # is declared or staged and not in the graph failed admission -- a premise it cites is unknown,
+    # removed or on a cycle -- and has no slice, so there is nothing about it to adopt.
     needed_ids: set[str] | None = None
     if target_id:
-        needed_ids = {target_id} | dag.ancestors(target_id)
+        if dag.get(target_id) is None:
+            absent.add(target_id)
+            obligations.append(f"{target_id} is declared but not in the proof graph: a premise it "
+                               "cites is unknown, removed or on a cycle, so there is nothing to decide on")
+            needed_ids = {target_id}
+        else:
+            needed_ids = {target_id} | dag.ancestors(target_id)
         relevant_slices = [s for s in slices if s.target_id in needed_ids]
     else:
         relevant_slices = slices
@@ -85,16 +94,21 @@ def evaluate_consistency_policy(
         elif s.state != PROVEN:
             obligations.append(f"{s.target_id} is {s.state.upper()} ({s.n_independent}/{s.n_min} independent trials)")
 
-    # The joint gate. Only criteria that ask for it, and only for the branches in scope.
     for criterion in policy.criteria:
-        required = criterion.get("evidence")
         branch = criterion.get("target") or criterion.get("branch")
-        if not required or not branch:
+        if not branch or (needed_ids is not None and branch not in needed_ids):
             continue
-        if needed_ids is not None and branch not in needed_ids:
-            continue
+        # Every node the policy names must be in the graph. One that left it has no slice, and a
+        # policy that skipped it would adopt on what is left.
         if dag.get(branch) is None:
-            obligations.append(f"{branch}: not a node in the proof graph")
+            if branch not in absent:
+                absent.add(branch)
+                obligations.append(f"{branch}: the policy requires it, and it is not in the proof "
+                                   "graph (a premise it cites is unknown, removed or on a cycle)")
+            continue
+        # The joint gate, for criteria that ask for it.
+        required = criterion.get("evidence")
+        if not required:
             continue
         cited = cited_contracts(dag, branch)
         if not cited:
@@ -116,6 +130,10 @@ def evaluate_consistency_policy(
             else:
                 obligations.append(f"{branch} rests on {contract}, which is {state} "
                                    f"(policy requires {required})")
+
+    if not relevant_slices and not obligations and not refutations:
+        obligations.append("no lemma or branch is in scope of this decision; adopting on nothing "
+                           "would adopt nothing")
 
     if refutations:
         status = REJECT

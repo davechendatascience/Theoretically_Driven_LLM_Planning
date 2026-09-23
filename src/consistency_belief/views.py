@@ -106,6 +106,16 @@ def view_tree(ctx: Context) -> str:
                       + ", ".join(sorted(withdrawn)))
     if ctx.staged_issues:
         header += ["Staged proposals that do not resolve:", bullet(ctx.staged_issues)]
+    # A declared node that failed admission has no slice, so no other view would show it: it is
+    # neither an obligation a verifier can close nor anything a policy can adopt.
+    unadmitted = sorted(nid for nid in list(ctx.decl.lemmas) + list(ctx.decl.branches)
+                        if nid not in ctx.dag.nodes)
+    if unadmitted:
+        header.append("Declared, not admitted -- a premise each cites is unknown, removed or on a "
+                      "cycle, so it cannot be verified or decided on:")
+        header.append(bullet(
+            f"{nid}: cites {', '.join(p for p in ctx.decl.node(nid).premises if p not in ctx.dag.nodes)}"
+            for nid in unadmitted))
     header.append("")
     tree_text = render_ascii_dag(ctx.dag, ctx.slices)
     return envelope("\n".join(header) + "\n" + tree_text, basis_line(ctx.slices))
@@ -166,7 +176,9 @@ def view_axioms(ctx: Context) -> str:
 
 
 def view_obligations(ctx: Context) -> str:
-    open_obs = [s for s in ctx.slices if s.state in (OBLIGATION, UNGROUNDED, STALE)]
+    # DOUBTED is open too: enough trials, too little consensus. Leaving it out made this list
+    # shorter than the obligation count in its own basis line.
+    open_obs = [s for s in ctx.slices if s.state in (OBLIGATION, UNGROUNDED, STALE, DOUBTED)]
     if not open_obs:
         return envelope("No open proof obligations. All derived branches are verified or axiomatic.", basis_line(ctx.slices))
 
