@@ -253,6 +253,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_declarations.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
 
   - id: TST-consistency-declarations
     layer: component
@@ -260,6 +261,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_declarations.py tests/test_consistency_coverage.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
 
   - id: TST-consistency-graph
     layer: component
@@ -267,6 +269,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_graph.py tests/test_consistency_probes.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
 
   - id: TST-beliefs
     layer: component
@@ -274,6 +277,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_beliefs.py tests/test_gate_and_staleness.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
 
   - id: TST-diagnose
     layer: component
@@ -281,6 +285,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_diagnose_decide.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
 
   - id: TST-server
     layer: e2e
@@ -288,6 +293,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_server.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
     mandatory: true
 
   - id: TST-consistency-server
@@ -296,6 +302,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_server.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
+    reads: [tests/conftest.py]
     mandatory: true
 
 priors: []
