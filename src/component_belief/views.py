@@ -83,13 +83,21 @@ def view_artifacts(ctx: "Context") -> str:
         lines.append("  (none)")
 
     if generated:
-        big = sorted(generated, key=lambda r: -r.stamps[0].get("bytes", 0))[:8]
-        lines += ["", "largest generated artifacts, by newest write:"]
-        for r in big:
-            s = r.stamps[0]
-            lines.append(f"  {r.path}  {s.get('bytes', 0) / 1e9:.2f} GB  newest {s['at']}")
-        lines.append("  (a generated artifact is kept by what reads it, which the ledger only knows "
-                     "if a declared test names it)")
+        by_size = sorted(generated, key=lambda r: -r.stamps[0].get("bytes", 0))
+        verdicts: dict[str, int] = {}
+        for r in generated:
+            verdicts[r.artifact_verdict().split(":")[0]] = verdicts.get(
+                r.artifact_verdict().split(":")[0], 0) + 1
+        lines += ["", "generated artifacts: " + ", ".join(f"{k} {n}" for k, n in sorted(verdicts.items())),
+                  "largest, with what keeps them:"]
+        for r in by_size[:10]:
+            st = r.stamps[0]
+            lines.append(f"  {r.path}  {st.get('bytes', 0) / 1e9:.2f} GB  newest {st['at']}")
+            lines.append(f"      {r.artifact_verdict()}")
+        gb = sum(r.stamps[0].get("bytes", 0) for r in generated
+                 if r.artifact_verdict().startswith("prunable")) / 1e9
+        if gb:
+            lines.append(f"  prunable by the read log: {gb:.2f} GB")
     if not ctx.decl.artifacts:
         lines += ["", "note: belief.yaml declares no `artifacts:` roots, so generated output is "
                   "not stamped. Declare the directories that hold it."]

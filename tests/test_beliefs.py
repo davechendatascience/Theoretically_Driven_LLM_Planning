@@ -207,3 +207,35 @@ def test_artifacts_view_stamps_files_and_finds_the_unclaimed(repo, monkeypatch):
     text = server.status(view="artifacts")
     assert "src/orphan.py" in text.split("prune candidates")[1]
     assert "out/cache.bin" in text
+
+
+def test_the_read_hook_records_what_a_run_opened(repo, monkeypatch):
+    """A run that opens an artifact says so itself, so the artifact's verdict is a fact about
+    what read it rather than a guess from its mtime."""
+    from component_belief import server
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git
+
+    (repo / "out").mkdir(exist_ok=True)
+    (repo / "out" / "big.bin").write_text("data" * 10, encoding="utf-8")
+    (repo / "reader.py").write_text(
+        "from pathlib import Path\n"
+        "print(Path('out/big.bin').read_text())\n"
+        "Path(__import__('os').environ['OUT']).write_text('[{\"metrics\": {\"ik_success\": true}}]')\n",
+        encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        '    run: "echo ok"', '    run: "python reader.py"')
+    (repo / "belief.yaml").write_text(belief + "\nartifacts: [out]\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a test that reads an artifact")
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    server.run_test(test_id="TST-grasp-ik")
+
+    stamps = {s.path: s for s in collect(repo, load(repo), Store(repo))}
+    artifact = stamps["out/big.bin"]
+    assert "opened" in artifact.kinds(), artifact.stamps
+    assert artifact.artifact_verdict().startswith("kept"), artifact.artifact_verdict()
+    assert "reader.py" not in [p for p in stamps if stamps[p].prune_candidate()]

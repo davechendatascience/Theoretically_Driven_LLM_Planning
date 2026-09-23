@@ -115,6 +115,8 @@ class Test:
     layer: str = "component"
     targets: list[str] = field(default_factory=list)
     run: str = ""
+    reads: list[str] = field(default_factory=list)   # inputs a non-Python child opens; the audit
+    #                                                  hook records the rest by itself
     metrics: list[str] = field(default_factory=list)
     capture: list[str] = field(default_factory=list)
     mandatory: bool = False

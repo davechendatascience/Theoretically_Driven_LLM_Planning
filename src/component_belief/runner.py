@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from . import readlog
 from .declarations import Declarations, Test
 from .store import Store, utc_now
 
@@ -86,6 +87,7 @@ def run_test(
     env = dict(os.environ)
     env["OUT"] = str(out_path)
     env["BELIEF_RUN_ID"] = run_id
+    env = readlog.instrument(env, root, artifact_dir / "reads.log")
     command = _substitute_out(test.run, out_path)
 
     try:
@@ -107,6 +109,7 @@ def run_test(
     (artifact_dir / "command.txt").write_text(
         f"{command}\nexit={exit_code}\ntest={test.ref}\nat={utc_now()}\n", encoding="utf-8"
     )
+    readlog.write(artifact_dir, readlog.harvest(root, artifact_dir / "reads.log"))
 
     raw_trials = _parse_result(out_path)
     synthesized = raw_trials is None

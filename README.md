@@ -92,6 +92,7 @@ Evidence-grounded belief state for a system modeled as components and interfaces
 * **Regressions & Bottlenecks**: Surfaces regressions and ranks bottlenecks by decision relevance without blaming unobserved components.
 * **Components Claim Their Code**: `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` at all is *planned*.
 * **Every File Stamped**: `status(view="artifacts")` joins git (added, last changed), the run ledger (which runs invoked it, when), the declarations (what claims or names it) and the filesystem (generated output under the declared `artifacts:` roots). Each stamp carries its source, because "RUN-0140 invoked it at 04:44" is a fact and "its mtime is three weeks old" is a hint. A file nothing claims, nothing has run, and no belief-eligible evidence rests on is a prune candidate — pruning stops being a memory exercise.
+* **Runs Record What They Read**: every `run_test` installs an audit hook through `sitecustomize`, so the run itself reports each file it opened under the project root. A generated artifact then carries a verdict rather than a date: *kept* (live evidence or a declared test reads it), *prunable* (every run that opened it has superseded evidence), or *undecidable* (nothing instrumented ever opened it). Files a non-Python child opens are declared with `reads:` on the test; the hook narrows that gap and the view says which case it is reporting.
 
 ### The Loop
 ```
