@@ -271,7 +271,7 @@ tests:
   - id: TST-beliefs
     layer: component
     targets: [CMP-belief-model]
-    run: python tools/pytest_trials.py $OUT -- tests/test_beliefs.py -q -p no:asyncio
+    run: python tools/pytest_trials.py $OUT -- tests/test_beliefs.py tests/test_gate_and_staleness.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
 
