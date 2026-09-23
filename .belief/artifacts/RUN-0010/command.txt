@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0010/result.json -- tests/test_server.py -q -p no:asyncio
+exit=0
+test=TST-server@c38f683a
+at=2026-09-23T09:39:33+00:00

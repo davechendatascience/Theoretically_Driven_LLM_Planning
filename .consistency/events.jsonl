@@ -1,0 +1,2 @@
+{"actor": "agent", "payload": {"approver": null, "change_id": "CHG-se-framework", "head": "81c35fb", "status": "more_testing"}, "session": "", "timestamp": "2026-09-23T09:38:28+00:00", "tool": "decide"}
+{"actor": "agent", "payload": {"approver": null, "change_id": "CHG-se-framework", "head": "81c35fb", "status": "more_testing"}, "session": "", "timestamp": "2026-09-23T09:39:35+00:00", "tool": "decide"}

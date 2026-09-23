@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0007/result.json -- tests/test_consistency_graph.py tests/test_consistency_probes.py -q -p no:asyncio
+exit=0
+test=TST-consistency-graph@28d1abc0
+at=2026-09-23T09:39:30+00:00

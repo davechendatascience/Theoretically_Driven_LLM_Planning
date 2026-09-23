@@ -1,0 +1,9 @@
+[
+ ".consistency",
+ "artifacts",
+ "pyproject.toml",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "test_note_channel_is_asserted_0",
+ "test_store_ledger_immutability0",
+ "tools/pytest_trials.py"
+]

@@ -1,0 +1,256 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_unobserved_component_with_no_test_limits_coverage"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_refuted_slice_is_a_confirmed_failure"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_upstream_of_a_failure_is_suspected_not_ignored"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_e2e_failure_alone_does_not_attribute_to_components"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestSingleFailureIsNotAConfirmedFailure::test_supported_slice_with_one_fail_is_ok_in_aggregate"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestSingleFailureIsNotAConfirmedFailure::test_diagnosing_a_specific_run_still_attributes_its_failure"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestSingleFailureIsNotAConfirmedFailure::test_zero_tolerance_contract_is_confirmed_by_one_fail"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDiscriminatingTestDoesNotLoop::test_an_unrun_test_that_splits_the_tie_is_recommended"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDiscriminatingTestDoesNotLoop::test_the_same_test_is_not_recommended_once_its_evidence_is_in"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDiscriminatingTestDoesNotLoop::test_confirmed_leaders_are_not_ambiguous"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDiscriminatingTestDoesNotLoop::test_a_test_already_run_is_not_recommended_again"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDiscriminatingTestDoesNotLoop::test_a_confirmed_leader_needs_investigation_not_separation"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDecisionRelevance::test_wide_interval_that_changes_the_decision_is_relevant"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDecisionRelevance::test_tight_interval_that_does_not_is_irrelevant"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestDecisionRelevance::test_settled_failure_is_also_irrelevant"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPolicy::test_adopt_when_supported"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPolicy::test_reject_when_refuted_everywhere"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPolicy::test_insufficient_cannot_satisfy_an_adopt_criterion"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPolicy::test_buckets_that_disagree_return_an_envelope_not_an_average"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPolicy::test_verdict_carries_its_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPlanning::test_redundant_test_skipped_with_a_reason"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPlanning::test_uncertain_test_is_selected"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPlanning::test_every_skipped_test_is_listed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPlanning::test_mandatory_gate_runs_regardless_of_information_gain"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide.TestPlanning::test_budget_exhaustion_is_reported_not_silent"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_contract_gated_only_by_safety_gates_is_decision_relevant"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_contested_is_more_testing_not_reject"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_diagnose_decide::test_unproven_safety_gate_is_more_testing_refuted_gate_is_reject"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
