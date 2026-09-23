@@ -1,0 +1,391 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_asserted_evidence_can_never_move_a_posterior"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_note_channel_creates_no_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_insufficient_evidence_is_a_state_not_a_low_number"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_supported_and_refuted"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_incompatible_evidence_is_never_pooled"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_declared_buckets_partition_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_unmatched_conditions_land_unbucketed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_invalid_trials_are_excluded_but_retained"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_missing_metrics_excluded_not_scored_off_exit_code"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_set_hash_is_stable_and_order_independent"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_set_hash_changes_when_the_evidence_set_changes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_regression_only_across_compatible_slices"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_hardware_swap_reports_not_comparable_not_no_regression"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_amendment_folds_over_the_original"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_prior_is_named_in_the_slice"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_artifacts_view_stamps_files_and_finds_the_unclaimed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_the_read_hook_records_what_a_run_opened"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_the_hook_survives_a_command_that_sets_pythonpath"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_the_read_log_drops_the_environments_own_files"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_evidence_citations_keep_an_artifact_and_flag_the_missing"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_a_settings_string_is_not_a_filename_and_a_symlink_answers_for_its_target"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_amend_reclassifies_many_in_one_pass"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_an_ingested_artifact_uri_is_a_claim_on_the_file"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_every_file_and_folder_carries_a_stamp"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_beliefs::test_the_artifacts_view_writes_the_verdicts_to_a_file"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestGate::test_one_fully_passing_run_supports_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestGate::test_one_failing_case_refutes_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestGate::test_it_reads_its_latest_run_only"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestGate::test_it_adopts_without_reruns_and_stops_being_decision_relevant"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestGate::test_a_bad_kind_is_reported"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_evidence_measured_before_a_claimed_file_changed_is_stale"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_an_uncommitted_edit_to_claimed_code_does_not_stale_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_a_change_to_unclaimed_code_does_not_stale_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_new_evidence_counts_and_old_is_set_aside"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_an_unknown_revision_is_stale_and_a_missing_one_is_unknown"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_a_component_claiming_no_code_never_goes_stale"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_stale_evidence_cannot_satisfy_an_adopt_criterion"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_diagnose_names_the_rerun"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestStaleness::test_the_plan_reschedules_the_test"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestServerSurface::test_belief_view_prints_the_stale_line_and_the_rerun"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestServerSurface::test_gate_line_names_the_run"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestServerSurface::test_a_run_records_whether_the_tree_was_dirty"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_gate_and_staleness.TestServerSurface::test_decide_records_the_revision"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
