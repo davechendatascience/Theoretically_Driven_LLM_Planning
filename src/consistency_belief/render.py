@@ -55,7 +55,8 @@ def _state_badge(s: ConsistencySlice) -> str:
     if s.state == REFUTED:
         return "[REFUTED]"
     if s.state == OBLIGATION:
-        return f"[OBLIGATION {s.n_trials}/{s.n_min}]"
+        # progress toward closing it: independent trials, not raw ones
+        return f"[OBLIGATION {s.n_independent}/{s.n_min}]"
     if s.state == STALE:
         return "[STALE]"
     if s.state == UNGROUNDED:

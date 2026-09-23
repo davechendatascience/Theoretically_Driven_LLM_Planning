@@ -21,11 +21,31 @@ from .ids import content_hash
 SOURCE_CITATION = re.compile(
     r"\b[\w./-]+\.(?:py|pyx|cpp|cc|c|h|hpp|rs|go|ts|tsx|js|java)\b(?::\d+(?:-\d+)?)?")
 
+#: An identifier out of the implementation: a CamelCase class, a call, a dotted attribute. A claim
+#: built around one describes what the code does, which is exactly what a verifier must not be
+#: asked to judge (rule 3), and the file check above misses it because no file is named.
+CODE_IDENTIFIER = re.compile(
+    r"\b[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+\b"            # ProofDAG, ProofNode
+    r"|\b[A-Za-z_][A-Za-z0-9_]*\(\)"                        # append_event()
+    r"|\b[A-Za-z_][A-Za-z0-9_]+\.[a-z_][a-z0-9_]+\b")       # store.append_event, Store.withdrawn
+_DATA_FILE = re.compile(r"\.(?:yaml|yml|json|jsonl|md|txt|csv|log|html)$")
+
 
 def source_citations(text: str) -> list[str]:
     """Source files a piece of prose names, in order, without duplicates."""
     seen: dict[str, None] = {}
     for m in SOURCE_CITATION.findall(text or ""):
+        seen.setdefault(m, None)
+    return list(seen)
+
+
+def code_identifiers(text: str) -> list[str]:
+    """Implementation identifiers a piece of prose names: classes, calls, dotted attributes.
+    Data files (belief.yaml, a .json artifact) are declarations or evidence, not code."""
+    seen: dict[str, None] = {}
+    for m in CODE_IDENTIFIER.findall(text or ""):
+        if _DATA_FILE.search(m):
+            continue
         seen.setdefault(m, None)
     return list(seen)
 
@@ -41,20 +61,71 @@ STRATEGIES = (
     STRATEGY_CONTRADICTION,
 )
 
+#: The three probes one verification pass runs. Each is a different attack on the same step, so
+#: together they are what "independent trials" means for one actor.
+PROBE_STRATEGIES = (STRATEGY_COUNTEREXAMPLE, STRATEGY_ENTAILMENT, STRATEGY_NEGATION)
 
-def build_probe_prompt(dag: ProofDAG, target_id: str, strategy: str = STRATEGY_COUNTEREXAMPLE) -> dict[str, str]:
-    node = dag.get(target_id)
-    if not node:
-        raise ValueError(f"unknown node {target_id!r}")
 
+def premises_block(dag: ProofDAG, node: Any) -> str:
+    """Each direct premise with its statement -- what a step is judged from, and all of it."""
     premises_text = []
     for pid in sorted(node.premises):
         pnode = dag.get(pid)
         p_stmt = pnode.statement if pnode else "(unknown)"
         p_kind = pnode.kind if pnode else "unknown"
         premises_text.append(f"- [{p_kind.upper()} {pid}]: {p_stmt}")
+    return "\n".join(premises_text) or "(No premises declared — root or isolated node)"
 
-    premises_block = "\n".join(premises_text) or "(No premises declared — root or isolated node)"
+
+def probe_text(dag: ProofDAG, target_id: str, status: str = "") -> str:
+    """Everything a verifier needs for one node, and nothing else: the premises with their
+    statements, the claim, the derivation rule, the three strategies, and the one call that
+    records them. Served by status(view="probe") so the verifier assembles nothing by hand and
+    has no reason to open a file."""
+    node = dag.get(target_id)
+    if not node:
+        raise ValueError(f"unknown node {target_id!r}")
+    head = f"PROBE {target_id} [{node.kind.upper()}]" + (f" {status}" if status else "")
+    lines = [
+        head,
+        "Judge from the premises alone: no source files, no runs, no benchmarks. A clause you "
+        "cannot judge without the code is a gap -- name the premise the claim would need.",
+        "",
+        "PREMISES:",
+        premises_block(dag, node),
+        "",
+        f"DERIVED CLAIM [{target_id}]:",
+        node.statement,
+        "",
+        "DERIVATION RULE:",
+        node.derivation_rule or "direct deduction",
+        "",
+        "STRATEGIES (one trial each; the same strategy repeated by the same actor adds nothing):",
+        "  counterexample  a realizable scenario where every premise holds and the claim fails"
+        " -> falsified (with the scenario), else sound",
+        "  entailment      the claim follows with no unstated assumption -> sound, else gap"
+        " (name the assumption)",
+        "  negation        NOT(claim) is not also derivable from the same premises -> sound,"
+        " else inconclusive",
+        "",
+        "RECORD, one call:",
+        f'  verify_step("{target_id}", trials=[',
+        '    {"strategy": "counterexample", "outcome": "sound" | "falsified", '
+        '"rationale": "the attack, and why it failed or succeeded", '
+        '"counterexample": null | "the scenario"},',
+        '    {"strategy": "entailment", "outcome": "sound" | "gap", "rationale": "...", '
+        '"counterexample": null | "the unstated assumption"},',
+        '    {"strategy": "negation", "outcome": "sound" | "inconclusive", "rationale": "..."}])',
+    ]
+    return "\n".join(lines)
+
+
+def build_probe_prompt(dag: ProofDAG, target_id: str, strategy: str = STRATEGY_COUNTEREXAMPLE) -> dict[str, str]:
+    node = dag.get(target_id)
+    if not node:
+        raise ValueError(f"unknown node {target_id!r}")
+
+    premises_block_text = premises_block(dag, node)
 
     if strategy == STRATEGY_COUNTEREXAMPLE:
         system = (
@@ -63,7 +134,7 @@ def build_probe_prompt(dag: ProofDAG, target_id: str, strategy: str = STRATEGY_C
             "but the derived claim fails. If no counterexample is logically possible, certify it as sound."
         )
         task = (
-            f"PREMISES:\n{premises_block}\n\n"
+            f"PREMISES:\n{premises_block_text}\n\n"
             f"DERIVED CLAIM [{target_id}]:\n{node.statement}\n\n"
             f"RATIONALE / DERIVATION RULE:\n{node.derivation_rule or 'direct deduction'}\n\n"
             "Respond with a JSON object:\n"
@@ -79,7 +150,7 @@ def build_probe_prompt(dag: ProofDAG, target_id: str, strategy: str = STRATEGY_C
             "from the premises without introducing unstated assumptions or logical leaps."
         )
         task = (
-            f"PREMISES:\n{premises_block}\n\n"
+            f"PREMISES:\n{premises_block_text}\n\n"
             f"DERIVED CLAIM [{target_id}]:\n{node.statement}\n\n"
             f"RATIONALE / DERIVATION RULE:\n{node.derivation_rule or 'direct deduction'}\n\n"
             "Respond with a JSON object:\n"
@@ -95,7 +166,7 @@ def build_probe_prompt(dag: ProofDAG, target_id: str, strategy: str = STRATEGY_C
             "could also be deduced or supported by the premises."
         )
         task = (
-            f"PREMISES:\n{premises_block}\n\n"
+            f"PREMISES:\n{premises_block_text}\n\n"
             f"ORIGINAL CLAIM [{target_id}]:\n{node.statement}\n\n"
             f"NEGATED CLAIM:\nNOT ({node.statement})\n\n"
             "Respond with a JSON object:\n"

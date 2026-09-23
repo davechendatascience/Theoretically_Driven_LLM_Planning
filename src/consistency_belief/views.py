@@ -10,11 +10,16 @@ from typing import Any
 
 from .declarations import COMPONENT_ID, Declarations, contract_beliefs, load as load_declarations
 from .graph import ProofDAG, ProofNode
-from .model import PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice, compute_consistency
+from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
+                    compute_consistency)
+from .probes import probe_text
 from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
 from .store import Store
 
-VIEWS = ("tree", "branches", "axioms", "obligations", "contradictions", "coverage", "audit", "cycle")
+VIEWS = ("tree", "branches", "axioms", "obligations", "probe", "contradictions", "coverage", "audit", "cycle")
+
+#: States a verifier can still act on: the probe view serves these.
+OPEN_STATES = (OBLIGATION, STALE, DOUBTED)
 
 
 @dataclass
@@ -127,7 +132,11 @@ def view_branches(ctx: Context, subject: str | None = None) -> str:
             lines.append(f"  entailment gaps: {'; '.join(s.gaps)}")
         if s.issues:
             lines.append(f"  issues: {'; '.join(s.issues)}")
-        lines.append(f"  verification trials: {s.n_passed}/{s.n_trials} passed (n_min={s.n_min}, set={s.set_handle})")
+        lines.append(f"  verification trials: {s.n_passed}/{s.n_trials} passed, "
+                     f"{s.n_independent}/{s.n_min} independent (n_min={s.n_min}, set={s.set_handle})")
+        if s.strategies_tried:
+            lines.append(f"  strategies: {', '.join(s.strategies_tried)}"
+                         + (f"; untried: {', '.join(s.untried)}" if s.untried else ""))
         if s.n_superseded or s.n_stale:
             lines.append(f"  not counted: {s.n_superseded} verified an earlier statement, "
                          f"{s.n_stale} predate a restated premise")
@@ -165,11 +174,53 @@ def view_obligations(ctx: Context) -> str:
     for s in open_obs:
         lines.append(f"• {s.target_id} [{s.state.upper()}{' · STAGED' if s.staged else ''}]: {s.statement}")
         lines.append(f"    premises: {', '.join(s.premises) or '(none)'}")
-        lines.append(f"    progress: {s.n_trials}/{s.n_min} trials (need {max(0, s.n_min - s.n_trials)} more)")
+        need = max(0, s.n_min - s.n_independent)
+        lines.append(f"    progress: {s.n_independent}/{s.n_min} independent trials (need {need} more"
+                     + (f"; untried: {', '.join(s.untried)}" if s.untried and need else "") + ")")
         if s.issues:
             lines.append(f"    blocker: {'; '.join(s.issues)}")
         lines.append("")
+    lines.append('probe: status(view="probe") serves each obligation with its premises in full; '
+                 'status(view="probe", subject=<id>) serves one.')
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
+def view_probe(ctx: Context, subject: str | None = None) -> str:
+    """What a verifier reads, and all it reads: for each open obligation (or the one named), the
+    claim, its premises with their statements, the derivation rule, the three strategies, and
+    the one verify_step call that records them. Nothing here comes from the implementation."""
+    slices = {s.target_id: s for s in ctx.slices}
+    if subject:
+        if subject in ctx.decl.components:
+            targets = sorted(nid for nid, n in ctx.dag.nodes.items()
+                             if n.kind == "branch" and n.subject == subject)
+            if not targets:
+                return f"{subject} has no branch to probe; status(view=\"coverage\") says what governs it."
+        elif ctx.dag.get(subject) is None:
+            return f"unknown node {subject!r}"
+        elif ctx.dag.get(subject).kind in ("axiom", "definition"):
+            return f"{subject} is a root: it is declared, not verified. Probe a lemma or branch."
+        else:
+            targets = [subject]
+    else:
+        targets = [s.target_id for s in ctx.slices if s.state in OPEN_STATES]
+        if not targets:
+            return envelope("Nothing to probe: no lemma or branch is open. status(view=\"tree\") "
+                            "shows what is proven and what is refuted.", basis_line(ctx.slices))
+
+    blocks = []
+    for target in targets:
+        s = slices.get(target)
+        status = slice_badge(s) if s else ""
+        if s and s.state not in OPEN_STATES:
+            status += (" -- already proven; a new pass re-verifies it" if s.state == PROVEN else
+                       " -- refuted; amend the trial or restate the claim before re-probing" if s.state == REFUTED
+                       else " -- ungrounded; its premises must be declared first")
+        elif s and s.untried:
+            status += f" untried: {', '.join(s.untried)}"
+        blocks.append(probe_text(ctx.dag, target, status))
+    header = f"{len(targets)} probe(s). Judge each from its premises alone; record one verify_step per node."
+    return envelope(header + "\n\n" + "\n\n".join(blocks), basis_line([slices[t] for t in targets if t in slices]))
 
 
 def view_contradictions(ctx: Context) -> str:
@@ -294,7 +345,9 @@ def view_coverage(ctx: Context) -> str:
                    undeclared, show_code=True)
     lines += block("planned -- design declared, nothing implemented yet", planned, show_code=False)
     if bare:
-        lines += [f"no design, no code ({len(bare)}):", "  " + ", ".join(bare), ""]
+        lines += [f"no design, no code claimed ({len(bare)}):", "  " + ", ".join(bare),
+                  "  -- either planned (allowed) or built and unclaimed: a component whose code exists "
+                  "claims it with code: in belief.yaml, and a design over it belongs here", ""]
     def subject_block(title: str, ids: list[str]) -> list[str]:
         if not ids:
             return []

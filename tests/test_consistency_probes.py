@@ -118,11 +118,20 @@ def test_model_state_transitions(mini_dag: ProofDAG):
     assert slices[0].state == OBLIGATION
     assert slices[0].n_trials == 1
 
-    # 2 trials -> PROVEN
+    # a second trial of the same strategy by the same actor is recorded, not progress (rule 4.3:
+    # independent trials) -- still OBLIGATION, 2 trials, 1 independent
     trials.append({"id": "TRL-2", "target_id": "LMA-1", "outcome": "sound", "passed": True, "validity": "valid"})
     slices = compute_consistency(mini_dag, trials, targets=["LMA-1"])
+    assert slices[0].state == OBLIGATION
+    assert slices[0].n_trials == 2 and slices[0].n_independent == 1
+    assert slices[0].untried == ["entailment", "negation"]
+
+    # a different strategy -> PROVEN
+    trials.append({"id": "TRL-2b", "target_id": "LMA-1", "strategy": "entailment",
+                   "outcome": "sound", "passed": True, "validity": "valid"})
+    slices = compute_consistency(mini_dag, trials, targets=["LMA-1"])
     assert slices[0].state == PROVEN
-    assert slices[0].n_trials == 2
+    assert slices[0].n_trials == 3 and slices[0].n_independent == 2
 
     # Counterexample trial -> REFUTED
     trials.append({"id": "TRL-3", "target_id": "LMA-1", "outcome": "falsified", "passed": False, "counterexample": "Buffer overflow", "validity": "valid"})

@@ -15,6 +15,8 @@
 1. An LLM agent has no direct write-path to mark a branch as proven or consistent. There is no `set_consistency` tool.
 2. Consistency is measured via structured, falsifiable verification trials (adversarial counterexample search, entailment gap detection, and negation symmetry checks).
 3. The prompt, model metadata, temperature, and raw probe responses are captured, hashed, and committed to an immutable append-only ledger (`.consistency/evidence.jsonl`).
+4. A trial verifies entailment from the declarations alone. The verifier's whole input is served by `status(view="probe")` -- the premises with their statements, the claim, the derivation rule -- and nothing from the implementation. A clause that cannot be judged without the code is a gap naming the missing premise; a falsification argued from a source file is refused.
+5. Independence is counted, not assumed: `n_min` counts distinct (strategy, actor) pairs. A pass is one `verify_step` call carrying the three strategies; the same strategy repeated by the same actor is recorded and counts toward consensus, not toward `n_min`.
 
 ## 4. Distinguish Proven, Refuted, and Open Obligations
 1. An unverified or under-tested branch is an open proof obligation (`OBLIGATION`, analogous to Lean's `sorry`).
@@ -38,6 +40,8 @@
 1. Probes measure semantic properties of a single derivation step; the Proof DAG tracks global deductive consistency; policies govern release and adoption.
 2. Acceptance policies explicitly declare required verification thresholds and safety criteria.
 3. Adoption of a design branch requires an explicit human approver; an agent cannot approve its own design.
+4. A policy criterion may carry `evidence: <state>`: the contracts the branch cites in its derivation rule must be in that state in component-belief. A design proven over a refuted measurement is proven of nothing; one proven over no measurement is argued, not built.
+5. Every decision records the git revision it was taken at, and every `audit_change` is recorded as an event, so impact analysis, approval and re-verification form one chain in the ledger.
 
 ## 8. Expose Clear, Inspectable Status Views
 1. Provide an ASCII proof tree (`status(view="tree")`) visualizing the path from root axioms down to terminal branches with verification badges.

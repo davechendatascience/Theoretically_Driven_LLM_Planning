@@ -21,6 +21,9 @@ DOUBTED = "doubted"
 
 STATES = (PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, DOUBTED)
 
+#: The probes one verification pass runs; listed here so an obligation can say which are untried.
+PASS_STRATEGIES = ("counterexample", "entailment", "negation")
+
 
 @dataclass
 class ConsistencySlice:
@@ -43,10 +46,32 @@ class ConsistencySlice:
     staged: bool = False            # proposed, not declared at git HEAD: cannot support decide()
     n_superseded: int = 0           # trials that verified an earlier statement of this node
     n_stale: int = 0                # trials recorded before a premise upstream was restated
+    n_independent: int = 0          # distinct (strategy, actor) pairs among the counted trials
+    strategies_tried: list[str] = field(default_factory=list)
 
     @property
     def is_sound(self) -> bool:
         return self.state == PROVEN
+
+    @property
+    def untried(self) -> list[str]:
+        return [s for s in PASS_STRATEGIES if s not in self.strategies_tried]
+
+
+def _actor_of(trial: dict[str, Any]) -> str:
+    return str(trial.get("actor") or (trial.get("repro") or {}).get("actor") or "")
+
+
+def independent_trials(trials: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    """How many of these trials are independent, and which strategies they used.
+
+    Rule 4.3 asks for n_min *independent* trials. Three counterexample probes from one actor are
+    one probe run three times, so independence is counted as distinct (strategy, actor) pairs:
+    a different attack on the same step, or the same attack by a different prober, adds to n;
+    a repeat by the same actor is recorded and counts toward consensus, but not toward n.
+    """
+    pairs = {(str(t.get("strategy") or "counterexample"), _actor_of(t)) for t in trials}
+    return len(pairs), sorted({strategy for strategy, _ in pairs})
 
 
 def compute_consistency(
@@ -87,6 +112,8 @@ def compute_consistency(
         n_trials = len(target_trials)
         n_passed = sum(1 for t in target_trials if t.get("passed", False))
         consensus_rate = (n_passed / n_trials) if n_trials > 0 else 0.0
+        n_independent, strategies = independent_trials(target_trials)
+        untried = [s for s in PASS_STRATEGIES if s not in strategies]
 
         n_min = int(node.metadata.get("n_min", 3))
         min_consensus = float(node.metadata.get("min_consensus", 0.8))
@@ -108,6 +135,13 @@ def compute_consistency(
         trial_ids = sorted(t["id"] for t in target_trials if "id" in t)
         handle = set_hash(trial_ids)
 
+        def shortfall() -> str:
+            hint = f"; untried: {', '.join(untried)}" if untried else ""
+            repeats = n_trials - n_independent
+            repeat_note = (f"; {repeats} repeat(s) of a strategy by the same actor do not add"
+                           if repeats else "")
+            return f"{n_independent}/{n_min} independent{hint}{repeat_note}"
+
         # Determine state
         if not grounded:
             state = UNGROUNDED
@@ -118,13 +152,13 @@ def compute_consistency(
         elif counterexamples:
             state = REFUTED
             issues = [f"falsified by counterexample: {counterexamples[0]}"]
-        elif stale_trials and n_trials < n_min:
+        elif stale_trials and n_independent < n_min:
             state = STALE
             issues = [f"{len(stale_trials)} trial(s) verified it before {', '.join(restated)} was restated; "
-                      f"re-verify ({n_trials}/{n_min} under the current premises)"]
-        elif n_trials < n_min:
+                      f"re-verify ({shortfall()} under the current premises)"]
+        elif n_independent < n_min:
             state = OBLIGATION
-            issues = [f"insufficient verification trials: {n_trials}/{n_min} completed"]
+            issues = [f"insufficient verification trials: {shortfall()}"]
             if n_superseded:
                 issues.append(f"{n_superseded} earlier trial(s) verified a previous statement and no longer count")
         elif consensus_rate < min_consensus:
@@ -156,6 +190,8 @@ def compute_consistency(
             staged=node.staged,
             n_superseded=n_superseded,
             n_stale=len(stale_trials),
+            n_independent=n_independent,
+            strategies_tried=strategies,
         ))
 
     return slices

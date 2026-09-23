@@ -13,8 +13,9 @@ from mcp.server.fastmcp import FastMCP
 from .decide import ADOPT, active_policy, evaluate_consistency_policy
 from .graph import ProofNode
 from .model import compute_consistency
-from .probes import source_citations, STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, parse_probe_result
-from .declarations import COMPONENT_ID
+from .probes import (STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, code_identifiers,
+                     parse_probe_result, source_citations)
+from .declarations import COMPONENT_ID, contract_states, git_head
 from .render import basis_line, bullet, envelope
 from .store import VALIDITY, Store
 from .views import (
@@ -29,6 +30,7 @@ from .views import (
     view_cycle,
     view_no_declarations,
     view_obligations,
+    view_probe,
     view_tree,
 )
 
@@ -38,7 +40,13 @@ Deductive, axiom-to-branch design consistency for LLM planning and architectures
 Axioms, definitions, and policies live in a checked-in consistency.yaml and load
 from git HEAD, not the working tree — editing that file changes nothing until a human commits it.
 
-The loop: status(view="obligations") -> verify_step(...) -> status(view="tree").
+The loop: status(view="probe") -> verify_step(target, trials=[...]) -> status(view="tree").
+
+status(view="probe") serves every open obligation with its premises in full -- the claim, each
+premise's statement, the derivation rule, the three strategies -- so a verifier reads that and
+nothing else. One verify_step call records one pass: a counterexample search, an entailment
+check and a negation check. Independence is counted as distinct (strategy, actor) pairs; the
+same strategy repeated by the same actor is recorded but does not bring an obligation closer.
 
 Only a falsified probe refutes; a gap leaves a claim unproven (DOUBTED) and is listed as an
 entailment gap. amend() reclassifies a mis-recorded trial without editing it.
@@ -140,6 +148,10 @@ def status(
       branches       - detailed status per branch: claim, premises, axiomatic roots, trial counts
       axioms         - root axioms, domains, and lists of all downstream dependents
       obligations    - open proof obligations (Lean-style `sorry`s) needing verification
+      probe          - what a verifier reads: each open obligation (or subject=<node id>, or a
+                       CMP- id for its branches) with its premises' statements, the claim, the
+                       derivation rule, the three strategies and the verify_step call to record
+                       them; nothing from the implementation
       contradictions - refuted claims, discovered counterexamples, or ungrounded branches
       coverage       - components (belief.yaml) against the designs declared over them:
                        governed, undeclared design, planned, and the broken ones whose
@@ -164,6 +176,8 @@ def status(
         return view_axioms(ctx)
     if view == "obligations":
         return view_obligations(ctx)
+    if view == "probe":
+        return view_probe(ctx, subject)
     if view == "contradictions":
         return view_contradictions(ctx)
     if view == "coverage":
@@ -194,12 +208,12 @@ def propose_branch(
     once the same id is declared in consistency.yaml at git HEAD. Proposing an id
     that is already staged restates it; trials of the earlier claim stop counting.
     """
-    cited = source_citations(f"{claim} {rationale}")
+    cited = source_citations(f"{claim} {rationale}") + code_identifiers(f"{claim} {rationale}")
     warning = ""
     if cited:
         warning = (
             f"\nwarning: this claim names {', '.join(cited[:4])}. A branch that describes what a "
-            "function returns can be falsified by reading that function, which is not what a "
+            "function or class does can be falsified by reading it, which is not what a "
             "verifier does and not what the claim is for. State what must hold of any "
             "implementation, and leave the file to the contract that measures it."
         )
@@ -292,6 +306,26 @@ def withdraw(id: str, reason: str) -> str:
     return envelope("\n".join(lines), basis_line(ctx.slices))
 
 
+def _refuse_source_falsification(ctx: Any, cited: list[str], index: int | None) -> str:
+    """The refusal for a falsification argued from the code, with this ledger's own count of
+    how often that has already happened -- a number read from the amendments, not asserted."""
+    amended = sum(1 for t in ctx.store.effective_trials()
+                  if t.get("outcome") == "falsified" and t.get("validity") != "valid")
+    where = f"trial {index} of this call" if index is not None else "this falsification"
+    tail = (f" {amended} falsification(s) in this ledger were recorded this way and had to be amended."
+            if amended else "")
+    return (
+        f"refused: {where} argues from the implementation, naming {', '.join(cited[:4])}. "
+        "A trial verifies entailment from the declarations alone -- the axioms, definitions and "
+        "premises the claim cites -- and its counterexamples are constructed, not read off the "
+        "code. A clause you cannot judge without opening a file is itself the finding: record it "
+        "as outcome='gap' naming the fact the claim assumes and does not cite. If the "
+        "declarations are right and the code does not match them, that is implementation "
+        "fidelity, which belongs in component-belief as a contract and a test, cited here by id. "
+        "Nothing was recorded." + tail
+    )
+
+
 @mcp.tool()
 def verify_step(
     target_id: str,
@@ -300,8 +334,9 @@ def verify_step(
     rationale: str = "",
     counterexample: str | None = None,
     repro: dict[str, Any] | None = None,
+    trials: list[dict[str, Any]] | None = None,
 ) -> str:
-    """Record an LLM verification probe trial against a branch or lemma.
+    """Record LLM verification probe trials against a branch or lemma.
 
     This is how consistency is measured: via falsifiable adversarial trials
     (counterexample search, entailment gap detection, or negation symmetry).
@@ -312,7 +347,13 @@ def verify_step(
     reading the code is a gap: the claim assumes a fact it does not cite. Implementation fidelity
     is the implementer's duty and belongs in component-belief, cited here by id.
 
+    One verification pass is one call: `trials` carries the counterexample, entailment and
+    negation probes together. Independence is counted as distinct (strategy, actor) pairs, so
+    three probes of one strategy are one probe repeated -- recorded, not progress.
+
     target_id:      the lemma or branch being verified.
+    trials:         several probes in one call, each {"strategy", "outcome", "rationale",
+                    "counterexample"?}; when given, the single-trial fields below are ignored.
     strategy:       "counterexample" | "entailment" | "negation" | "contradiction".
     outcome:        "sound" | "falsified" | "gap" | "inconclusive".
     counterexample: concrete counter-scenario if falsified, otherwise null.
@@ -324,74 +365,81 @@ def verify_step(
     if not node:
         return f"unknown target {target_id!r}"
 
-    if strategy not in STRATEGIES:
-        return f"unknown strategy {strategy!r}; expected one of {', '.join(STRATEGIES)}"
+    batch = [dict(t) for t in trials] if trials else [{
+        "strategy": strategy, "outcome": outcome, "rationale": rationale, "counterexample": counterexample,
+    }]
+    if not batch:
+        return "no trials given"
+    for i, t in enumerate(batch):
+        t["strategy"] = str(t.get("strategy") or STRATEGY_COUNTEREXAMPLE)
+        t["outcome"] = str(t.get("outcome") or "sound").lower()
+        if t["strategy"] not in STRATEGIES:
+            where = f" in trial {i}" if trials else ""
+            return f"unknown strategy {t['strategy']!r}{where}; expected one of {', '.join(STRATEGIES)}"
+    # Refuse the whole call before recording anything: a batch is one pass, and one trial argued
+    # from the code is one trial too many.
+    for i, t in enumerate(batch):
+        cited = source_citations(f"{t.get('counterexample') or ''} {t.get('rationale') or ''}")
+        if cited and t["outcome"] == "falsified":
+            return _refuse_source_falsification(ctx, cited, i if trials else None)
 
-    cited = source_citations(f"{counterexample or ''} {rationale}")
-    if cited and outcome == "falsified":
-        return (
-            f"refused: this falsification argues from the implementation, naming {', '.join(cited[:4])}. "
-            "A trial verifies entailment from the declarations alone -- the axioms, definitions and "
-            "premises the claim cites -- and its counterexamples are constructed, not read off the "
-            "code. A clause you cannot judge without opening a file is itself the finding: record it "
-            "as outcome='gap' naming the fact the claim assumes and does not cite. If the "
-            "declarations are right and the code does not match them, that is implementation "
-            "fidelity, which belongs in component-belief as a contract and a test, cited here by id. "
-            "Thirteen refutations in this ledger were recorded this way and had to be amended."
-        )
-
-    # Normalize passed flag
-    parsed = parse_probe_result({
-        "outcome": outcome,
-        "counterexample": counterexample,
-        "reasoning": rationale,
-    })
-    note = ""
-    if cited:
-        note = (f"\nnote: this trial names {', '.join(cited[:4])}. A gap is judged from the "
-                "declarations; naming a file is a pointer for the implementer, never the reason.")
-
-    trial_record = {
-        "target_id": target_id,
-        "strategy": strategy,
-        "outcome": parsed["outcome"],
-        "passed": parsed["passed"],
-        "counterexample": parsed["counterexample"],
-        "reasoning": parsed["reasoning"],
-        "repro": repro or {"actor": _actor()},
-        "validity": "valid",
-        "statement_sha": node.fingerprint(),
-        "basis": ctx.dag.basis_fingerprints(target_id),
-        "staged": node.staged,
-    }
-
-    trial_id = ctx.store.append_trial(trial_record)
-    ctx.store.append_event("verify_step", {
-        "target_id": target_id,
-        "trial_id": trial_id,
-        "passed": parsed["passed"],
-        "strategy": strategy,
-    }, actor=_actor())
+    actor = _actor()
+    lines: list[str] = []
+    notes: list[str] = []
+    for t in batch:
+        parsed = parse_probe_result({
+            "outcome": t["outcome"],
+            "counterexample": t.get("counterexample"),
+            "reasoning": t.get("rationale") or "",
+        })
+        cited = source_citations(f"{t.get('counterexample') or ''} {t.get('rationale') or ''}")
+        trial_record = {
+            "target_id": target_id,
+            "strategy": t["strategy"],
+            "outcome": parsed["outcome"],
+            "passed": parsed["passed"],
+            "counterexample": parsed["counterexample"],
+            "reasoning": parsed["reasoning"],
+            "actor": actor,
+            "repro": repro or {"actor": actor},
+            "validity": "valid",
+            "statement_sha": node.fingerprint(),
+            "basis": ctx.dag.basis_fingerprints(target_id),
+            "staged": node.staged,
+        }
+        trial_id = ctx.store.append_trial(trial_record)
+        ctx.store.append_event("verify_step", {
+            "target_id": target_id,
+            "trial_id": trial_id,
+            "passed": parsed["passed"],
+            "strategy": t["strategy"],
+        }, actor=actor)
+        lines.append(f"Trial {trial_id} recorded for {target_id} "
+                     f"(strategy={t['strategy']}, outcome={parsed['outcome']}).")
+        if parsed["counterexample"] and parsed["outcome"] == "falsified":
+            lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
+        if cited:
+            notes.append(f"note: trial {trial_id} names {', '.join(cited[:4])}. A gap is judged from the "
+                         "declarations; naming a file is a pointer for the implementer, never the reason.")
+        hint = measurement_hint(f"{t.get('rationale') or ''} {t.get('counterexample') or ''}", "trial")
+        if hint:
+            notes.append(hint.lstrip("\n"))
 
     # Recompute updated context
     fresh = Context.build(root)
-    target_slice = next((s for s in fresh.slices if s.target_id == target_id), None)
-    slice_line = f"{target_id} [{target_slice.state.upper()}] {target_slice.n_passed}/{target_slice.n_trials} trials" if target_slice else target_id
-
-    lines = [
-        f"Trial {trial_id} recorded for {target_id} (strategy={strategy}, outcome={parsed['outcome']}).",
-        f"Updated status: {slice_line}",
-    ]
+    s = next((x for x in fresh.slices if x.target_id == target_id), None)
+    if s:
+        slice_line = (f"{target_id} [{s.state.upper()}] {s.n_passed}/{s.n_trials} trials, "
+                      f"{s.n_independent}/{s.n_min} independent")
+        if s.untried and s.state == "obligation":
+            slice_line += f" (untried: {', '.join(s.untried)})"
+    else:
+        slice_line = target_id
+    lines.append(f"Updated status: {slice_line}")
     if node.staged:
         lines.append(f"{target_id} is staged: the trial vouches for the proposed statement and carries over if "
                      "the same statement is declared at git HEAD.")
-    if parsed["counterexample"]:
-        lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
-    if note:
-        lines.append(note.lstrip("\n"))
-    hint = measurement_hint(f"{rationale} {counterexample or ''}", "trial")
-    if hint:
-        lines.append(hint.lstrip("\n"))
+    lines += notes
 
     return envelope("\n".join(lines), basis_line(fresh.slices))
 
@@ -452,6 +500,15 @@ def audit_change(
 
     blast = ctx.dag.blast_radius(target_id)
     anc = sorted(ctx.dag.ancestors(target_id))
+    # An impact analysis is the first step of a change; it is recorded so the chain from impact
+    # to approval to re-verification is in the ledger, not in someone's memory.
+    ctx.store.append_event("audit_change", {
+        "target": target_id,
+        "proposed_statement": proposed_statement,
+        "proposed_premises": list(proposed_premises or []),
+        "reason": reason,
+        "blast_radius": list(blast),
+    }, actor=_actor())
 
     lines = [
         f"Blast radius analysis for modifying {target_id} [{node.kind.upper()}]:",
@@ -506,13 +563,18 @@ def decide(
     if not policy:
         return "no consistency policy declared in consistency.yaml at git HEAD"
 
-    verdict = evaluate_consistency_policy(ctx.dag, policy, ctx.slices, target_id=change_id if ctx.dag.get(change_id) else None)
+    # The joint gate reads the component ledger only when a criterion asks for it.
+    beliefs = contract_states(root) if any(c.get("evidence") for c in policy.criteria) else None
+    verdict = evaluate_consistency_policy(
+        ctx.dag, policy, ctx.slices,
+        target_id=change_id if ctx.dag.get(change_id) else None, beliefs=beliefs)
+    head = git_head(root)
 
     needs_approval = verdict.status == ADOPT
     if needs_approval and not approver:
         body = (
             f"ADOPT — NOT RECORDED: this outcome requires a human approver.\n"
-            f"All proof obligations are closed and grounded in axioms.\n"
+            f"All proof obligations are closed and grounded in axioms (declarations at HEAD {head or '?'}).\n"
             f"Call decide() again with approver=<name> after human review."
         )
     else:
@@ -521,15 +583,19 @@ def decide(
             "status": verdict.status,
             "policy_id": policy.id,
             "approver": approver,
+            "head": head,
             "trial_ids": verdict.trial_ids,
+            "evidence": verdict.evidence,
             "reasons": verdict.reasons,
         })
         ctx.store.append_event("decide", {
             "change_id": change_id,
             "status": verdict.status,
             "approver": approver,
+            "head": head,
         }, actor=_actor())
-        body = f"{verdict.status.upper()} recorded as {rec['id']} under policy {policy.id}"
+        body = (f"{verdict.status.upper()} recorded as {rec['id']} under policy {policy.id} "
+                f"at HEAD {head or '?'}")
 
     lines = [body]
     if verdict.reasons:

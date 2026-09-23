@@ -24,6 +24,10 @@ _EVIDENCE_ID = re.compile(r"\b(?:CMP|CTR)-[A-Za-z0-9][A-Za-z0-9-]*\b")
 COMPONENT_ID = re.compile(r"CMP-[A-Za-z0-9][A-Za-z0-9-]*")
 _NUMBER = re.compile(r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?")
 
+#: The states a policy criterion may require of a cited contract (`evidence:`), as
+#: component-belief reports them.
+EVIDENCE_STATES = ("supported", "contested", "refuted", "insufficient_evidence", "stale")
+
 
 @dataclass(frozen=True)
 class Issue:
@@ -180,6 +184,19 @@ def _git_show(root: Path, ref: str) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
+def git_head(root: Path) -> str:
+    """The revision the declarations were read from -- what a decision names as its baseline."""
+    try:
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return out.stdout.strip() if out.returncode == 0 else ""
+
+
 def load(root: Path) -> Declarations:
     """Load declarations from git HEAD; report working-tree drift as pending."""
     committed = _git_show(root, "HEAD")
@@ -330,43 +347,63 @@ def validate_links(decl: Declarations) -> list[Issue]:
     return issues
 
 
-def contract_beliefs(root: Path) -> dict[str, str]:
-    """Each contract's belief state from component-belief, as one short phrase per contract.
+_BELIEF_RANK = {"unsupported": 0, "refuted": 0, "stale": 1, "contested": 2,
+                "insufficient_evidence": 3, "insufficient": 3, "supported": 4}
 
-    Read on demand, because it means loading the evidence ledger. A design claim that cites a
-    contract with no evidence is argued and unmeasured, and the coverage view says so.
+
+def _contract_summaries(root: Path) -> dict[str, tuple[str, str]] | None:
+    """Each contract's weakest belief slice from component-belief: (state, phrase).
+
+    Read on demand, because it means loading the evidence ledger. None when that ledger is not
+    readable from here (component-belief not installed, or a store this server cannot parse);
+    a contract with no slice at all reads as "no evidence".
     """
     try:
         from component_belief.declarations import load as load_components
         from component_belief.model import compute_slices
+        from component_belief.staleness import CodeStaleness
         from component_belief.store import Store
     except ImportError:
-        return {}
+        return None
     try:
         decl = load_components(root)
         if not decl.contracts:
             return {}
-        slices = compute_slices(decl, Store(root).effective_trials())
+        slices = compute_slices(decl, Store(root).effective_trials(), staleness=CodeStaleness(root))
     except Exception:                                   # a ledger this server does not own
-        return {}
+        return None
 
-    worst = {"unsupported": 0, "refuted": 0, "contested": 1, "insufficient_evidence": 2,
-             "insufficient": 2, "supported": 3}
-    out: dict[str, tuple[int, str]] = {}
+    out: dict[str, tuple[int, str, str]] = {}
     counts: dict[str, int] = {}
     for sl in slices:
         counts[sl.contract_id] = counts.get(sl.contract_id, 0) + 1
-        rank = worst.get(sl.state, 2)
+        rank = _BELIEF_RANK.get(sl.state, 3)
         seen = out.get(sl.contract_id)
         if seen is None or rank < seen[0]:
             # the weakest slice, named: a contract supported at one revision and thin at another
             # reads as thin, and a reader must be able to see which one that is
-            out[sl.contract_id] = (rank, f"{sl.state} n={sl.n_valid} [{sl.condition_label()}]")
-    summary = {cid: (text if counts[cid] == 1 else f"{text}, weakest of {counts[cid]} slices")
-               for cid, (_, text) in out.items()}
+            n = sl.n_stale if sl.state == "stale" else sl.n_valid
+            out[sl.contract_id] = (rank, sl.state, f"{sl.state} n={n} [{sl.condition_label()}]")
+    summary = {cid: (state, text if counts[cid] == 1 else f"{text}, weakest of {counts[cid]} slices")
+               for cid, (_, state, text) in out.items()}
     for cid in decl.contracts:
-        summary.setdefault(cid, "no evidence")
+        summary.setdefault(cid, ("no evidence", "no evidence"))
     return summary
+
+
+def contract_beliefs(root: Path) -> dict[str, str]:
+    """Each contract's belief state from component-belief, as one short phrase per contract.
+    A design claim that cites a contract with no evidence is argued and unmeasured, and the
+    coverage view says so."""
+    summaries = _contract_summaries(root)
+    return {} if summaries is None else {cid: phrase for cid, (_state, phrase) in summaries.items()}
+
+
+def contract_states(root: Path) -> dict[str, str] | None:
+    """Each contract's weakest belief state, for the joint gate in decide(); None when the
+    component ledger cannot be read, which decide() reports rather than treating as supported."""
+    summaries = _contract_summaries(root)
+    return None if summaries is None else {cid: state for cid, (state, _phrase) in summaries.items()}
 
 
 def _parse(text: str) -> Declarations:
@@ -471,5 +508,10 @@ def validate(decl: Declarations) -> list[Issue]:
             target = crit.get("target") or crit.get("branch")
             if target and target not in all_ids:
                 issues.append(Issue("UNKNOWN_TARGET", pid, f"criterion names unknown target {target!r}"))
+            required = crit.get("evidence")
+            if required and required not in EVIDENCE_STATES:
+                issues.append(Issue(
+                    "BAD_CRITERION", pid,
+                    f"evidence must be one of {', '.join(EVIDENCE_STATES)}, not {required!r}"))
 
     return issues
