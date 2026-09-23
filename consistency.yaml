@@ -196,6 +196,25 @@ definitions:
       component. A component is confirmed failing only on failing
       observations against its own contract.
 
+  - id: DEF-proof-state
+    term: Proof state
+    meaning: >-
+      A node's proof state is computed from its place in the premise graph and
+      the trials recorded on it alone, and from nothing else belief.yaml or the
+      ledger says about it, its subject included. A lemma or branch is proven
+      exactly when it cites at least one premise and every node it depends on
+      that cites none is a declared axiom or definition; its current trials
+      cover at least its declared minimum of distinct strategy and actor
+      pairs; the share of its current trials that passed meets its declared
+      consensus; and none of its current trials is falsified.
+
+  - id: DEF-contract-slice
+    term: Contract slice
+    meaning: >-
+      The belief-eligible trials on one contract that fall in the same
+      declared condition bucket and carry the same value for every key in the
+      contract's declared compatibility key.
+
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
     statement: >-
@@ -239,9 +258,11 @@ lemmas:
       each of those nodes exactly as before, since only r changed, so it admits
       e with the same nodes behind it and the same fingerprints, and each of
       e's trials is current exactly as it was. If e is in neither build, none
-      of its trials is current in either. This is the invalidation
-      AXM-blast-radius-invalidation requires, and it needs no traversal order
-      and no acyclic graph.
+      of its trials is current in either. For trials that recorded
+      fingerprints this is the invalidation AXM-blast-radius-invalidation
+      requires; a trial made before trials carried fingerprints is not
+      invalidated this way, and the lemma claims nothing about it. It needs no
+      traversal order and no acyclic graph.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-asserted-is-inert
@@ -282,41 +303,46 @@ branches:
       so the graph never contains a cycle, as AXM-acyclicity requires, and a
       node whose ancestry does not end in declared axioms or definitions is
       ungrounded and never proven.
-    premises: [LMA-kernel-enforces-acyclicity, AXM-acyclicity, AXM-axiomatic-grounding, DEF-premise-graph]
+    premises: [LMA-kernel-enforces-acyclicity, AXM-acyclicity, AXM-axiomatic-grounding, DEF-premise-graph, DEF-proof-state]
     derivation_rule: >-
       DEF-premise-graph defines the premise graph as the build the proof kernel
       makes on every read. By LMA-kernel-enforces-acyclicity no such build
       contains a cycle, which is what AXM-acyclicity requires of a deductive
-      graph. By AXM-axiomatic-grounding a claim counts only through a path to
-      declared axioms and definitions, so a node whose ancestry ends anywhere
-      else is ungrounded and cannot be proven. evidence: CTR-proof-dag-invariants
+      graph. By DEF-proof-state a node is proven only when it cites a premise
+      and every node it depends on that cites none is a declared axiom or
+      definition, so a node whose ancestry ends anywhere else is never proven;
+      that is the ungrounded case AXM-axiomatic-grounding forbids.
+      evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-falsification-trial-ledger
     subject: CMP-trial-ledger
     claim_type: contract
     statement: >-
-      A recorded trial is never edited or removed. It stops counting only when
-      an appended amendment reclassifies it, or when its target, or a node its
-      target depends on in the build before or after the change, is restated
-      or removed. While a falsified trial whose counterexample meets
-      DEF-counterexample counts, its target is refuted.
-    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger]
+      A recorded trial is never edited or removed. It stops being current only
+      when an appended amendment reclassifies it, or when its target, or a node
+      its target depends on in the build before or after the change, is
+      restated or removed. While a falsified trial whose counterexample meets
+      DEF-counterexample is current, its target's claim does not follow from
+      its premises.
+    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger, DEF-premise-graph]
     derivation_rule: >-
       By DEF-ledger a trial is an entry in an append-only record, so it is
       never edited or removed, and by AXM-falsifiable-measurement it is a
       captured measurement, so a correction is an amendment appended beside it
-      with its reason. By DEF-current-trial only current trials count, and
-      whether a trial is current turns on nothing but its validity after
-      amendments, its target's place in the graph, and the fingerprints of its
-      target and of the nodes it depends on. Validity changes only by an
-      appended amendment. Declaring a new node stops no trial, since no node in
-      the graph cites a node that is not yet in it; and by
-      LMA-blast-radius-propagation a restatement or removal of a node r stops a
-      trial only when its target is r or depends on r in the build before or
-      after the change. A counterexample meeting DEF-counterexample is a
-      scenario in which every premise holds and the claim fails, so while it
-      counts the claim does not follow and its target is refuted.
+      with its reason. By DEF-current-trial whether a trial is current turns on
+      nothing but its validity after amendments, its target's place in the
+      graph, and the fingerprints of its target and of the nodes it depends on;
+      validity changes only by an appended amendment. By DEF-premise-graph the
+      graph is built from the declared and staged nodes and their citations
+      alone, so it changes only when a node is declared, restated or removed.
+      Declaring a new node makes no trial stop being current, since a node in
+      the graph cites only nodes already in it; and by
+      LMA-blast-radius-propagation a restatement or removal of a node r makes a
+      trial stop being current only when its target is r or depends on r in
+      the build before or after the change. A counterexample meeting
+      DEF-counterexample is a scenario in which every premise holds and the
+      claim fails, so the claim does not follow from its premises.
       evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
@@ -347,7 +373,7 @@ branches:
       as a declaration. A declaration that no build admits is reported, never
       dropped in silence, and so is a branch whose subject belief.yaml no
       longer declares; that branch keeps its proof state.
-    premises: [AXM-commit-is-approval, AXM-no-silent-failure, DEF-premise-graph, DEF-current-trial]
+    premises: [AXM-commit-is-approval, AXM-no-silent-failure, DEF-premise-graph, DEF-current-trial, DEF-proof-state]
     derivation_rule: >-
       By DEF-premise-graph a build admits nothing but the head revision's
       declarations and the ledger's staged proposals. By AXM-commit-is-approval
@@ -355,29 +381,32 @@ branches:
       proposal that is only staged takes no effect as one. By
       AXM-no-silent-failure a declaration that cannot take its place in the
       graph, and a branch whose subject belief.yaml no longer declares, are
-      reported rather than dropped. A branch's subject is neither one of its
-      premises nor part of its fingerprint, by DEF-premise-graph and
-      DEF-current-trial, so losing its subject changes neither its place in
-      the graph nor which of its trials are current, and its proof state
-      stands. evidence: CTR-consistency-declarations-gate
+      reported rather than dropped. By DEF-proof-state a node's proof state is
+      computed from its place in the graph and the trials on it alone, its
+      subject excluded; a subject is neither a premise, by DEF-premise-graph,
+      nor part of a fingerprint, by DEF-current-trial, so losing it changes
+      neither the branch's place in the graph nor which of its trials are
+      current, and its proof state stands. evidence: CTR-consistency-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-model-honest
     subject: CMP-belief-model
     claim_type: contract
     statement: >-
-      A slice's posterior is a function of belief-eligible evidence, declared
-      priors and the model version alone; below declared sufficiency the slice
-      carries an estimate and no verdict; and trials that differ on a declared
-      compatibility key are never pooled.
-    premises: [LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-belief-eligible]
+      A slice's posterior changes only through belief-eligible evidence, and
+      never through a record whose provenance is asserted; below its declared
+      sufficiency a slice issues no verdict; and trials that differ on a
+      declared compatibility key are never pooled into one posterior.
+    premises: [AXM-no-belief-write-path, LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-contract-slice]
     derivation_rule: >-
-      From LMA-asserted-is-inert and DEF-belief-eligible nothing but measured
-      or imported evidence enters a posterior. From AXM-sparse-data-no-verdict
-      a slice under its sufficiency reports insufficient rather than a verdict.
-      Pooling across a compatibility key would average two measurement
-      processes into a number neither produced, which is a belief without a
-      measurement. evidence: CTR-model-honest
+      By AXM-no-belief-write-path a measured belief -- the posterior over a
+      contract slice -- changes only through belief-eligible evidence, and by
+      LMA-asserted-is-inert never through an asserted record. By
+      AXM-sparse-data-no-verdict no verdict is issued below a claim's declared
+      sufficiency. By DEF-contract-slice trials that differ on a key of the
+      contract's declared compatibility key belong to different slices, and a
+      posterior is over one slice, so they are never pooled into one.
+      evidence: CTR-model-honest
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-diagnosis-coverage-first
