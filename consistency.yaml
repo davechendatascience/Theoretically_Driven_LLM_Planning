@@ -202,15 +202,17 @@ definitions:
     meaning: >-
       Only a node in the premise graph has a proof state; a node no build admits
       has none and is never proven. A node's proof state is computed from its
-      place in the premise graph, its own declaration or staged proposal -- its
-      statement, the premises it cites and its declared sufficiency -- and the
-      trials recorded on it, and from nothing else belief.yaml or the ledger
-      says about it, its subject included. A lemma or branch is proven exactly
-      when it cites at least one premise and every node it depends on that cites
-      none is a declared axiom or definition; its current trials cover at least
-      its declared minimum of distinct strategy and actor pairs, a minimum below
-      one being read as one; the share of its current trials that passed meets
-      its declared consensus; and none of its current trials is falsified.
+      place in the premise graph, the version of it the build admitted -- its
+      declaration at the head revision, or, for an id not declared there, its
+      staged proposal -- with that version's statement, cited premises and
+      declared sufficiency, and the trials recorded on it, and from nothing else
+      belief.yaml or the ledger says about it, its subject included. A lemma or
+      branch is proven exactly when it cites at least one premise and every node
+      it depends on that cites none is a declared axiom or definition; its
+      current trials cover at least its declared minimum of distinct strategy
+      and actor pairs, a minimum below one being read as one; the share of its
+      current trials that passed meets its declared consensus; and none of its
+      current trials is falsified.
 
   - id: DEF-contract-slice
     term: Contract slice
@@ -412,11 +414,12 @@ branches:
       declared or staged node that cannot take its place in the premise graph,
       and a declared or staged branch whose subject belief.yaml no longer
       declares, are reported rather than dropped. By DEF-proof-state a node's
-      proof state is computed from its place in the graph, its own declaration
-      or staged proposal -- its statement, the premises it cites and its
-      declared sufficiency -- and the trials on it, its subject excluded; a
-      subject is neither a premise, by DEF-premise-graph, nor part of a
-      fingerprint, by DEF-current-trial, so losing it changes neither the
+      proof state is computed from its place in the graph, the version of it the
+      build admitted -- its declaration at the head revision, or, for an id not
+      declared there, its staged proposal -- with that version's statement,
+      cited premises and declared sufficiency, and the trials on it, its subject
+      excluded; a subject is neither a premise, by DEF-premise-graph, nor part
+      of a fingerprint, by DEF-current-trial, so losing it changes neither the
       branch's place in the graph nor which of its trials are current, and its
       proof state stands. evidence: CTR-consistency-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
@@ -502,19 +505,21 @@ branches:
       AXM-no-belief-write-path, under which a measured belief changes only
       through belief-eligible evidence, no measured belief moves. Proof states:
       by DEF-proof-state a node's proof state is computed from its place in the
-      premise graph, its own declaration or staged proposal, and the trials
-      recorded on it; a report changes no declaration and, appending no record,
-      stages or restates no proposal, so no node's own declaration or staged
-      proposal changes. By DEF-premise-graph the graph is built from the axioms,
-      definitions, lemmas and branches declared at the head revision and the
-      proposals staged in the ledger; a report changes no declaration and
-      appends no record, so it stages no proposal and the graph is unchanged,
-      whatever else it reads or writes. By DEF-current-trial whether a trial is
-      current depends on its validity after amendments, its target being in the
-      premise graph, and the fingerprints it recorded; a report appends no trial
-      and no amendment and leaves the graph unchanged, so the trials recorded on
-      each node, and which of them are current, are unchanged. So no proof state
-      changes. evidence: CTR-monitor-read-only
+      premise graph, the version of it the build admitted -- its declaration at
+      the head revision, or, for an id not declared there, its staged proposal
+      -- and the trials recorded on it; a report changes no declaration and,
+      appending no record, stages or restates no proposal, so neither which
+      version a build admits nor that version changes. By DEF-premise-graph the
+      graph is built from the axioms, definitions, lemmas and branches declared
+      at the head revision and the proposals staged in the ledger; a report
+      changes no declaration and appends no record, so it stages no proposal and
+      the graph is unchanged, whatever else it reads or writes. By
+      DEF-current-trial whether a trial is current depends on its validity after
+      amendments, its target being in the premise graph, and the fingerprints it
+      recorded; a report appends no trial and no amendment and leaves the graph
+      unchanged, so the trials recorded on each node, and which of them are
+      current, are unchanged. So no proof state changes. evidence:
+      CTR-monitor-read-only
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
