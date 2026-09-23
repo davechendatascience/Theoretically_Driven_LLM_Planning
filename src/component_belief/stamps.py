@@ -44,6 +44,7 @@ class FileStamps:
     path: str
     tracked: bool
     stamps: list[dict[str, Any]] = field(default_factory=list)
+    directory: bool = False
 
     def kinds(self) -> set[str]:
         return {s["kind"] for s in self.stamps}
@@ -54,7 +55,7 @@ class FileStamps:
 
     def prune_candidate(self) -> bool:
         """Nothing claims it, nothing has run it, no live evidence rests on it."""
-        return self.tracked and self.is_code and not (
+        return self.tracked and not self.directory and self.is_code and not (
             self.kinds() & {"invoked", "claimed", "named", "supports", "opened"})
 
     def artifact_verdict(self) -> str:
@@ -162,42 +163,15 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
                            "note": "belief-eligible evidence came from a run that named it"})
         out.append(FileStamps(path=path, tracked=True, stamps=stamps))
 
+    out += _tracked_directories(out)
+
     for name in decl.artifacts:
         base = root / name
         if not base.exists():
             continue
-        for entry in sorted(base.iterdir()):
-            files = [p for p in entry.rglob("*") if p.is_file()] if entry.is_dir() else [entry]
-            newest = max((p.stat().st_mtime for p in files), default=entry.stat().st_mtime)
-            prefix = f"{name}/{entry.name}"
-            hits = [s for rel, ss in opened.items() if rel == prefix or rel.startswith(prefix + "/")
-                    for s in ss]
-            declared = sorted({tid for rel, ids in named.items()
-                               if rel == prefix or rel.startswith(prefix + "/") for tid in ids})
-            stamps = [{"kind": "generated", "source": "mtime", "at": _iso(newest),
-                       "bytes": sum(p.stat().st_size for p in files)}]
-            stamps += _opened_stamps(hits)
-            stamps += [{"kind": "named", "source": "declared test", "by": tid} for tid in declared]
-            aliases = [entry.name]
-            if entry.is_symlink():                   # a trial cites the revision, not the alias
-                aliases.append(os.path.basename(os.path.realpath(entry)))
-            if entry.is_dir():
-                # a directory is cited through what is in it: trials name the trial file, not the
-                # folder, and a folder of cited files is not unwanted because its own name is not
-                aliases += [f.name for f in files]
-            hit = next((a for a in aliases if a in cited), None)
-            if hit:
-                stamps.append({"kind": "cited", "source": "evidence", "trials": cited[hit],
-                               "as": hit,
-                               "note": "belief-eligible trials name it in their reproduction data"})
-            if hit:
-                stamps.append({"kind": "supports", "source": "evidence",
-                               "runs": [], "note": f"{cited[hit]} live trials cite it"})
-            elif any(s.get("live") for s in hits):
-                stamps.append({"kind": "supports", "source": "evidence",
-                               "runs": sorted({s["run"] for s in hits if s.get("live")})[:4],
-                               "note": "a run whose evidence is still belief-eligible opened it"})
-            out.append(FileStamps(path=prefix, tracked=False, stamps=stamps))
+        for path in sorted(base.rglob("*")) + [base]:
+            out.append(_artifact_record(root, path, opened, named, cited))
+
     collect.dangling = dangling          # the view prints it; nothing else reads it
     return out
 
@@ -240,6 +214,71 @@ def _citations(root: Path, store: Store, decl: Declarations) -> tuple[dict[str, 
                     present.add(os.path.basename(os.path.realpath(entry)))
     dangling = {n: c for n, c in names.items() if n not in present}
     return {n: c for n, c in names.items() if n in present}, dangling
+
+
+def _artifact_record(root: Path, path: Path, opened: dict[str, list[dict]],
+                     named: dict[str, set[str]], cited: dict[str, int]) -> FileStamps:
+    """One generated file or directory, with everything that keeps it.
+
+    A directory answers to its contents as well as its own name: trials cite the trial file, runs
+    open the shard, and a folder is not unwanted because nothing names the folder.
+    """
+    rel = path.relative_to(root).as_posix()
+    files = [p for p in path.rglob("*") if p.is_file()] if path.is_dir() else [path]
+    newest = max((p.stat().st_mtime for p in files), default=path.stat().st_mtime)
+    stamps: list[dict[str, Any]] = [{"kind": "generated", "source": "mtime", "at": _iso(newest),
+                                     "bytes": sum(p.stat().st_size for p in files),
+                                     "files": len(files)}]
+
+    hits = [h for r, hh in opened.items() if r == rel or r.startswith(rel + "/") for h in hh]
+    stamps += _opened_stamps(hits)
+    for tid in sorted({t for r, ids in named.items()
+                       if r == rel or r.startswith(rel + "/") for t in ids}):
+        stamps.append({"kind": "named", "source": "declared test", "by": tid})
+
+    aliases = [path.name]
+    if path.is_symlink():                       # a trial cites the revision, not the alias
+        aliases.append(os.path.basename(os.path.realpath(path)))
+    if path.is_dir():
+        aliases += [f.name for f in files]
+    hit = next((a for a in aliases if a in cited), None)
+    if hit:
+        stamps.append({"kind": "cited", "source": "evidence", "trials": cited[hit], "as": hit,
+                       "note": "belief-eligible trials name it in their reproduction data"})
+        stamps.append({"kind": "supports", "source": "evidence", "runs": [],
+                       "note": f"{cited[hit]} live trials cite it"})
+    elif any(h.get("live") for h in hits):
+        stamps.append({"kind": "supports", "source": "evidence",
+                       "runs": sorted({h["run"] for h in hits if h.get("live")})[:4],
+                       "note": "a run whose evidence is still belief-eligible opened it"})
+    return FileStamps(path=rel, tracked=False, stamps=stamps, directory=path.is_dir())
+
+
+def _tracked_directories(files: list[FileStamps]) -> list[FileStamps]:
+    """Every directory holding tracked files, stamped by what its files carry.
+
+    The question "is this folder justified" is asked of folders, so a folder is a record rather
+    than something a reader has to assemble from the files inside it.
+    """
+    rolled: dict[str, list[FileStamps]] = {}
+    for record in files:
+        parts = record.path.split("/")[:-1]
+        for depth in range(1, len(parts) + 1):
+            rolled.setdefault("/".join(parts[:depth]), []).append(record)
+
+    out = []
+    for path, members in sorted(rolled.items()):
+        kinds: dict[str, set[str]] = {}
+        for member in members:
+            for stamp in member.stamps:
+                if stamp["kind"] in ("claimed", "named", "invoked", "cited", "supports", "opened"):
+                    kinds.setdefault(stamp["kind"], set()).add(str(stamp.get("by") or stamp.get("run")
+                                                                   or stamp.get("as") or ""))
+        stamps = [{"kind": "contains", "source": "git", "files": len(members)}]
+        stamps += [{"kind": kind, "source": "rolled up from its files",
+                    "by": sorted(x for x in who if x)[:4]} for kind, who in sorted(kinds.items())]
+        out.append(FileStamps(path=path, tracked=True, stamps=stamps, directory=True))
+    return out
 
 
 def _opened_stamps(hits: list[dict]) -> list[dict]:

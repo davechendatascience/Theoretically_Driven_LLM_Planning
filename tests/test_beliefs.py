@@ -401,3 +401,29 @@ def test_an_ingested_artifact_uri_is_a_claim_on_the_file(repo, monkeypatch):
                           "artifact_uri": str(repo / "out" / "round2" / "inner.trials.json")}])
     records = {s.path: s for s in collect(repo, load(repo), store)}
     assert records["out/round2"].artifact_verdict().startswith("kept")
+
+
+def test_every_file_and_folder_carries_a_stamp(repo, monkeypatch):
+    """A repository is pruned folder by folder as much as file by file, so a folder is a record
+    rather than something a reader assembles from the files inside it."""
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git
+
+    (repo / "out" / "round1").mkdir(parents=True)
+    (repo / "out" / "round1" / "shard.npz").write_text("x", encoding="utf-8")
+    (repo / "src" / "deep").mkdir(parents=True)
+    (repo / "src" / "deep" / "mod.py").write_text("# code\n", encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        "    remediation: Retune approach sampling",
+        "    remediation: Retune approach sampling\n    code: [src/deep/mod.py]")
+    (repo / "belief.yaml").write_text(belief + "\nartifacts: [out]\n", encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a nested file on each side")
+
+    records = {s.path: s for s in collect(repo, load(repo), Store(repo))}
+    assert records["out/round1"].directory and records["out/round1/shard.npz"].stamps
+    assert records["src/deep"].directory, "a tracked folder is stamped too"
+    assert "claimed" in records["src/deep"].kinds(), "a folder carries what its files carry"
+    assert not records["src/deep"].prune_candidate(), "a folder is not pruned as if it were code"

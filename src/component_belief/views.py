@@ -59,14 +59,16 @@ def view_artifacts(ctx: "Context", subject: str | None = None) -> str:
         records = [r for r in records if r.path == subject or r.path.startswith(subject.rstrip("/") + "/")]
         if not records:
             return f"nothing stamped under {subject!r}"
-    tracked = [r for r in records if r.tracked]
-    generated = [r for r in records if not r.tracked]
+    tracked = [r for r in records if r.tracked and not r.directory]
+    folders = [r for r in records if r.directory]
+    generated = [r for r in records if not r.tracked and not r.directory]
     counts: dict[str, int] = {}
     for r in records:
         for s in r.stamps:
             counts[s["kind"]] = counts.get(s["kind"], 0) + 1
 
-    lines = [f"{len(tracked)} tracked file(s), {len(generated)} generated artifact(s)",
+    lines = [f"{len(tracked)} tracked file(s), {len(generated)} generated artifact(s), "
+             f"{len(folders)} folder(s) -- every path in the repository carries a stamp",
              "stamps: " + ", ".join(f"{k} {n}" for k, n in sorted(counts.items())), ""]
 
     supported = [r for r in tracked if "supports" in r.kinds()]
@@ -81,6 +83,12 @@ def view_artifacts(ctx: "Context", subject: str | None = None) -> str:
     if unclaimed:
         lines += [f"code no component claims ({len(unclaimed)}): "
                   + ", ".join(r.path for r in unclaimed[:10]), ""]
+
+    bare = [r for r in folders if not (r.kinds() & {"claimed", "named", "invoked", "cited",
+                                                    "supports", "opened"})]
+    if bare:
+        lines += [f"folders nothing claims, runs or cites ({len(bare)}): "
+                  + ", ".join(r.path for r in bare[:12]), ""]
 
     candidates = [r for r in tracked if r.prune_candidate()]
     lines.append(f"prune candidates -- nothing claims, runs or rests on them ({len(candidates)}):")
