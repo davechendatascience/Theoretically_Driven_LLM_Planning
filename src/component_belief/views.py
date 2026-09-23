@@ -48,9 +48,17 @@ class Context:
         return compute_slices(self.decl, self.trials(), contract_ids)
 
 
-def view_artifacts(ctx: "Context") -> str:
-    """Every file with what made it, what ran it, and whether live evidence rests on it."""
+def view_artifacts(ctx: "Context", subject: str | None = None) -> str:
+    """Every file with what made it, what ran it, and whether live evidence rests on it.
+
+    `subject` narrows to one directory, so "is runs/ justified?" is a question the ledger answers
+    rather than one answered by reading the ledger's files by hand.
+    """
     records = collect_stamps(ctx.root, ctx.decl, ctx.store)
+    if subject:
+        records = [r for r in records if r.path == subject or r.path.startswith(subject.rstrip("/") + "/")]
+        if not records:
+            return f"nothing stamped under {subject!r}"
     tracked = [r for r in records if r.tracked]
     generated = [r for r in records if not r.tracked]
     counts: dict[str, int] = {}
@@ -84,13 +92,14 @@ def view_artifacts(ctx: "Context") -> str:
 
     if generated:
         by_size = sorted(generated, key=lambda r: -r.stamps[0].get("bytes", 0))
+        shown = len(by_size) if subject else 10
         verdicts: dict[str, int] = {}
         for r in generated:
             verdicts[r.artifact_verdict().split(":")[0]] = verdicts.get(
                 r.artifact_verdict().split(":")[0], 0) + 1
         lines += ["", "generated artifacts: " + ", ".join(f"{k} {n}" for k, n in sorted(verdicts.items())),
                   "largest, with what keeps them:"]
-        for r in by_size[:10]:
+        for r in by_size[:shown]:
             st = r.stamps[0]
             lines.append(f"  {r.path}  {st.get('bytes', 0) / 1e9:.2f} GB  newest {st['at']}")
             lines.append(f"      {r.artifact_verdict()}")

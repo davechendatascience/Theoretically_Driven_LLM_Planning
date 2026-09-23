@@ -78,7 +78,8 @@ def status(
       diagnose  - ranked bottlenecks, discriminating test, coverage limits
       plan      - tests to run this round, and every test skipped with its reason
   artifacts - every file with what made it, what ran it, and whether live evidence rests
-              on it; prune candidates are the code nothing claims, runs or supports
+              on it; prune candidates are the code nothing claims, runs or supports.
+              `subject` narrows to one directory
       cycle     - the full evaluation-cycle report as JSON, with complete chains
       trace     - expand a `set=` citation handle into its exact evidence records
 
@@ -101,7 +102,7 @@ def status(
     if view == "plan":
         return view_plan(ctx, budget, policy)
     if view == "artifacts":
-        return view_artifacts(ctx)
+        return view_artifacts(ctx, subject)
     if view == "trace":
         return view_trace(ctx, set, subject)
     if view == "cycle":
