@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -46,14 +47,45 @@ the same id is declared in consistency.yaml at git HEAD. Trials are bound to the
 verified: restating a node sets its earlier trials aside, and restating any premise upstream
 makes it STALE until it is re-verified.
 
-Four rules:
+Five rules:
 1. Every component, contract, and change must ground transitively in declared Axioms.
 2. Verification trials are falsifiable probes (counterexample search, entailment, negation) — never ungrounded assertion.
-3. Mutating an upstream node invalidates its downstream blast radius as STALE until re-verified.
-4. Escalate to the human for decide(), never approve on their behalf.
+3. A trial verifies ENTAILMENT from the declarations alone -- the axioms, definitions and premises
+   a claim cites, and the claims themselves. A verifier does not read the implementation and does
+   not run it: no source files, no simulations, no benchmarks. Its counterexamples are constructed,
+   not observed. A clause that cannot be judged without opening the code is itself the finding: the
+   claim leans on an undischarged premise, and the verdict is a gap naming the fact it assumes but
+   does not cite.
+4. Mutating an upstream node invalidates its downstream blast radius as STALE until re-verified.
+5. Escalate to the human for decide(), never approve on their behalf.
+
+Implementation fidelity is the implementer's duty, not the verifier's. Whether the code does what a
+branch says is checked by the person or agent who wrote it and recorded as evidence in
+component-belief (run_test, contracts, compatibility keys), which carries provenance and staleness
+for empirical facts. Keeping the verifier inside the graph is what makes the graph worth trusting:
+if a claim is only true because of something in the source, the graph does not yet say so.
+
+So a claim states what must be true and cites where a measured fact lives; it does not carry the
+number. Numbers written into claims rot: restating a claim invalidates trials that measured
+the old wording, and a figure measured under one configuration is silently wrong under the next.
 """
 
 mcp = FastMCP("consistency-belief", instructions=INSTRUCTIONS)
+
+
+_MEASUREMENT = re.compile(r"\b\d+(?:\.\d+)?\s*(?:%|mm|cm|m|ms|s|rad|deg|N|J|Hz|steps?|episodes?|/\s*\d+)\b")
+_CITATION = re.compile(r"\b(?:CTR|TST|CMP|TRL)-[A-Za-z0-9-]+\b")
+
+
+def measurement_hint(text: str, where: str) -> str:
+    """Numbers belong in component-belief, where evidence carries provenance and goes stale with
+    the code. A claim states what must hold and cites where the number lives (rule 3)."""
+    found = _MEASUREMENT.findall(text or "")
+    if len(found) < 3 or _CITATION.search(text or ""):
+        return ""
+    return (f"\nnote: this {where} carries {len(found)} measurements and cites no evidence id. "
+            "A trial verifies entailment; measured facts belong in component-belief and are cited "
+            "by id, so restating this claim will not silently invalidate them.")
 
 
 def project_root() -> Path:
@@ -164,7 +196,8 @@ def propose_branch(
         f"Claim: {claim}\n"
         + ("Trials of the earlier claim no longer count.\n" if restating else "")
         + f"Staged: verify_step({id!r}) and later proposals can use it now; it supports decide() once "
-        f"{id!r} is declared in consistency.yaml at git HEAD.",
+        f"{id!r} is declared in consistency.yaml at git HEAD."
+        + measurement_hint(claim, "claim"),
         basis_line(ctx.slices)
     )
 
@@ -182,6 +215,12 @@ def verify_step(
 
     This is how consistency is measured: via falsifiable adversarial trials
     (counterexample search, entailment gap detection, or negation symmetry).
+
+    A trial verifies ENTAILMENT from the declarations alone: it reasons from the axioms,
+    definitions and premises the claim cites, never from the implementation, and its
+    counterexamples are constructed rather than observed. A clause that cannot be judged without
+    reading the code is a gap: the claim assumes a fact it does not cite. Implementation fidelity
+    is the implementer's duty and belongs in component-belief, cited here by id.
 
     target_id:      the lemma or branch being verified.
     strategy:       "counterexample" | "entailment" | "negation" | "contradiction".
@@ -241,6 +280,9 @@ def verify_step(
                      "the same statement is declared at git HEAD.")
     if parsed["counterexample"]:
         lines.append(f"FALSIFIED: counterexample recorded: {parsed['counterexample']}")
+    hint = measurement_hint(f"{rationale} {counterexample or ''}", "trial")
+    if hint:
+        lines.append(hint.lstrip("\n"))
 
     return envelope("\n".join(lines), basis_line(fresh.slices))
 

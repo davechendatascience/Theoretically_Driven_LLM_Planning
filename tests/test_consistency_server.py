@@ -330,3 +330,15 @@ def test_tree_prints_each_statement_once_and_short(committed_repo: Path):
     assert len(rows) == 2 and sum("(shown above)" in r for r in rows) == 1
     assert all(len(r) < 200 for r in rows)
     assert long_claim.strip() in status("branches", subject="BRN-fan-curve")
+
+
+def test_measurement_hint_points_numbers_at_component_belief():
+    """A claim thick with measurements and citing no evidence id gets a note; one that cites an
+    id, or that is purely logical, does not (rule 3: trials verify entailment, not measurement)."""
+    from consistency_belief.server import measurement_hint
+
+    assert "component-belief" in measurement_hint(
+        "the gap was 118.7 mm, it settled in 261 steps, over 40 episodes", "claim")
+    assert measurement_hint("118.7 mm and 261 steps over 40 episodes, measured in CTR-teacher-reliable",
+                            "claim") == ""
+    assert measurement_hint("the release is gentle exactly when DEF-gentle-placement holds", "claim") == ""

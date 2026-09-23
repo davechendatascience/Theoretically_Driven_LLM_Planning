@@ -56,7 +56,7 @@ status(view="obligations")  →  verify_step(...)  →  status(view="tree")
 ### The Seven Tools
 * `status`: 7 views (`tree`, `branches`, `axioms`, `obligations`, `contradictions`, `audit`, `cycle`).
 * `propose_branch`: Stages new contracts or lemmas (declared or staged premises); validates acyclicity and premise validity; re-proposing a staged id restates it.
-* `verify_step`: Executes/records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified.
+* `verify_step`: Records falsifiable verification trials (counterexample search, entailment, negation), each bound to the statement it verified. A trial establishes entailment **from the declarations alone** — a verifier reads the axioms, definitions, premises and claims, never the implementation, and never runs it. A clause that cannot be judged without opening the code is a gap: the claim leans on a fact it does not cite. Implementation fidelity and measurement are the implementer's duty and belong in component-belief, cited here by id.
 * `amend`: Reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending an amendment; the original record and the reason stay in the ledger.
 * `audit_change`: Calculates topological blast radius of modifying axioms or lemmas.
 * `note`: Qualitative annotation (inert channel, zero proof weight).
