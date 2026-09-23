@@ -63,9 +63,8 @@ axioms:
     domain: epistemic
     statement: >-
       A measured belief -- the posterior over a contract slice -- changes only
-      through evidence the server itself produced by running a declared test,
-      or imported with an artifact and its hash; a statement by an agent or a
-      human carries zero weight in it.
+      through belief-eligible evidence, as DEF-belief-eligible defines it; a
+      statement by an agent or a human carries zero weight in it.
     rationale: >-
       An LLM agent is a fluent producer of plausible numbers; a belief it can
       write is a belief that measures nothing. A proof state is not a measured
@@ -105,6 +104,29 @@ axioms:
       Optimising an uninstrumented component converts missing measurement into
       apparent progress; instrumentation is the binding constraint until then.
 
+  - id: AXM-no-silent-failure
+    domain: integrity
+    statement: >-
+      A declaration that cannot take its place in the proof graph, or whose
+      subject belief.yaml no longer declares, is reported where the graph is
+      shown; it is never dropped in silence.
+    rationale: >-
+      A defect nobody sees reads exactly like a design that holds: a lemma
+      whose premise was deleted, or a branch left behind by a removed
+      component, would otherwise vanish from every view and every decision.
+
+  - id: AXM-coverage-binds-first
+    domain: diagnosis
+    statement: >-
+      While the component a diagnosis ranks first has no observation against
+      its own contract, the diagnosis recommends no optimisation of any
+      component.
+    rationale: >-
+      The ranking is by decision relevance, so an unobserved leader means the
+      ranking itself is unresolved, and optimising anything on it turns
+      missing measurement into apparent progress. Design rules 7.3 and 7.5 of
+      component-belief.
+
 definitions:
   - id: DEF-proof-obligation
     term: Proof Obligation
@@ -121,90 +143,129 @@ definitions:
   - id: DEF-belief-eligible
     term: Belief-eligible evidence
     meaning: >-
-      A trial record with provenance measured (the server ran the declared
-      test and captured the artifact) or imported (brought in with a source,
-      an artifact and its hash). A note, with provenance asserted, is not one.
+      A trial record with provenance measured -- the server ran a declared
+      test, captured its artifact with the artifact's hash, and took the
+      record's metrics from that artifact -- or imported -- brought in with its
+      source, an artifact and the artifact's hash -- and in either case
+      recorded against a contract that a declared test can measure. Every
+      record carries exactly one provenance: measured, imported or asserted. A
+      record that is neither measured nor imported, a note among them, is
+      asserted.
 
   - id: DEF-premise-graph
     term: Premise graph
     meaning: >-
-      The directed graph the proof kernel holds: a node for each axiom,
-      definition, lemma and branch it has admitted, declared or staged, and an
-      edge from each premise a node cites to that node. A node depends on
-      another when a path of edges leads from the other to it. Only a citation
-      is an edge: an assumption a derivation relies on without citing it is
-      not in the graph, and a cycle is a cycle among these edges.
+      The directed graph the proof kernel builds afresh on every read, from the
+      axioms, definitions, lemmas and branches declared at the head revision
+      and the proposals staged in the ledger. A build starts from the empty
+      graph and admits nodes one at a time, each at most once, and never
+      removes one. A node is admitted only once every premise it cites is
+      already in the graph, and a build ends only when every node left out
+      cites a premise that is not in it. Admitting a node adds it together
+      with an edge from each premise it cites to it; no other step adds a node
+      or an edge. A node depends on another when a path of edges leads from the
+      other to it. Only a citation is an edge: an assumption a derivation
+      relies on without citing it is not in the graph, and a cycle is a cycle
+      among these edges.
+
+  - id: DEF-current-trial
+    term: Current trial
+    meaning: >-
+      A trial is current exactly when three things hold: its validity, after
+      any amendments appended to it, is valid; its target is in the premise
+      graph; and either it recorded no fingerprints, having been made before
+      trials carried them, or the fingerprints it recorded, of its target and
+      of each node its target then depended on, are exactly those its target
+      and the nodes it now depends on have now. A node's fingerprint is
+      determined by its statement and the premises it cites, and differs
+      whenever either differs. Only current trials are counted, toward
+      sufficiency, consensus and refutation alike.
+
+  - id: DEF-ledger
+    term: Ledger
+    meaning: >-
+      The append-only records the two servers keep: trials, amendments, notes,
+      events and decisions, and the artifacts runs capture. A declaration file
+      is not part of it.
+
+  - id: DEF-observation
+    term: Observation
+    meaning: >-
+      An observation of a component against its own contract is a
+      belief-eligible trial recorded against a contract whose subject is that
+      component. A component is confirmed failing only on failing
+      observations against its own contract.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
     statement: >-
-      If the kernel builds the premise graph from empty, adds every edge by
-      admitting a node, and admits a node only when each premise it cites is a
-      different node already in the graph that does not depend on it, the
-      premise graph never contains a cycle.
+      No build of the premise graph contains a cycle.
     premises: [DEF-premise-graph]
     derivation_rule: >-
-      Induction on admissions. A build starts from the empty graph, which has
-      no cycle. Suppose the graph has none when a node n is admitted citing
-      premises P. Each new edge runs from some p in P to n, where p is already
-      in the graph and is not n, so none is a self-loop; a new cycle would have
-      to enter n by one of these edges and return from n to that p along edges
-      already present -- that is, p would already depend on n, which admission
-      refuses. Every edge is added this way, so no build holds a cycle. By
-      DEF-premise-graph an assumption a derivation relies on without citing it
-      is not an edge, so this lemma says nothing about it.
+      Induction on the admissions of one build, which DEF-premise-graph makes
+      one at a time from the empty graph, each node at most once, with nothing
+      removed. The empty graph has no cycle. When a node n is admitted it is
+      new to the build, so no edge leaves it yet: an edge leaving n is added
+      only when a node citing n is admitted, and such a node is admitted only
+      once n is already in the graph, so after n. Every edge added with n ends
+      at n, so a new cycle would have to leave n along an edge, and none does.
+      So every admission keeps the graph acyclic. An assumption a derivation
+      relies on without citing it is not an edge, so this lemma says nothing
+      about it.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-blast-radius-propagation
     statement: >-
-      If a node's fingerprint is determined by its statement and the premises
-      it cites and changes whenever either does, every trial records the
-      fingerprints of its target and of each node its target depends on, a
-      trial counts only while its target is in the premise graph and every
-      fingerprint it recorded still matches, and a node stays in the graph only
-      while every premise it cites does, then restating or removing a node
-      stops every earlier trial of that node and of every node that depends on
-      it from counting, and leaves the trials of every other node counting as
-      before.
-    premises: [AXM-blast-radius-invalidation, DEF-premise-graph]
+      When a node r is restated, a trial of r, or of a node that depends on r,
+      that recorded a fingerprint of r other than r's new one is not current;
+      when r is removed, no trial of r or of a node that depends on r is
+      current. Either way, whether a trial of any other node is current does
+      not change.
+    premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial]
     derivation_rule: >-
-      Restating a node r changes its fingerprint. Every earlier trial of r
-      recorded the old one, and every earlier trial of a node d that depends on
-      r recorded r's among the fingerprints of d's ancestors, so each
-      mismatches and stops counting; a trial recorded afterwards carries the
-      new fingerprints and counts, which is re-verification. Removing r takes
-      it out of the graph, so a node citing r leaves with it, and by induction
-      on the length of a path from r so does every node that depends on r; a
-      trial of a node outside the graph does not count. A node e that does not
-      depend on r recorded no fingerprint of r; the only fingerprint that
-      changes is r's, and every node that leaves the graph is r or depends on
-      r, so none of them is one e depends on -- e would then depend on r -- and
-      e's trials count as before. This is the invalidation
-      AXM-blast-radius-invalidation requires, and it needs neither a traversal
-      order nor an acyclic graph.
+      By DEF-current-trial a trial that recorded fingerprints is current only
+      if the one it recorded for r, as its target's or as that of a node its
+      target depends on, is r's fingerprint now; after a restatement, one that
+      recorded any other is not. When r is removed no build admits it, and
+      since DEF-premise-graph admits a node only once every premise it cites is
+      in the graph, induction along a path from r shows that no node depending
+      on r is admitted either; a trial whose target is not in the graph is not
+      current. A node e that is neither r nor depends on r keeps its statement,
+      its premises and its place in the graph, and so does every node e depends
+      on, since none of them is r or depends on r -- else e would depend on r.
+      So e's target, the nodes it depends on and all their fingerprints are as
+      they were, and each of e's trials is current exactly as before. This is
+      the invalidation AXM-blast-radius-invalidation requires, and it needs no
+      traversal order and no acyclic graph.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-asserted-is-inert
     statement: >-
-      A record with provenance asserted cannot change any belief slice.
+      A record with provenance asserted cannot change any measured belief.
     premises: [AXM-no-belief-write-path, DEF-belief-eligible]
     derivation_rule: >-
-      By AXM-no-belief-write-path only evidence the server produced or imported
-      with an artifact reaches a belief; by DEF-belief-eligible an asserted
-      record is neither, so no slice is a function of it.
+      By DEF-belief-eligible every record carries exactly one provenance, and a
+      record whose provenance is asserted is neither measured nor imported, so
+      it is not belief-eligible evidence. By AXM-no-belief-write-path a
+      measured belief changes only through belief-eligible evidence. So no
+      measured belief changes through a record whose provenance is asserted.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-worktree-inert
     statement: >-
-      An edit to a declaration file that is not committed changes no verdict
-      and no proof state.
-    premises: [AXM-commit-is-approval]
+      Making an edit to a declaration file, without committing it, changes no
+      verdict and no proof state.
+    premises: [AXM-commit-is-approval, DEF-ledger]
     derivation_rule: >-
       By AXM-commit-is-approval every verdict and every proof state is computed
-      from committed content and the ledger, and from no other file in the
-      working tree. An uncommitted edit to a declaration file changes no
-      committed content and writes nothing to the ledger, so every input of
-      both is what it was, and so are they.
+      from committed content -- the declarations at the head revision and the
+      commits that evidence names -- and from the ledger, and from no other
+      file in the working tree. Making the edit adds no commit and moves no
+      revision, and by DEF-ledger a declaration file is not part of the ledger,
+      so the edit adds no entry to it either. Every input of both is what it
+      was, so making the edit changes neither. What happens later -- a commit,
+      or evidence a run records while the edit is in the working tree -- this
+      lemma does not claim.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 branches:
@@ -212,26 +273,18 @@ branches:
     subject: CMP-proof-dag
     claim_type: contract
     statement: >-
-      The proof DAG builds its premise graph from empty on every load, adds
-      every edge by admitting a node, and admits a node only when each premise
-      it cites is a different node already in the graph that does not depend
-      on it. So the premise graph never contains a cycle, and a node whose
-      ancestry does not end in declared axioms or definitions is reported
-      ungrounded, never proven.
-    premises: [LMA-kernel-enforces-acyclicity, AXM-acyclicity, AXM-axiomatic-grounding, AXM-commit-is-approval, DEF-premise-graph]
+      The proof kernel builds the premise graph as DEF-premise-graph defines,
+      so the graph never contains a cycle, as AXM-acyclicity requires, and a
+      node whose ancestry does not end in declared axioms or definitions is
+      ungrounded and never proven.
+    premises: [LMA-kernel-enforces-acyclicity, AXM-acyclicity, AXM-axiomatic-grounding, DEF-premise-graph]
     derivation_rule: >-
-      By AXM-commit-is-approval a proof state is computed from committed
-      content and the ledger alone, so the graph is rebuilt from them on every
-      load, which is to say from empty. By DEF-premise-graph an edge runs from
-      a cited premise to an admitted node, so every edge enters with an
-      admission, and a node can be admitted with its edges only once each
-      premise it cites is in the graph. Admitting a node that cites itself, or
-      that one of its premises already depends on, would put it on a cycle,
-      which AXM-acyclicity forbids; so the admission rule is necessary, and
-      LMA-kernel-enforces-acyclicity makes the three together sufficient. By
-      AXM-axiomatic-grounding a claim counts only through a path to declared
-      axioms and definitions, so a node whose ancestry ends anywhere else is
-      ungrounded and cannot be proven. evidence: CTR-proof-dag-invariants
+      DEF-premise-graph defines the premise graph as the build the proof kernel
+      makes on every read. By LMA-kernel-enforces-acyclicity no such build
+      contains a cycle, which is what AXM-acyclicity requires of a deductive
+      graph. By AXM-axiomatic-grounding a claim counts only through a path to
+      declared axioms and definitions, so a node whose ancestry ends anywhere
+      else is ungrounded and cannot be proven. evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-falsification-trial-ledger
@@ -242,52 +295,64 @@ branches:
       an appended amendment reclassifies it, or when its target or a node its
       target depends on is restated or removed. While a falsified trial whose
       counterexample meets DEF-counterexample counts, its target is refuted.
-    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample]
+    premises: [AXM-falsifiable-measurement, LMA-blast-radius-propagation, DEF-counterexample, DEF-current-trial, DEF-ledger]
     derivation_rule: >-
-      From AXM-falsifiable-measurement consistency is measured, never
-      asserted, so a trial is a captured record: correcting it appends an
-      amendment that folds over it with its reason, and the original stays.
-      Setting a trial aside any other way would change the measured state with
-      nothing measured and no reason recorded, which is consistency asserted;
-      the one other way is LMA-blast-radius-propagation's -- its target or a
-      node it depends on was restated or removed, so the trial vouches for a
-      statement no longer in the graph. A counterexample meeting
-      DEF-counterexample is a scenario in which every premise holds and the
-      claim fails, so while it counts the claim does not follow and its target
-      is refuted. evidence: CTR-trial-ledger-replay
+      By DEF-ledger a trial is an entry in an append-only record, so it is
+      never edited or removed, and by AXM-falsifiable-measurement it is a
+      captured measurement, so a correction is an amendment appended beside it
+      with its reason. By DEF-current-trial only current trials count, and
+      whether a trial is current turns on nothing but its validity after
+      amendments, its target's place in the graph, and the fingerprints of its
+      target and of the nodes it depends on. Validity changes only by an
+      appended amendment. Declaring a new node stops no trial, since no node in
+      the graph cites a node that is not yet in it; and by
+      LMA-blast-radius-propagation a restatement or removal stops a trial only
+      when it is of the trial's target or of a node its target depends on. A
+      counterexample meeting DEF-counterexample is a scenario in which every
+      premise holds and the claim fails, so while it counts the claim does not
+      follow and its target is refuted. evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-declarations-gate
     subject: CMP-declarations
     claim_type: contract
     statement: >-
-      Only committed declarations reach the belief model; a contract that no
-      declared test can measure accepts no evidence; and an uncommitted edit
-      leaves every verdict as it was.
-    premises: [LMA-worktree-inert, AXM-no-belief-write-path]
+      Only committed declarations reach the belief model; no evidence recorded
+      against a contract that no declared test can measure moves a belief; and
+      making an uncommitted edit to a declaration file changes no verdict.
+    premises: [LMA-worktree-inert, AXM-no-belief-write-path, AXM-commit-is-approval, DEF-belief-eligible]
     derivation_rule: >-
-      From LMA-worktree-inert an uncommitted edit changes no verdict. A
-      contract with no producing test has no measurement, so admitting
-      evidence against it would move a belief without one, which
-      AXM-no-belief-write-path forbids. evidence: CTR-declarations-gate
+      By AXM-commit-is-approval a declaration takes effect only from the
+      committed revision, so only committed declarations reach the belief
+      model. By DEF-belief-eligible evidence is belief-eligible only when it is
+      recorded against a contract that a declared test can measure, and by
+      AXM-no-belief-write-path nothing else moves a measured belief. By
+      LMA-worktree-inert making an uncommitted edit to a declaration file
+      changes no verdict. evidence: CTR-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-consistency-declarations-gate
     subject: CMP-consistency-declarations
     claim_type: contract
     statement: >-
-      Only committed axioms, definitions, lemmas and branches enter the proof
-      graph; a premise that names no declared node, and a cycle among
-      declarations, are reported before any verification is recorded; and a
-      branch whose subject belief.yaml no longer declares is reported as
-      governing nothing rather than as proven.
-    premises: [LMA-worktree-inert, AXM-acyclicity, AXM-axiomatic-grounding]
+      Only the declarations at the head revision and the proposals staged in
+      the ledger enter the proof graph, and a staged proposal takes no effect
+      as a declaration. A declaration that no build admits is reported, never
+      dropped in silence, and so is a branch whose subject belief.yaml no
+      longer declares; that branch keeps its proof state.
+    premises: [AXM-commit-is-approval, AXM-no-silent-failure, DEF-premise-graph, DEF-current-trial]
     derivation_rule: >-
-      From LMA-worktree-inert only committed declarations are in effect. From
-      AXM-acyclicity a cycle among declarations is unsound, so it is reported
-      at load rather than verified. From AXM-axiomatic-grounding a claim about
-      a component that no longer exists grounds nothing it governs, so the
-      join reports it. evidence: CTR-consistency-declarations-gate
+      By DEF-premise-graph a build admits nothing but the head revision's
+      declarations and the ledger's staged proposals. By AXM-commit-is-approval
+      a declaration takes effect only from the committed revision, so a
+      proposal that is only staged takes no effect as one. By
+      AXM-no-silent-failure a declaration that cannot take its place in the
+      graph, and a branch whose subject belief.yaml no longer declares, are
+      reported rather than dropped. A branch's subject is neither one of its
+      premises nor part of its fingerprint, by DEF-premise-graph and
+      DEF-current-trial, so losing its subject changes neither its place in
+      the graph nor which of its trials are current, and its proof state
+      stands. evidence: CTR-consistency-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-model-honest
@@ -312,17 +377,18 @@ branches:
     subject: CMP-diagnosis
     claim_type: contract
     statement: >-
-      When no declared test observes the leading candidate, the diagnosis
-      names instrumentation as the binding constraint and recommends no
-      optimisation; a component is blamed only on an observation against its
-      own contract.
-    premises: [AXM-observe-before-optimise]
+      While the component the diagnosis ranks first has no observation against
+      its own contract, the diagnosis recommends no optimisation of any
+      component; and a component is confirmed failing only on failing
+      observations against its own contract, never on an end-to-end outcome
+      alone.
+    premises: [AXM-coverage-binds-first, AXM-observe-before-optimise, DEF-observation]
     derivation_rule: >-
-      From AXM-observe-before-optimise an optimisation recommendation needs an
-      observation of its target; where no test can produce one, the only
-      recommendation that satisfies the axiom is to instrument, and
-      attributing an end-to-end failure to an unobserved component would be a
-      blame without an observation. evidence: CTR-diagnosis-refuses-blind-optimisation
+      The first clause is AXM-coverage-binds-first, with observation as
+      DEF-observation defines it. DEF-observation confirms a component as
+      failing only on failing observations against its own contract, and
+      AXM-observe-before-optimise adds that an end-to-end outcome alone
+      attributes to no component. evidence: CTR-diagnosis-refuses-blind-optimisation
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-runner-captures
@@ -334,10 +400,13 @@ branches:
       synthesised.
     premises: [AXM-no-belief-write-path, DEF-belief-eligible]
     derivation_rule: >-
-      From DEF-belief-eligible a measured record is one the server produced
-      with its artifact, so a record without one is not measured. A metric
-      absent from the artifact has no measurement behind it, and scoring it
-      would move a belief on nothing, which AXM-no-belief-write-path forbids.
+      By DEF-belief-eligible a measured record is one the server produced by
+      running a declared test and capturing its artifact with the artifact's
+      hash, its metrics taken from that artifact; so every measured record
+      carries both, and a metric the artifact does not contain is not among a
+      measured record's metrics. Scoring it anyway would move a measured belief
+      through something that is not belief-eligible evidence, which
+      AXM-no-belief-write-path forbids, so it is excluded.
       evidence: CTR-surface-intact
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
