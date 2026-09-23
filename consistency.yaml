@@ -230,6 +230,15 @@ definitions:
       is removed when it is neither declared at the head revision nor staged
       in the ledger.
 
+  - id: DEF-report
+    term: Report
+    meaning: >-
+      Output a reader returns to its caller, computed from the ledger, the
+      declarations and the repository. Producing a report appends no record to
+      the ledger -- no trial, amendment, note, event or decision, of any
+      provenance -- and changes no declaration. Output that does either is not a
+      report.
+
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
     statement: >-
