@@ -22,6 +22,7 @@ components:
   - {id: CMP-belief-model, note: belief slices from evidence, priors and the model version}
   - {id: CMP-diagnosis, note: bottleneck ranking and the decision policy}
   - {id: CMP-runner, note: test execution, artifact capture and the tool surface}
+  - {id: CMP-stamp-monitor, note: the read-only monitor over both ledgers}
 
 axioms:
   - id: AXM-axiomatic-grounding
@@ -482,6 +483,37 @@ branches:
       evidence: CTR-surface-intact
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-monitor-moves-nothing
+    subject: CMP-stamp-monitor
+    claim_type: contract
+    statement: >-
+      Producing a report changes no measured belief and no proof state: a report
+      is neither belief-eligible evidence nor a trial recorded on a node, and a
+      finding it states -- that evidence is stale, damaged or one-sided -- is
+      not a record, so it moves no belief.
+    premises: [AXM-no-belief-write-path, DEF-belief-eligible, DEF-proof-state, DEF-premise-graph, DEF-current-trial, DEF-ledger, DEF-report]
+    derivation_rule: >-
+      Beliefs: by DEF-report, producing a report appends no record to the ledger
+      of any provenance and changes no declaration. Belief-eligible evidence, by
+      DEF-belief-eligible, is a trial record, measured or imported -- a record
+      in the ledger as DEF-ledger names it. Producing a report appends none, and
+      a finding it states is part of its output, not a record; so by
+      AXM-no-belief-write-path, under which a measured belief changes only
+      through belief-eligible evidence, no measured belief moves. Proof states:
+      by DEF-proof-state a node's proof state is computed from its place in the
+      premise graph and the trials recorded on it alone. By DEF-premise-graph
+      the graph is built from the axioms, definitions, lemmas and branches
+      declared at the head revision and the proposals staged in the ledger; a
+      report changes no declaration and appends no record, so it stages no
+      proposal and the graph is unchanged, whatever else it reads or writes. By
+      DEF-current-trial whether a trial is current depends on its validity after
+      amendments, its target being in the premise graph, and the fingerprints it
+      recorded; a report appends no trial and no amendment and leaves the graph
+      unchanged, so the trials recorded on each node, and which of them are
+      current, are unchanged. So no proof state changes. evidence:
+      CTR-monitor-read-only
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -492,3 +524,4 @@ policies:
       - {target: BRN-model-honest, require: proven, evidence: supported}
       - {target: BRN-diagnosis-coverage-first, require: proven, evidence: supported}
       - {target: BRN-runner-captures, require: proven, evidence: supported}
+      - {target: BRN-monitor-moves-nothing, require: proven, evidence: supported}
