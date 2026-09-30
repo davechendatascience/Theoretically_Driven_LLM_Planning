@@ -22,3 +22,5 @@
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 54, "run_id": "RUN-0022", "synthesized": false, "test": "TST-beliefs@32bd673a"}, "session": "", "timestamp": "2026-09-23T14:28:31+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 31, "run_id": "RUN-0023", "synthesized": false, "test": "TST-server@c38f683a"}, "session": "", "timestamp": "2026-09-23T14:29:31+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 18, "run_id": "RUN-0024", "synthesized": false, "test": "TST-stamp-monitor@0056950c"}, "session": "", "timestamp": "2026-09-23T14:35:30+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 35, "run_id": "RUN-0025", "synthesized": false, "test": "TST-server@c38f683a"}, "session": "", "timestamp": "2026-09-30T14:58:56+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 20, "run_id": "RUN-0026", "synthesized": false, "test": "TST-stamp-monitor@0056950c"}, "session": "", "timestamp": "2026-09-30T15:01:47+00:00", "tool": "run_test"}
