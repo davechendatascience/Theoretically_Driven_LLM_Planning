@@ -175,6 +175,36 @@ class TestAudit:
         assert found.get("AMENDMENT_TARGET_UNKNOWN") == WARN
         assert found.get("DECISION_EVIDENCE_UNKNOWN") == BLOCK
 
+    def test_an_import_audits_like_a_run(self, project):
+        """ingest keeps its own copy: editing the original changes nothing, editing the copy is
+        tampering with the ledger's artifact."""
+        from component_belief import server
+        from component_belief.store import Store
+
+        original = project / "out" / "robot.trials.json"
+        original.parent.mkdir()
+        original.write_text('[{"ik_success": true}]', encoding="utf-8")
+        server.ingest(records=[{"contract_id": "CTR-grasp-reachable", "test_id": "TST-grasp-ik",
+                                "outcome": "pass", "metrics": {"ik_success": True},
+                                "repro": {"model_revision": "v3"}}],
+                      source="bench", artifact_uri=str(original))
+        original.write_text("[]", encoding="utf-8")
+        assert not [f for f in audit(project) if f.severity in (BLOCK, WARN)]
+
+        [t] = Store(project).effective_trials()
+        (project / t["artifact_uri"]).write_text("[]", encoding="utf-8")
+        assert codes(audit(project)).get("ARTIFACT_HASH_MISMATCH") == BLOCK
+
+    def test_an_import_recorded_without_a_hash_is_reported(self, project):
+        """Before ingest hashed what it imports, an import could name a URL and carry no hash."""
+        from component_belief.store import Store
+
+        Store(project).append_trials([{**trial(), "provenance": "imported", "run_id": "RUN-0007",
+                                       "artifact_uri": "ci://run/1"}])
+        found = codes(audit(project))
+        assert found.get("ARTIFACT_MISSING") == BLOCK
+        assert found.get("IMPORT_UNHASHED") == WARN
+
     def test_uncommitted_declarations_are_reported(self, project):
         (project / "belief.yaml").write_text(CLAIMED_YAML + "\n# a lowered threshold\n", encoding="utf-8")
         assert codes(audit(project)).get("DECLARATIONS_PENDING") == WARN

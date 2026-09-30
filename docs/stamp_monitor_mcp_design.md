@@ -134,8 +134,10 @@ how an untested file becomes visible.
 - Every ledger line parses (the stores skip unparsable lines silently), and evidence ids are unique.
 - Every amendment and every decision cites records that exist.
 - Every stamp a trial cites exists and matches the trial's digest.
-- Every measured trial's artifact exists and still hashes to the recorded value (LF-normalised
-  content counts as the same artifact, so a cross-platform checkout is not tampering).
+- Every measured or imported trial's artifact exists and still hashes to the recorded value
+  (LF-normalised content counts as the same artifact, so a cross-platform checkout is not
+  tampering). An import recorded with no hash, from before `ingest` hashed what it imports, is
+  reported as `IMPORT_UNHASHED`.
 - The declarations in effect are the committed ones.
 - Unstamped evidence is counted, since its staleness is judged by the weaker revision check.
 

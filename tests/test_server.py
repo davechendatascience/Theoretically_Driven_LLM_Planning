@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 
@@ -19,6 +20,24 @@ def project(repo, monkeypatch):
     monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
     monkeypatch.setenv("BELIEF_ACTOR", "test-agent")
     return repo
+
+
+def results_file(repo, text='[{"ik_success": true}]'):
+    """A results file an external run left in the project, as `ingest` expects to find one."""
+    path = repo / "out" / "round1.trials.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def complete_record(**overrides):
+    return {
+        "contract_id": "CTR-grasp-reachable", "test_id": "TST-grasp-ik",
+        "outcome": "pass", "metrics": {"ik_success": True},
+        "conditions": {"lighting": "normal"},
+        "repro": {"model_revision": "v3", "sw_revision": "deadbeef"},
+        **overrides,
+    }
 
 
 def emit_yaml(repo, run_command):
@@ -137,7 +156,7 @@ class TestToolSurface:
         out = server.ingest(
             records=[{"contract_id": "CTR-grasp-reachable", "test_id": "TST-grasp-ik",
                       "outcome": "pass", "metrics": {"ik_success": True}}],
-            source="ci", artifact_uri="ci://run/1",
+            source="ci", artifact_uri=str(results_file(project)),
         )
         assert "rejected" in out
         assert "repro" in out
@@ -145,20 +164,47 @@ class TestToolSurface:
     def test_ingest_requires_an_artifact(self, project):
         assert "artifact_uri is required" in server.ingest(records=[], source="ci", artifact_uri="")
 
+    @pytest.mark.parametrize("uri", ["ci://run/1", "out/never-written.json"])
+    def test_ingest_refuses_an_artifact_it_cannot_read(self, project, uri):
+        """DEF-belief-eligible: an import comes with an artifact and its hash. The server can
+        hash only bytes it can read, so a URL or a missing path imports nothing."""
+        out = server.ingest(records=[complete_record()], source="ci", artifact_uri=uri)
+        assert "not a file on this machine" in out
+        assert Store(project).effective_trials() == []
+
+    def test_ingest_refuses_a_test_the_contract_does_not_list(self, project):
+        out = server.ingest(records=[complete_record(test_id="TST-never-declared")],
+                            source="ci", artifact_uri=str(results_file(project)))
+        assert "ingested 0 record" in out
+        assert "is not a test CTR-grasp-reachable lists in evaluable_by" in out
+        assert Store(project).effective_trials() == []
+        assert not list(Store(project).artifacts_dir.glob("RUN-*")), "a rejected import copies nothing"
+
     def test_ingest_accepts_a_complete_record(self, project):
-        out = server.ingest(
-            records=[{
-                "contract_id": "CTR-grasp-reachable", "test_id": "TST-grasp-ik",
-                "outcome": "pass", "metrics": {"ik_success": True},
-                "conditions": {"lighting": "normal"},
-                "repro": {"model_revision": "v3", "sw_revision": "deadbeef"},
-            }],
-            source="ci", artifact_uri="ci://run/1",
-        )
+        original = results_file(project)
+        out = server.ingest(records=[complete_record(artifact_hash="0000000000000000")],
+                            source="ci", artifact_uri=str(original))
         assert "ingested 1 record" in out
-        trials = Store(project).effective_trials()
-        assert trials[0]["provenance"] == "imported"
-        assert trials[0]["source_system"] == "ci"
+        [t] = Store(project).effective_trials()
+        assert t["provenance"] == "imported"
+        assert t["source_system"] == "ci"
+        assert t["test_ref"] == load(project).tests["TST-grasp-ik"].ref
+
+        # the server's copy, hashed by the server; the caller's hash is not what is recorded
+        copy = project / t["artifact_uri"]
+        assert t["artifact_uri"].startswith(".belief/artifacts/")
+        assert copy.read_bytes() == original.read_bytes()
+        assert t["artifact_hash"] == hashlib.sha256(original.read_bytes()).hexdigest()[:16]
+        assert t["source_artifact"] == str(original.resolve())
+
+    def test_a_fabricated_import_cannot_adopt(self, project):
+        """The probe that found the hole: an undeclared test, no hash, an artifact that does not
+        exist, an empty repro. It must neither record a trial nor let a policy adopt."""
+        fabricated = complete_record(test_id="TST-never-declared", repro={})
+        for uri in ("nowhere/none.json", str(results_file(project))):
+            server.ingest(records=[fabricated], source="CI", artifact_uri=uri)
+        assert Store(project).effective_trials() == []
+        assert not server.decide(change_id="CHG-x", approver="David").startswith("ADOPT")
 
     def test_run_test_reports_unknown_test(self, project):
         assert "unknown test" in server.run_test("TST-nope")

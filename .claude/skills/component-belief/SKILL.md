@@ -26,7 +26,12 @@ point, and the ranking is by *decision relevance*, not by lowest score.
 
 2. **Never report a result you did not obtain through `run_test` or `ingest`.**
    If you ran something in your own shell, that number has no artifact and no
-   provenance. Re-run it through `run_test` or do not state it.
+   provenance. Re-run it through `run_test` or do not state it. `ingest` is for
+   results a run you could not start produced -- CI, a robot, a GPU box -- and
+   it takes the results file itself (`artifact_uri`, a file on this machine)
+   and a test the contract lists in `evaluable_by`; the server copies and
+   hashes that file. Importing your own shell run is not a shortcut around
+   `run_test`: declare the test instead.
 
 3. **`insufficient` is an answer.** Report it as one. A slice below `n_min`
    carries an estimate but no verdict, and no amount of confidence in the

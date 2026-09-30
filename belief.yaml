@@ -129,7 +129,8 @@ components:
     failure_modes:
       - {id: FM-fabricated-metric, observable: a declared metric is synthesised from an exit code}
       - {id: FM-unversioned-run, observable: a measured record carries no sw_revision}
-    remediation: runner.run_test() synthesis branch; the tool list in server.py
+      - {id: FM-unbacked-import, observable: an imported record is recorded without an artifact the server copied and hashed, or against a test its contract does not list}
+    remediation: runner.run_test() synthesis branch; the tool list in server.py; the checks in server.ingest()
     code:
       - src/component_belief/runner.py
       - src/component_belief/readlog.py

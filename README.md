@@ -96,7 +96,7 @@ fixed weight:
 |---|---|---|
 | Server ran a declared test | `component_belief.run_test` | measured evidence (artifact, hash and content stamp captured) |
 | Server recorded a falsification probe | `consistency_belief.verify_step` | a deductive verification trial |
-| External import | `component_belief.ingest` | imported evidence (requires source and artifact) |
+| External import | `component_belief.ingest` | imported evidence (a declared test, and a local artifact the server copies and hashes) |
 | Agent or human statement | `note` (both servers) | **zero** — recorded as `provenance=asserted` |
 
 ### 2. Declarations live in git, not in tools
@@ -210,7 +210,7 @@ status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 |---|---|
 | `status` | 8 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace` |
 | `run_test` | runs a declared test, captures its artifact and stamp, records its trials |
-| `ingest` | imports external evidence with its source and artifact |
+| `ingest` | imports external evidence: each record names a test its contract lists, and the server copies and hashes the results file itself |
 | `amend` | reclassifies or supersedes trials by appending; nothing is edited |
 | `note` | qualitative annotation; zero weight |
 | `decide` | evaluates a policy; human approver for `ADOPT`/`ROLLBACK`; records the revision |

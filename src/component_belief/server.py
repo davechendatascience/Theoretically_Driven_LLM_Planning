@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
 from .render import basis_line, bullet, envelope
-from .runner import _git_revision, run_test as execute_test
+from .runner import _git_revision, _sha256, run_test as execute_test
 from .store import VALIDITY, Store
 from .views import (
     view_artifacts,
@@ -162,6 +163,16 @@ def run_test(
     return envelope("\n".join(lines), basis_line(slices))
 
 
+def _local_file(root: Path, uri: str) -> Path | None:
+    """The file an import names, if it is one on this machine: a path in the project, or an
+    absolute one. A URL names nothing the server can read, so it names nothing here."""
+    if "://" in uri:
+        return None
+    path = Path(uri)
+    path = (path if path.is_absolute() else root / path).resolve()
+    return path if path.is_file() else None
+
+
 @mcp.tool()
 def ingest(
     records: list[dict[str, Any]],
@@ -171,38 +182,58 @@ def ingest(
     """Import belief-eligible evidence produced outside this server (CI,
     telemetry, a robot log).
 
-    Each record needs: contract_id, test_id, outcome, metrics, and a repro
-    block. Records missing required fields are rejected rather than stored
-    partially, because a record you cannot compare is not evidence (3.4).
+    artifact_uri: the file the records were read from -- a path in the project
+    or an absolute path on this machine, never a URL. The server copies it into
+    the run's artifact directory and hashes the copy itself, so the ledger
+    audits on any clone and a later edit to the original changes nothing. Any
+    artifact_hash a record carries is ignored.
+
+    Each record needs: contract_id, test_id (a test the contract lists in
+    evaluable_by), outcome, metrics, and a repro block. Records missing
+    required fields are rejected rather than stored partially, because a record
+    you cannot compare is not evidence (3.4).
     """
     root = project_root()
     ctx = Context.build(root)
     if not artifact_uri:
         return "rejected: artifact_uri is required for imported evidence"
+    original = _local_file(root, artifact_uri)
+    if original is None:
+        # DEF-belief-eligible: an import is brought in with an artifact *and its hash*. A hash
+        # the caller supplies is testimony; the server can only vouch for bytes it has read.
+        return (f"rejected: artifact_uri {artifact_uri!r} is not a file on this machine. The "
+                "server copies and hashes the artifact itself, so it must exist here -- download "
+                "a remote artifact into the project first")
 
     required = ("contract_id", "test_id", "outcome")
     accepted, rejected = [], []
     run_id = ctx.store.next_run_id()
 
     for index, record in enumerate(records):
-        missing = [f for f in required if not record.get(f)]
+        problems = [f"missing {f}" for f in required if not record.get(f)]
         contract = ctx.decl.contracts.get(record.get("contract_id", ""))
         if contract is None:
-            missing.append("contract_id (not declared)")
+            problems.append("contract_id is not declared")
         elif not ctx.decl.is_scorable(contract.id):
-            missing.append(f"contract_id ({contract.id} is not scorable)")
+            problems.append(f"{contract.id} is not scorable")
+        elif record.get("test_id") and record["test_id"] not in contract.evaluable_by:
+            # Only a declared test can measure a contract (DEF-belief-eligible); an import is
+            # evidence from one of them, run somewhere the server could not run it.
+            problems.append(f"test_id {record['test_id']} is not a test {contract.id} lists in "
+                            f"evaluable_by ({', '.join(contract.evaluable_by)})")
         if not isinstance(record.get("repro"), dict):
-            missing.append("repro")
-        if missing:
-            rejected.append(f"record {index}: missing {', '.join(missing)}")
+            problems.append("missing repro")
+        if problems:
+            rejected.append(f"record {index}: {'; '.join(problems)}")
             continue
+        test = ctx.decl.tests[record["test_id"]]
         accepted.append({
             "subject": contract.subject,
             "contract_id": contract.id,
-            "test_id": record["test_id"],
-            "test_ref": record.get("test_ref", record["test_id"]),
-            "run_id": record.get("run_id", run_id),
-            "system_version": record.get("repro", {}).get("sw_revision", ""),
+            "test_id": test.id,
+            "test_ref": record.get("test_ref") or test.ref,
+            "run_id": run_id,
+            "system_version": record["repro"].get("sw_revision", ""),
             "provenance": "imported",
             "source_system": source,
             "outcome": record["outcome"],
@@ -210,16 +241,25 @@ def ingest(
             "conditions": {"raw": record.get("conditions", {})},
             "repro": record["repro"],
             "validity": "valid",
-            "artifact_uri": artifact_uri,
-            "artifact_hash": record.get("artifact_hash", ""),
         })
 
+    if accepted:
+        # Copied only once something will rest on it, so a rejected import leaves no directory.
+        copy = ctx.store.artifact_dir(run_id) / original.name
+        shutil.copyfile(original, copy)
+        stored = {"artifact_uri": copy.relative_to(root).as_posix(),
+                  "artifact_hash": _sha256(copy),
+                  "source_artifact": str(original)}
+        accepted = [{**record, **stored} for record in accepted]
     ids = ctx.store.append_trials(accepted) if accepted else []
     ctx.store.append_event("ingest", {
         "source": source, "accepted": len(ids), "rejected": len(rejected), "run_id": run_id,
     }, actor=_actor())
 
     lines = [f"ingested {len(ids)} record(s) from {source!r} as provenance=imported"]
+    if accepted:
+        lines.append(f"artifact: {stored['artifact_uri']} sha={stored['artifact_hash']} "
+                     f"(copied from {original})")
     if rejected:
         lines += ["", "rejected:", bullet(rejected)]
     fresh = Context.build(root)

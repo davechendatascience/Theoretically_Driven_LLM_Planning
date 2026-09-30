@@ -7,7 +7,7 @@ stops existing. This re-checks, mechanically, what the ledgers assume:
   - every ledger line parses, and every evidence id is unique
   - every amendment names a trial that exists
   - every stamp a trial cites exists and still matches the digest the trial recorded
-  - every measured trial's artifact exists and still hashes to the value recorded at run time
+  - every measured or imported trial's artifact exists and still hashes to the value recorded
   - every id a decision cites is in the ledger
   - the declarations in effect are the committed ones
 
@@ -130,19 +130,28 @@ def _stamps(root: Path, store: Store, trials: list[dict], findings: list[Finding
 
 
 def _artifacts(root: Path, trials: list[dict], findings: list[Finding]) -> None:
-    """One finding per artifact, not per trial: a run's trials share one file."""
+    """One finding per artifact, not per trial: a run's trials share one file.
+
+    Imported trials are held to the same check. Since `ingest` copies and hashes the artifact
+    itself, an import is as auditable as a run; one recorded before that, with no hash, rests on
+    whatever the caller said the file was, and is reported as such."""
     checked: dict[tuple[str, str], str] = {}
+    unhashed: set[str] = set()
     for t in trials:
-        if t.get("provenance") != "measured" or not t.get("artifact_uri"):
+        if t.get("provenance") not in ("measured", "imported") or not t.get("artifact_uri"):
             continue
         key = (str(t["artifact_uri"]), str(t.get("artifact_hash") or ""))
+        if t.get("provenance") == "imported" and not key[1]:
+            unhashed.add(str(t.get("run_id")))
         if key in checked:
             continue
         path = root / key[0]
         if not path.exists():
             checked[key] = "missing"
             findings.append(Finding("ARTIFACT_MISSING", BLOCK, str(t.get("run_id")),
-                                    f"{key[0]} is gone; its trials can no longer be audited"))
+                                    f"{key[0]} is gone; its trials can no longer be audited"
+                                    if t.get("provenance") == "measured" else
+                                    f"{key[0]} is not a file here; this import cannot be audited"))
         elif key[1] and not _artifact_matches(path, key[1]):
             checked[key] = "mismatch"
             findings.append(Finding("ARTIFACT_HASH_MISMATCH", BLOCK, str(t.get("run_id")),
@@ -150,3 +159,7 @@ def _artifacts(root: Path, trials: list[dict], findings: list[Finding]) -> None:
                                     "when the run wrote it"))
         else:
             checked[key] = "ok"
+    for run_id in sorted(unhashed):
+        findings.append(Finding("IMPORT_UNHASHED", WARN, run_id,
+                                "imported with no artifact hash, before ingest hashed what it "
+                                "imports; nothing shows the file is the one the records came from"))

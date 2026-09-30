@@ -144,7 +144,7 @@ Three channels reach the server. Two are belief-eligible.
 | Channel | Tool | Belief-eligible | Backed by |
 |---|---|---|---|
 | Server ran a declared test | `run_test` | **yes** | Server executed `run:`, captured exit code + artifact + hash |
-| External import | `ingest` | **yes** | Pre-registered `source`, artifact + hash |
+| External import | `ingest` | **yes** | A test the contract lists; a local artifact the server copies and hashes (a pre-registered `source` is still open, §known issues 2) |
 | Agent or human statement | `note` | **no** | Nothing. It is testimony. |
 
 `note` is the sanctioned home for the qualitative judgement rule 4.5 permits —
@@ -439,8 +439,14 @@ distributional models for graded metrics; telemetry-query tests.
    actor recorded in `events.jsonl`. The third is cheap and worth trying first.
 2. **`imported` evidence is trusted on an artifact the server didn't
    produce** — a real weakening of §3, since an agent with shell access could
-   write an artifact and import it. Same root cause as (1). Decide whether
-   `ingest` requires a pre-registered source token.
+   write an artifact and import it. Same root cause as (1). Half closed:
+   `ingest` now requires a test the contract lists in `evaluable_by` and a
+   file on this machine, which it copies into the run's artifact directory
+   and hashes itself, and `stamp-monitor audit` checks imported artifacts as
+   it checks measured ones -- so an import can no longer rest on a URL, a
+   missing file or a hash the caller typed. Still open: the agent can write
+   the file it imports. Decide whether `ingest` requires a pre-registered
+   source.
 3. **`equivalent_to` is the one route around test-version isolation.** If it
    becomes routine, the isolation is theatre. Track its usage rate as a health
    metric of the process itself.
