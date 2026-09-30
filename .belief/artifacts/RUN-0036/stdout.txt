@@ -1,0 +1,48 @@
+.................F....................................                   [100%]
+================================== FAILURES ===================================
+____________ test_the_hook_survives_a_command_that_sets_pythonpath ____________
+
+repo = WindowsPath('C:/Users/ychen/AppData/Local/Temp/pytest-of-ychen/pytest-249/test_the_hook_survives_a_comma0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002177B847EF0>
+
+    def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
+        """A declared command of the form `env PYTHONPATH=... python ...` replaces the environment the
+        runner prepared. Recording nothing then reads exactly like a run that opened no files."""
+        from pathlib import Path
+    
+        from component_belief import readlog, server
+        from component_belief.store import Store
+        from conftest import git
+    
+        import os
+    
+        hook, sep = str(Path("/hook")), os.pathsep      # the platform's own spelling of both
+        woven = readlog.weave("env PYTHONPATH=third_party:. python x.py", Path("/hook"))
+        assert woven.startswith(f"env PYTHONPATH={hook}{sep}third_party:. ")
+        assert readlog.weave('PYTHONPATH="a:b" python x.py', Path("/hook")) == f'PYTHONPATH="{hook}{sep}a:b" python x.py'
+        assert readlog.weave("python x.py", Path("/hook")) == "python x.py"
+    
+        (repo / "lib").mkdir(exist_ok=True)
+        (repo / "lib" / "data.txt").write_text("payload", encoding="utf-8")
+        (repo / "reader2.py").write_text(
+            "import os\nfrom pathlib import Path\n"
+            "Path('lib/data.txt').read_text()\n"
+            "Path(os.environ['OUT']).write_text('[{\"metrics\": {\"ik_success\": true}}]')\n",
+            encoding="utf-8")
+        belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+            '    run: "echo ok"', '    run: "env PYTHONPATH=lib:. python reader2.py"')
+        (repo / "belief.yaml").write_text(belief, encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "a test that sets PYTHONPATH itself")
+    
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+        server.run_test(test_id="TST-grasp-ik")
+        reads = readlog.read(Store(repo).artifacts_dir / "RUN-0001")
+>       assert "lib/data.txt" in reads, reads
+E       AssertionError: []
+E       assert 'lib/data.txt' in []
+
+tests\test_beliefs.py:277: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_beliefs.py::test_the_hook_survives_a_command_that_sets_pythonpath
+1 failed, 53 passed in 331.36s (0:05:31)
