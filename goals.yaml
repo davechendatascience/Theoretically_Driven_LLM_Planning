@@ -1,0 +1,130 @@
+# DRAFT, written by the agent for you to review, change and commit yourself.
+#
+# Your goals for this project, the interface between two of them, and how each is measured.
+# Every measure runs the acceptance suite in acceptance/, which drives only the servers' public
+# tools in throwaway projects and shares nothing with tests/ -- so it changes when you change
+# what a goal means, not when the agent changes how the harness is built.
+#
+# Once committed: the guard (tdlp-guard install) keeps the agent's commits off this file and the
+# acceptance suite, status(view="goals") is your check-in, and POL-goals is the default policy
+# for decide, diagnose and plan -- an adoption under it needs no approver.
+
+goals:
+  - id: GOL-honest-evidence
+    outcome: >-
+      A number the harness reports was measured -- by a test it ran or an artifact it hashed --
+      and stops counting the moment what it measured changes.
+    measure: CTR-evidence-is-honest
+
+  - id: GOL-sound-designs
+    outcome: >-
+      A design claim counts as proven only after falsification probes judged from the
+      declarations alone, and stops counting when a premise it rests on changes.
+    measure: CTR-designs-are-sound
+
+  - id: GOL-goals-stay-mine
+    outcome: >-
+      My goals and how they are measured change only by my commit, and the agent's loop waits on
+      me for nothing else.
+    measure: CTR-goals-stay-mine
+
+  - id: GOL-any-project
+    outcome: >-
+      The harness runs in any project at a pinned version, reading that project and running its
+      tests in that project's environment.
+    measure: CTR-runs-in-any-project
+
+interfaces:
+  - id: IFC-evidence__designs
+    from: GOL-honest-evidence
+    to: GOL-sound-designs
+    hands_over: >-
+      the state of each contract a design cites (supported, refuted, insufficient, stale), which
+      a design's release gate requires alongside its proof
+    measure: CTR-design-gate-reads-evidence
+
+contracts:
+  - id: CTR-evidence-is-honest
+    subject: GOL-honest-evidence
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-evidence]
+
+  - id: CTR-designs-are-sound
+    subject: GOL-sound-designs
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-designs]
+
+  - id: CTR-goals-stay-mine
+    subject: GOL-goals-stay-mine
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-goals]
+
+  - id: CTR-runs-in-any-project
+    subject: GOL-any-project
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-any-project]
+
+  - id: CTR-design-gate-reads-evidence
+    subject: IFC-evidence__designs
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-design-gate]
+
+tests:
+  - id: TST-acceptance-evidence
+    layer: e2e
+    targets: [GOL-honest-evidence]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_honest_evidence.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
+  - id: TST-acceptance-designs
+    layer: e2e
+    targets: [GOL-sound-designs]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_sound_designs.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
+  - id: TST-acceptance-goals
+    layer: e2e
+    targets: [GOL-goals-stay-mine]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_goals_stay_mine.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
+  - id: TST-acceptance-any-project
+    layer: e2e
+    targets: [GOL-any-project]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_any_project.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
+  - id: TST-acceptance-design-gate
+    layer: interface
+    targets: [IFC-evidence__designs]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_design_gate_reads_evidence.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
+policies:
+  - id: POL-goals
+    criteria:
+      - {slice: CTR-evidence-is-honest, require: supported}
+      - {slice: CTR-designs-are-sound, require: supported}
+      - {slice: CTR-goals-stay-mine, require: supported}
+      - {slice: CTR-runs-in-any-project, require: supported}
+      - {slice: CTR-design-gate-reads-evidence, require: supported}
