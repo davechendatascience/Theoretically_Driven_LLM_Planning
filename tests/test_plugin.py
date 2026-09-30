@@ -109,7 +109,7 @@ class TestManifest:
 
     def test_every_skill_is_where_the_plugin_loads_it(self):
         skills = sorted(p.parent.name for p in (PLUGIN / "skills").glob("*/SKILL.md"))
-        assert skills == ["component-belief", "consistency-belief"]
+        assert skills == ["adopt-goals", "component-belief", "consistency-belief"]
         for name in skills:
             front = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8").split("---")[1]
             assert f"name: {name}" in front

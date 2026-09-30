@@ -131,3 +131,105 @@ class TestRatification:
 
     def test_a_policy_in_belief_yaml_is_never_approved_by_it(self, goals_repo):
         assert "belief.yaml" in ratification_gap(goals_repo, load(goals_repo), "POL-release")
+
+
+class TestAdoption:
+    """Setting up goals in a project that already uses TDLP: the view shows what could measure a
+    goal and checks a draft without putting it in effect, and a measure promoted from belief.yaml
+    keeps the evidence it already has."""
+
+    E2E_YAML = """
+components:
+  - id: CMP-grasp
+    purpose: Choose a grasp pose
+    testable_capability: Produces a reachable pose
+    failure_modes: [{id: FM-unreachable, observable: IK returns nothing}]
+    remediation: Retune approach sampling
+    code: [grasp.py]
+contracts:
+  - {id: CTR-pick-success, subject: CMP-grasp, kind: gate, metrics: [{id: passed, unit: bool}],
+     acceptance: {rule: "passed == true"}, evaluable_by: [TST-pick]}
+tests:
+  - {id: TST-pick, layer: e2e, targets: [CMP-grasp], run: python eval/pick.py $OUT, metrics: [passed]}
+"""
+    PROMOTED_GOALS = """
+goals:
+  - {id: GOL-grasp, outcome: The arm picks up the object it is asked for, measure: CTR-pick-success}
+contracts:
+  - {id: CTR-pick-success, subject: GOL-grasp, kind: gate, metrics: [{id: passed, unit: bool}],
+     acceptance: {rule: "passed == true"}, evaluable_by: [TST-pick]}
+tests:
+  - {id: TST-pick, layer: e2e, targets: [GOL-grasp], run: python eval/pick.py $OUT, metrics: [passed]}
+policies:
+  - {id: POL-goals, criteria: [{slice: CTR-pick-success, require: supported}]}
+"""
+
+    @pytest.fixture
+    def measured(self, repo, monkeypatch):
+        """A project with an end-to-end contract and one passing run of it, and no goals yet."""
+        from component_belief.runner import run_test
+        from component_belief.store import Store
+        from conftest import EVAL_PY
+
+        (repo / "belief.yaml").write_text(self.E2E_YAML, encoding="utf-8")
+        (repo / "grasp.py").write_text("# v1\n", encoding="utf-8")
+        (repo / "eval").mkdir()
+        (repo / "eval" / "pick.py").write_text(EVAL_PY, encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "an end-to-end test")
+        decl = load(repo)
+        run_test(repo, Store(repo), decl, decl.tests["TST-pick"])
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+        return repo
+
+    @staticmethod
+    def pick_slice(repo):
+        from component_belief.model import compute_slices
+        from component_belief.staleness import CodeStaleness
+        from component_belief.store import Store
+
+        [sl] = compute_slices(load(repo), Store(repo).effective_trials(), ["CTR-pick-success"],
+                              staleness=CodeStaleness(repo))
+        return sl
+
+    def test_before_any_goals_the_view_lists_what_could_measure_one(self, measured):
+        from component_belief import server
+
+        view = server.status(view="goals")
+        assert "candidate measures" in view
+        assert "CTR-pick-success (TST-pick): CTR-pick-success [unbucketed] supported gate 1/1" in view
+
+    def test_a_draft_is_checked_without_taking_effect(self, measured):
+        from component_belief import server
+
+        (measured / "goals.yaml").write_text(self.PROMOTED_GOALS.replace(
+            "measure: CTR-pick-success}", "measure: CTR-not-declared}"), encoding="utf-8")
+        view = server.status(view="goals")
+        assert "no goals in effect" in view and "draft in the working tree" in view
+        assert "UNMEASURED_GOAL GOL-grasp: measure CTR-not-declared is not a declared contract" in view
+        assert not load(measured).goals, "a draft is reported, never in effect"
+
+    def test_a_promoted_measure_keeps_its_evidence(self, measured):
+        """The prediction step 4 rests on: a contract moved into goals.yaml with its id and test
+        keeps its trials -- while both files declare it, and after belief.yaml lets it go -- with
+        no re-run."""
+        before = self.pick_slice(measured)
+        assert before.state == "supported"
+
+        (measured / "goals.yaml").write_text(self.PROMOTED_GOALS, encoding="utf-8")
+        git(measured, "add", "-A")
+        git(measured, "commit", "-q", "-m", "my goals, promoting the pick test")
+        decl = load(measured)
+        assert decl.contracts["CTR-pick-success"].subject == "GOL-grasp"
+        assert any(i.code == "DUPLICATE_ID" for i in decl.issues)
+        during = self.pick_slice(measured)
+        assert (during.state, during.evidence_ids) == (before.state, before.evidence_ids)
+
+        cleaned = self.E2E_YAML.split("contracts:")[0].replace(
+            "    code: [grasp.py]\n", "    code: [grasp.py]\n    goal: GOL-grasp\n")
+        (measured / "belief.yaml").write_text(cleaned, encoding="utf-8")
+        git(measured, "commit", "-q", "-am", "belief.yaml lets the promoted ids go; tag the goal" + AGENT_TRAILER)
+        decl = load(measured)
+        assert not [i for i in decl.issues if i.code in ("DUPLICATE_ID", "UNMEASURED_GOAL")]
+        after = self.pick_slice(measured)
+        assert (after.state, after.evidence_ids) == (before.state, before.evidence_ids)

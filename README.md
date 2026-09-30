@@ -57,7 +57,8 @@ does not fetch it on its own.
 * **Which Python a test gets.** A declared test's `run:` line runs in the project's environment:
   its `.venv` if it has one, else the PATH Claude Code inherited, never the plugin's own
   interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
-* **Skills.** They load as `/tdlp:component-belief` and `/tdlp:consistency-belief`.
+* **Skills.** They load as `/tdlp:component-belief`, `/tdlp:consistency-belief` and
+  `/tdlp:adopt-goals` (setting up goals in a project that already uses the harness).
 
 ### Your goals
 
@@ -97,13 +98,37 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.4.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.0" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
 met, insufficient or stale (with the test to run), the agent's proposals on them, and any agent
 commit to your goal set since your last. Your goals policy is the default for `decide`,
 `diagnose` and `plan`, and an adoption under it needs no approver.
+
+### Setting up goals in a project that already uses TDLP
+
+Ask the agent to run `/tdlp:adopt-goals`. The procedure is the same in every project, and only
+step 4 waits on you:
+
+1. **The agent reads what exists.** With no goals in effect, `status(view="goals")` lists the
+   candidate measures: contracts an end-to-end test already measures, with their state.
+2. **It drafts `goals.yaml` in the working tree** and never commits it. Each goal's measure is
+   one of two kinds:
+   - **Promoted:** an existing end-to-end contract, moved with its id and test, so its evidence
+     comes along. Use this when its test rarely changes, since the test becomes yours.
+   - **An acceptance test:** a new one in `acceptance/`, with its own `conftest.py`, so your
+     measures share nothing with the agent's tests.
+
+   The goals view checks the draft as if committed and puts nothing in effect.
+3. **It installs the guard** in this clone.
+4. **You review the draft and commit it yourself.**
+5. **It cleans up after your commit.** It removes the promoted ids from `belief.yaml`, tags each
+   component with the goal it serves, and runs any measure without evidence. A promoted measure
+   reads the state it had before the move, with no re-run.
+
+This repository's own goals went through it (`680e5da`): four goals and one interface, each
+measured by the acceptance suite in `acceptance/`.
 
 ### Moving a project that registered the servers by hand
 
@@ -515,6 +540,7 @@ The suites assert the invariants above, not the implementation:
 14. As a plugin, all three servers read the project Claude Code reports, install from their own version's tag, and never lend a test the plugin's own interpreter.
 15. An agent-trailered commit to the goal set is refused and one the human types passes; an adoption under the goals policy needs no approver until the agent touches the goal set.
 16. A declared input git ignores is judged by its content on disk: changed or missing, its evidence is stale; the same bytes again, current.
+17. A measure promoted from `belief.yaml` into `goals.yaml` keeps its evidence, while both files declare it and after; a draft `goals.yaml` is checked without taking effect.
 
 ---
 
@@ -523,6 +549,21 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.5.0 — 2026-10-01 · setting up goals in any project that uses TDLP
+
+- **`/tdlp:adopt-goals`**, a plugin skill, walks the agent through putting goals into a project
+  that already uses the harness. It drafts, checks and installs the guard; the human commits;
+  then the agent cleans up. Only the human's commit waits on the human.
+- **The goals view**, with no goals in effect, lists the candidate measures: contracts an
+  end-to-end test already measures. It also checks a `goals.yaml` in the working tree as a draft
+  and puts nothing in effect, so the agent can validate what it will hand over without
+  committing it.
+- **A measure promoted** from `belief.yaml` into `goals.yaml`, with its id and test, is shown to
+  keep its evidence ids and state before, during and after the move, with no re-run.
+- **This repository adopted its own goals** (`680e5da`, committed by the human): honest evidence,
+  sound designs, goals that stay the human's, and running in any project, plus the interface
+  from evidence to designs. Each is measured by the acceptance suite in `acceptance/`.
 
 ### 0.4.0 — 2026-10-01 · evidence on files git does not track
 

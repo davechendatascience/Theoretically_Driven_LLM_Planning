@@ -27,6 +27,7 @@ components:
       - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
       - {id: FM-goal-measured-by-agent, observable: a goal whose measure or its test lives in belief.yaml loads with no issue}
     remediation: Tighten validate() and _validate_goals(); the fatal-code set in Declarations.is_scorable
+    goal: GOL-honest-evidence
     code:
       - src/component_belief/declarations.py
       - src/component_belief/expr.py
@@ -42,6 +43,7 @@ components:
       - {id: FM-removed-subject-silent, observable: a branch whose component left belief.yaml reads as governing it}
       - {id: FM-worktree-leak, observable: an uncommitted axiom edit alters a proof state}
     remediation: validate() and validate_links() in the consistency declarations loader
+    goal: GOL-sound-designs
     code:
       - src/consistency_belief/declarations.py
 
@@ -59,6 +61,7 @@ components:
       - {id: FM-stale-carried, observable: a trial keeps counting after its target or a premise is restated}
       - {id: FM-repeat-counts, observable: three probes of one strategy by one actor close an obligation}
     remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints and independence count
+    goal: GOL-sound-designs
     code:
       - src/consistency_belief/graph.py
       - src/consistency_belief/model.py
@@ -77,6 +80,7 @@ components:
       - {id: FM-declared-masked, observable: a stale staged copy stands in for a declaration}
       - {id: FM-source-falsification, observable: a counterexample naming a source file is recorded as a refutation}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
+    goal: GOL-sound-designs
     code:
       - src/consistency_belief/store.py
       - src/consistency_belief/decide.py
@@ -101,6 +105,7 @@ components:
       - {id: FM-stale-counted, observable: a trial measured before a claimed file changed still counts as current}
       - {id: FM-blind-outside-git, observable: a trial resting on a declared input git ignores stays current after that file changes, or is never current}
     remediation: model.eligible() and the slice key in compute_slices(); staleness.CodeStaleness
+    goal: GOL-honest-evidence
     code:
       - src/component_belief/model.py
       - src/component_belief/stats.py
@@ -118,6 +123,7 @@ components:
       - {id: FM-e2e-attribution, observable: a component is blamed with no local observation}
       - {id: FM-adopt-on-stale, observable: a policy adopts on a slice whose evidence predates a code change}
     remediation: diagnose() status assignment and the coverage_limited branch; decide.evaluate_policy
+    goal: GOL-honest-evidence
     code:
       - src/component_belief/diagnose.py
       - src/component_belief/planning.py
@@ -133,6 +139,7 @@ components:
       - {id: FM-unversioned-run, observable: a measured record carries no sw_revision}
       - {id: FM-unbacked-import, observable: an imported record is recorded without an artifact the server copied and hashed, or against a test its contract does not list}
     remediation: runner.run_test() synthesis branch; the tool list in server.py; the checks in server.ingest()
+    goal: GOL-honest-evidence
     code:
       - src/component_belief/runner.py
       - src/component_belief/readlog.py
@@ -156,6 +163,7 @@ components:
       - {id: FM-missed-impact, observable: a changed claimed path is not traced to its contract}
       - {id: FM-silent-tamper, observable: an edited artifact or stamp audits clean}
     remediation: stamp_monitor.impact / audit / workflow; the tool list in stamp_monitor/server.py
+    goal: GOL-honest-evidence
     code:
       - src/stamp_monitor/
 
@@ -171,6 +179,7 @@ components:
       - {id: FM-stale-ratification, observable: an adoption under the goals policy records without an approver after the agent changed the goal set}
       - {id: FM-human-blocked, observable: a commit the human types is refused}
     remediation: goals.goal_set, check_commit, goal_history and ratification_gap
+    goal: GOL-goals-stay-mine
     code:
       - src/component_belief/goals.py
 
@@ -185,6 +194,7 @@ components:
       - {id: FM-version-drift, observable: the plugin, the marketplace entry, the package and the pinned tag name different versions}
       - {id: FM-toolless-verifier, observable: the verifier names a tool its server does not register}
     remediation: component_belief.project.project_root; plugin/.mcp.json; plugin/agents/consistency-verifier.md
+    goal: GOL-any-project
     code:
       - plugin/
       - .claude-plugin/marketplace.json

@@ -34,7 +34,7 @@ from typing import Any
 import yaml
 
 from . import __version__
-from .declarations import GOALS_FILE, Declarations
+from .declarations import DECLARATION_FILE, GOALS_FILE, Declarations, _parse
 from .model import (STATE_CONTESTED, STATE_INSUFFICIENT, STATE_REFUTED, STATE_STALE,
                     STATE_SUPPORTED, Slice)
 from .render import basis_line, bullet, envelope, slice_line
@@ -242,18 +242,69 @@ def _measure_lines(decl: Declarations, measure: str, slices: list[Slice]) -> lis
     return [f"  {measure}: no evidence yet -- run {tests}"]
 
 
+def _draft_lines(ctx: Any) -> list[str]:
+    """A goals.yaml in the working tree that differs from HEAD, checked as if committed. It is
+    reported, never put in effect: the agent drafting goals can see what the human would be
+    committing without committing it, which is the one thing it must not do."""
+    path = ctx.root / GOALS_FILE
+    if not path.is_file():
+        return []
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if text == (_git(ctx.root, "show", f"HEAD:{GOALS_FILE}") or None):
+        return []
+    draft = _parse(_git(ctx.root, "show", f"HEAD:{DECLARATION_FILE}") or "", text)
+    mine = draft.goal_owned | set(draft.goals) | set(draft.goal_interfaces) | {GOALS_FILE}
+    issues = [i for i in draft.issues if i.subject in mine or i.code == "UNKNOWN_GOAL"]
+    promoted = sorted(i.subject for i in issues if i.code == "DUPLICATE_ID")
+    lines = [f"draft in the working tree (not in effect until you commit it): {len(draft.goals)} "
+             f"goal(s), {len(draft.goal_interfaces)} interface(s)"]
+    lines += [f"  {gid} -- {g.outcome}  (measured by {g.measure or 'nothing yet'})"
+              for gid, g in sorted(draft.goals.items())]
+    if promoted:
+        lines.append(f"  promoted from belief.yaml, same ids, evidence carried over: {', '.join(promoted)}")
+    rest = [i for i in issues if i.code != "DUPLICATE_ID"]
+    lines += ["  draft issues:", bullet(i.render() for i in rest)] if rest else ["  draft issues: none"]
+    return lines
+
+
+def _candidate_lines(ctx: Any) -> list[str]:
+    """Contracts measured by an end-to-end test: what could already say when a goal is met."""
+    decl: Declarations = ctx.decl
+    e2e = {t.id for t in decl.tests.values() if t.layer == "e2e"}
+    candidates = sorted(c.id for c in decl.contracts.values()
+                        if c.id not in decl.goal_owned and set(c.evaluable_by) & e2e)
+    if not candidates:
+        return ["no contract here is measured by an end-to-end test yet: a goal's measure will be a "
+                "new test, in acceptance/ with its own conftest"]
+    by_contract: dict[str, list[Slice]] = {}
+    for sl in ctx.slices(contract_ids=candidates):
+        by_contract.setdefault(sl.contract_id, []).append(sl)
+    lines = ["candidate measures -- contracts an end-to-end test measures, which could be promoted "
+             "into goals.yaml with their evidence:"]
+    for cid in candidates:
+        tests = ", ".join(t for t in decl.contracts[cid].evaluable_by if t in e2e)
+        own = by_contract.get(cid, [])
+        lines.append(f"  {cid} ({tests}): " + ("; ".join(slice_line(s) for s in own) if own else "no evidence"))
+    return lines
+
+
 def view_goals(ctx: Any) -> str:
     """The one read for checking in: is each goal met, is each hand-over sound, what does the agent
     propose, and has it touched what is yours."""
     decl: Declarations = ctx.decl
     install_hint = f'uvx --from "{RELEASES}@tdlp--v{__version__}" tdlp-guard install'
+    draft = _draft_lines(ctx)
     if not decl.goals and not decl.goal_interfaces:
-        issues = [i for i in decl.issues if i.subject == GOALS_FILE]
         body = [f"no goals in effect: {GOALS_FILE} is not committed at HEAD.",
                 "Write your goals there -- each an outcome and the contract that says it is met, in "
-                "belief.yaml's schema -- and commit it yourself."]
+                "belief.yaml's schema -- and commit it yourself; or have the agent draft them with "
+                "/tdlp:adopt-goals.", ""]
+        body += draft or _candidate_lines(ctx)
+        issues = [i for i in decl.issues if i.subject == GOALS_FILE and i.code != "UNCOMMITTED"]
         if issues:
             body += ["", "issues:", bullet(i.render() for i in issues)]
+        body += ["", "guard: " + ("installed in this clone" if guard_installed(ctx.root)
+                                  else f"not installed in this clone -- run: {install_hint}")]
         return envelope("\n".join(body), f"basis: declarations · {GOALS_FILE} absent at HEAD")
 
     measures = [g.measure for g in decl.goals.values()] + [b.measure for b in decl.goal_interfaces.values()]
@@ -295,6 +346,8 @@ def view_goals(ctx: Any) -> str:
     issues = [i for i in decl.issues if i.subject in mine or i.code == "UNKNOWN_GOAL"]
     if issues:
         lines += ["", "issues:", bullet(i.render() for i in issues)]
+    if draft:
+        lines += [""] + draft
     return envelope("\n".join(lines), basis_line(slices) + f" · {GOALS_FILE}@{decl.goals_blob[:7]}")
 
 
