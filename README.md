@@ -59,6 +59,52 @@ does not fetch it on its own.
   interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
 * **Skills.** They load as `/tdlp:component-belief` and `/tdlp:consistency-belief`.
 
+### Your goals
+
+Write `goals.yaml` at the project root and commit it yourself. It holds your goals, the interfaces
+between them, and the contracts, tests and policy that measure them, in `belief.yaml`'s schema:
+
+```yaml
+goals:
+  - {id: GOL-teacher, outcome: The teacher's demonstrations succeed in sim, measure: CTR-demos-succeed}
+  - {id: GOL-vla, outcome: The VLA performs the skill from a language instruction, measure: CTR-vla-success}
+interfaces:
+  - {id: IFC-teacher__vla, from: GOL-teacher, to: GOL-vla,
+     hands_over: "demonstrations: format, frame, rate", measure: CTR-demos-fit-vla}
+contracts:   # the three measures above, and only those
+  - {id: CTR-demos-succeed, subject: GOL-teacher, kind: rate, metrics: [{id: success, unit: bool}],
+     acceptance: {rule: "success == true", target_rate: 0.9}, sufficiency: {n_min: 30},
+     evaluable_by: [TST-teacher-eval]}
+  - {id: CTR-vla-success, subject: GOL-vla, kind: rate, metrics: [{id: success, unit: bool}],
+     acceptance: {rule: "success == true", target_rate: 0.8}, sufficiency: {n_min: 30},
+     evaluable_by: [TST-vla-eval]}
+  - {id: CTR-demos-fit-vla, subject: IFC-teacher__vla, kind: gate, metrics: [{id: passed, unit: bool}],
+     acceptance: {rule: "passed == true"}, evaluable_by: [TST-demos-fit]}
+tests:
+  - {id: TST-teacher-eval, layer: e2e, targets: [GOL-teacher], run: python eval/teacher.py $OUT, metrics: [success]}
+  - {id: TST-vla-eval, layer: e2e, targets: [GOL-vla], run: python eval/vla.py $OUT, metrics: [success]}
+  - {id: TST-demos-fit, layer: interface, targets: [IFC-teacher__vla], run: python eval/demos_fit.py $OUT, metrics: [passed]}
+policies:
+  - id: POL-goals
+    criteria:
+      - {slice: CTR-demos-succeed, require: supported}
+      - {slice: CTR-vla-success, require: supported}
+      - {slice: CTR-demos-fit-vla, require: supported}
+```
+
+The agent tags each component in `belief.yaml` with the `goal:` it serves, so a goal's evidence
+goes stale when that code changes. Once per clone, install the guard that keeps the agent's
+commits off your goal set:
+
+```bash
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.3.0" tdlp-guard install
+```
+
+Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
+met, insufficient or stale (with the test to run), the agent's proposals on them, and any agent
+commit to your goal set since your last. Your goals policy is the default for `decide`,
+`diagnose` and `plan`, and an adoption under it needs no approver.
+
 ### Moving a project that registered the servers by hand
 
 1. Once per machine: `claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning`.
@@ -147,14 +193,31 @@ fixed weight:
 
 ### 2. Declarations live in git, not in tools
 
-`consistency.yaml` and `belief.yaml` load from **git HEAD, not the working tree**:
+`consistency.yaml`, `belief.yaml` and `goals.yaml` load from **git HEAD, not the working tree**:
 
-* Editing a declaration changes nothing until a human commits it; uncommitted edits show as `PENDING`.
+* Editing a declaration changes nothing until it is committed; uncommitted edits show as `PENDING`.
 * A lowered threshold or weakened axiom in the working tree cannot flip a verdict.
 * A staged proposal (consistency-belief) can be verified and cited before that commit, but cannot support a decision until it is declared and committed.
 
-> This is exactly as strong as your commit discipline. If agents can commit unattended, add
-> CODEOWNERS on `consistency.yaml` and `belief.yaml`, or require signed commits.
+The files have different owners. `belief.yaml` and `consistency.yaml` are the agent's engineering:
+components, contracts, thresholds and designs, which it commits as it works. **`goals.yaml` is the
+human's**: each goal's outcome and the contract that says it is met, each interface between goals
+and the contract its hand-over must pass, and the tests and policy those use. The agent may change
+anything below the goals; only the human changes what a goal is and how it is measured.
+
+* **Refused.** `tdlp-guard install` puts a `commit-msg` hook in a clone. It refuses a commit that
+  changes `goals.yaml` or a file its tests name when the commit carries the agent's trailer
+  (`Co-Authored-By: Claude`). A commit you type yourself has no trailer and passes.
+* **Recorded.** Any agent commit to the goal set that got through (hook not installed,
+  `--no-verify`) shows in `status(view="goals")` and `stamp-monitor workflow`
+  (`GOAL_SET_CHANGED_BY_AGENT`) until your next commit to the goal set.
+* **Proposed.** An agent that thinks a goal is wrong writes `note(subject="GOL-...")`; the goals
+  view lists it.
+
+> The trailer is a convention the agent keeps, not a credential. This guards against drift, an
+> agent relaxing a measure while sincerely reporting progress, not against an agent working
+> around you on purpose. For that, the agent needs its own account and a remote it cannot
+> administer.
 
 ### 3. Evidence is bound to what it measured
 
@@ -171,7 +234,10 @@ and the plan schedules the re-run. Nothing re-runs automatically.
 ### 4. "Insufficient" is an answer, and humans approve
 
 Sparse data yields `insufficient_evidence`, never a verdict. An open proof step is an `OBLIGATION`,
-never a pass. `decide` will not record an adoption or rollback without a human `approver=`.
+never a pass. `decide` will not record an adoption or rollback without a human `approver=` --
+except under a policy in `goals.yaml`, whose criteria (and every contract and test they name) the
+human approved by committing them, and only while no agent commit to the goal set has come since.
+The record names the `goals.yaml` blob it rests on.
 
 ---
 
@@ -254,7 +320,7 @@ status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 
 | Tool | Does |
 |---|---|
-| `status` | 8 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace` |
+| `status` | 9 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace`, `goals` |
 | `run_test` | runs a declared test, captures its artifact and stamp, records its trials |
 | `ingest` | imports external evidence: each record names a test its contract lists, and the server copies and hashes the results file itself |
 | `amend` | reclassifies or supersedes trials by appending; nothing is edited |

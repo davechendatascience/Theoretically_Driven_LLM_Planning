@@ -362,3 +362,71 @@ def test_multi_slice_basis_handle_resolves(project):
     traced = server.status(view="trace", set=handle)
     assert "Known handles" not in traced, f"union handle {handle} must resolve"
     assert traced.count("CTR-grasp-reachable") == 2
+
+
+class TestGoals:
+    """The human's side of the surface: one view to check in with, and a decision rule under which
+    committing goals.yaml is the approval."""
+
+    @pytest.fixture
+    def goals(self, goals_repo, monkeypatch):
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(goals_repo))
+        monkeypatch.setenv("BELIEF_ACTOR", "test-agent")
+        return goals_repo
+
+    @staticmethod
+    def measure_all():
+        for tid in ("TST-see", "TST-pick", "TST-cloud-fits"):
+            assert "exit=0" in server.run_test(tid)
+
+    def test_the_goals_view_is_what_you_read_to_check_in(self, goals):
+        view = server.status(view="goals")
+        assert "GOL-grasp  UNMEASURED -- The arm picks up the object it is asked for" in view
+        assert "CTR-pick-success: no evidence yet -- run TST-pick" in view
+        assert "IFC-see__grasp  GOL-see -> GOL-grasp  UNMEASURED" in view
+        assert "served by: CMP-grasp" in view
+        assert "you last committed the goal set in" in view and "my goals" in view
+        assert "guard: NOT INSTALLED" in view and "tdlp-guard install" in view
+
+        server.note("GOL-grasp", "0.8 is out of reach on the old arm; propose 0.7 on the tabletop scene")
+        self.measure_all()
+        view = server.status(view="goals")
+        assert "GOL-grasp  MET" in view and "IFC-see__grasp  GOL-see -> GOL-grasp  MET" in view
+        assert "proposals on your goals (1):" in view and "propose 0.7" in view
+        assert "basis:" in view
+
+    def test_without_goals_the_view_says_what_to_write(self, project):
+        view = server.status(view="goals")
+        assert "no goals in effect" in view and "commit it yourself" in view
+
+    def test_an_adoption_under_your_goals_needs_no_approver(self, goals):
+        self.measure_all()
+        out = server.decide("CHG-1")
+        assert out.startswith("ADOPT recorded") and "no approver needed" in out
+        [decision] = Store(goals).decisions()
+        assert decision["approver"] is None and decision["criteria_committed"]["goals.yaml"]
+
+    def test_after_the_agent_touches_your_goal_set_it_needs_you_again(self, goals):
+        from conftest import commit_as_agent
+
+        self.measure_all()
+        commit_as_agent(goals, "goals.yaml",
+                        (goals / "goals.yaml").read_text(encoding="utf-8") + "# tidied\n", "tidy goals")
+        out = server.decide("CHG-2")
+        assert "NOT RECORDED" in out and "the agent changed your goal set" in out
+        assert "changes to your goal set by the agent" in server.status(view="goals")
+        assert "tidy goals" in server.status(view="goals")
+
+        (goals / "goals.yaml").write_text(
+            (goals / "goals.yaml").read_text(encoding="utf-8") + "# fine\n", encoding="utf-8")
+        git(goals, "commit", "-q", "-am", "reviewed the tidy")
+        assert server.decide("CHG-2").startswith("ADOPT recorded")
+
+    def test_a_policy_in_belief_yaml_still_needs_an_approver(self, goals):
+        from conftest import trial
+
+        # current evidence in both lighting buckets, so the policy reaches the approval question
+        Store(goals).append_trials([{**trial(ik=True, lighting=light), "repro": {"model_revision": "v3"}}
+                                    for light in ("normal", "low") for _ in range(40)])
+        out = server.decide("CHG-3", policy_id="POL-release")
+        assert "requires a human approver" in out and "Not covered by your goals.yaml" in out

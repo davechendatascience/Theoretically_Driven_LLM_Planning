@@ -89,9 +89,13 @@ def impact(root: Path, base: str = "HEAD~1", worktree: bool = True) -> Impact:
     named = {p for paths in result.tests.values() for p in paths}
     result.unclaimed = [p for p in changed if p not in claimed | named]
 
+    # A contract rests on every component its subject does -- an interface's two ends, a goal's
+    # serving components -- so a change to any of them reaches it, not only a change to a
+    # component that is its subject by name.
+    resting = {c.id: set(decl.components_of_subject(c.subject)) for c in decl.contracts.values()}
     affected = sorted(
         c.id for c in decl.contracts.values()
-        if c.subject in result.components or set(c.evaluable_by) & set(result.tests))
+        if resting[c.id] & set(result.components) or set(c.evaluable_by) & set(result.tests))
     slices = compute_slices(decl, Store(root).effective_trials(), affected,
                             staleness=CodeStaleness(root))
     for cid in affected:
@@ -103,7 +107,7 @@ def impact(root: Path, base: str = "HEAD~1", worktree: bool = True) -> Impact:
     uncommitted_hits = {p for p in result.uncommitted if p in claimed | named}
     for cid in affected:
         contract = decl.contracts[cid]
-        touched_now = (any(p in uncommitted_hits for p in result.components.get(contract.subject, []))
+        touched_now = (any(p in uncommitted_hits for c in resting[cid] for p in result.components.get(c, []))
                        or any(p in uncommitted_hits for t in contract.evaluable_by
                               for p in result.tests.get(t, [])))
         if STATE_STALE in result.contracts[cid] or touched_now:

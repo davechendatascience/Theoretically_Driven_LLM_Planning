@@ -14,6 +14,7 @@ import re
 import tomllib
 from pathlib import Path
 
+from component_belief.goals import RELEASES
 from component_belief.project import project_root
 
 REPO = Path(__file__).resolve().parents[1]
@@ -66,7 +67,9 @@ class TestManifest:
         market = _json(REPO / ".claude-plugin" / "marketplace.json")
         [entry] = [p for p in market["plugins"] if p["name"] == MANIFEST["name"]]
         assert entry["source"] == "./plugin"
-        assert MANIFEST["version"] == entry["version"] == PYPROJECT["project"]["version"]
+        from component_belief import __version__
+
+        assert MANIFEST["version"] == entry["version"] == PYPROJECT["project"]["version"] == __version__
 
     def test_every_server_installs_from_this_versions_tag(self):
         """`claude plugin tag` names a release <name>--v<version>; the servers install from that
@@ -77,7 +80,7 @@ class TestManifest:
         for name, server in SERVERS.items():
             args = server["args"]
             source = args[args.index("--from") + 1]
-            assert source.endswith("@" + tag), f"{name} installs from {source}, not {tag}"
+            assert source == f"{RELEASES}@{tag}", f"{name} installs from {source}, not {tag}"
             assert args[-1] in scripts, f"{name} runs {args[-1]}, which pyproject does not install"
 
     def test_every_server_reads_the_project_claude_code_reports(self):

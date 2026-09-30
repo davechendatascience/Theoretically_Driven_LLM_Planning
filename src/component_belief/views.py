@@ -23,7 +23,7 @@ from .planning import plan_round
 from .render import basis_line, bullet, envelope, slice_dict, slice_line
 from .store import Store
 
-VIEWS = ("graph", "coverage", "belief", "diagnose", "plan", "artifacts", "cycle", "trace")
+VIEWS = ("graph", "coverage", "belief", "diagnose", "plan", "artifacts", "cycle", "trace", "goals")
 
 
 @dataclass

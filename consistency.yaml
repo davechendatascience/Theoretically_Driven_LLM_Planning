@@ -80,11 +80,14 @@ axioms:
       declarations at the head revision and the commits that evidence names --
       and from the ledger, and from no other file in the working tree.
     rationale: >-
-      The commit is the approval gate: an uncommitted edit that changed a
-      verdict would let an agent approve its own threshold. The gate is exactly
-      as strong as the discipline over who commits. Nothing declared here tells
-      a human commit from an agent's, so that part rests on process -- review,
-      CODEOWNERS, signed commits -- and not on this file.
+      The commit is the gate: an uncommitted edit that changed a verdict would
+      let an agent move a verdict without leaving anything to review. Who may
+      commit what is a separate line, drawn in goals.yaml: the agent commits
+      its own engineering (belief.yaml, this file), and only the human commits
+      the goals and how they are measured. Nothing declared here tells a human
+      commit from an agent's; the guard keys on the agent's commit trailer, a
+      convention it keeps, so that line holds against drift and rests on
+      process, not on this file, against anything more.
 
   - id: AXM-sparse-data-no-verdict
     domain: epistemic

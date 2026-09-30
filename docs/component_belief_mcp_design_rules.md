@@ -89,7 +89,7 @@
 2. Every belief estimate must be reproducible from versioned inputs.
 3. Every agent-generated summary or recommendation must identify whether it is derived from evidence, a declared prior, or an assumption.
 4. Never permit an LLM to silently invent measurements, test results, causal links, or confidence levels.
-5. Require human approval for changes to contracts, acceptance thresholds, priors with material impact, utility weights, and release decisions.
+5. Require human approval for the goals and how they are measured: each goal and the contract that says it is met, the interfaces between goals and their contracts, the tests those run, and the policy that releases against them -- all declared in `goals.yaml`, approved by the human's commit of it. Below the goals, contracts, thresholds, priors and weights are the agent's engineering instruments; a release decision under the goals policy rests on the human's commit rather than a separate approver.
 6. Design the MCP as an append-only learning system: new feedback updates knowledge while preserving prior states and the reasons they changed.
 7. Optimize for clarity of diagnosis and actionability over theoretical model complexity.
 

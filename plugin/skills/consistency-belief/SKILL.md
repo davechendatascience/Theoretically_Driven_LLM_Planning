@@ -54,10 +54,13 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
    blast radius: every downstream node that becomes `STALE` and must be re-verified. Tell
    the user before the edit; never re-verify a stale branch by re-recording the old outcome.
 
-5. **Declarations are the gate.** Axioms, definitions, lemmas, branches and policies live in
-   `consistency.yaml`, read from git HEAD. Edits do nothing until a human commits them;
-   `PENDING` in `status` is the gate reporting that. Say what needs committing; do not
-   work around it.
+5. **Declarations take effect when committed.** Axioms, definitions, lemmas, branches and
+   policies live in `consistency.yaml`, read from git HEAD; `PENDING` in `status` means an
+   edit is not in effect yet. The design is yours: commit it as you work, after
+   `audit_change` for an axiom or lemma. The human's line is `goals.yaml` -- what the design
+   is for and how that is measured -- which you never commit (component-belief's skill says
+   how to propose a change to it). An axiom added to close a gap is a claim nothing verifies:
+   say in the commit which requirement it states.
 
 6. **Escalate for `decide()`.** An `ADOPT` verdict will not record without `approver=`.
    Present it, get the human's explicit approval, then pass their name. A policy criterion

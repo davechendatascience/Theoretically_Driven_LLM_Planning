@@ -17,6 +17,8 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
+from .declarations import GOALS_FILE
+from .goals import ratification_gap, view_goals
 from .project import project_root as resolve_root
 from .render import basis_line, bullet, envelope
 from .runner import _git_revision, _sha256, run_test as execute_test
@@ -83,6 +85,8 @@ def status(
               `subject` narrows to one directory
       cycle     - the full evaluation-cycle report as JSON, with complete chains
       trace     - expand a `set=` citation handle into its exact evidence records
+      goals     - the human's goals.yaml: each goal and interface met or not, the agent's proposals
+                  on them, and any agent commit to the goal set since the human's last
 
     subject: a component or contract id to narrow to (or a RUN- id for diagnose).
     set:     the citation handle from a `basis:` line, for view="trace".
@@ -108,6 +112,8 @@ def status(
         return view_trace(ctx, set, subject)
     if view == "cycle":
         return json.dumps(view_cycle(ctx, policy), indent=2, default=str)
+    if view == "goals":
+        return view_goals(ctx)
     return view_belief(ctx, subject, since)
 
 
@@ -356,7 +362,9 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
     insufficient_evidence slice cannot satisfy an adopt criterion — the verdict
     comes back more_testing with the shortfall named.
 
-    approver: required to record an adopt or rollback. Supply the human's name
+    approver: required to record an adopt or rollback -- except under a policy
+    declared in goals.yaml, whose criteria the human approved by committing them,
+    while the agent has not changed the goal set since. Supply the human's name
     only after they have explicitly approved. Never approve on their behalf.
     """
     root = project_root()
@@ -372,11 +380,17 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
     verdict = evaluate_policy(ctx.decl, policy, slices)
     head = _git_revision(root)
 
-    needs_approval = verdict.status in (ADOPT, ROLLBACK)
+    consequential = verdict.status in (ADOPT, ROLLBACK)
+    # The human's commit of goals.yaml approved this policy's criteria, if the policy and all it
+    # measures by are declared there and the agent has not touched the goal set since.
+    gap = ratification_gap(root, ctx.decl, policy.id) if consequential else None
+    needs_approval = consequential and gap is not None
     recorded = None
     if needs_approval and not approver:
+        why = (f"\nNot covered by your {GOALS_FILE}: {gap}."
+               if ctx.decl.goal_owned & set(ctx.decl.policies) else "")
         body = (
-            f"{verdict.status.upper()} — NOT RECORDED: this outcome requires a human approver.\n"
+            f"{verdict.status.upper()} — NOT RECORDED: this outcome requires a human approver.{why}\n"
             f"Present the verdict below and call decide() again with approver=<their name> "
             f"only after they explicitly approve."
         )
@@ -387,6 +401,9 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
             "policy_id": policy.id,
             "policy_weights": policy.weights,
             "approver": approver,
+            # the approval an adoption rests on when no approver is named: this blob of goals.yaml
+            "criteria_committed": ({GOALS_FILE: ctx.decl.goals_blob}
+                                   if consequential and gap is None else None),
             "head": head,
             "evidence_ids": verdict.evidence_ids,
             "reasons": verdict.reasons,
@@ -400,6 +417,9 @@ def decide(change_id: str, policy_id: str | None = None, approver: str | None = 
         }, actor=_actor())
         body = (f"{verdict.status.upper()} recorded as {recorded['id']} under policy {policy.id} "
                 f"at HEAD {head or '?'}")
+        if consequential and gap is None:
+            body += (f"\ncriteria approved by your commit of {GOALS_FILE} "
+                     f"(blob {ctx.decl.goals_blob[:7]}); no approver needed")
 
     lines = [body]
     if verdict.reasons:

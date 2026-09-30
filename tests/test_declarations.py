@@ -156,3 +156,77 @@ def test_non_ascii_declarations_still_load(repo):
     assert decl.source == "git-HEAD", "non-ASCII declarations must still load"
     assert decl.is_scorable("CTR-grasp-reachable")
     assert "naïve" in decl.components["CMP-grasp"].purpose
+
+
+# --- goals.yaml: the declarations only the human commits ---------------------------------------
+
+class TestGoals:
+    def test_goals_load_from_head_and_are_marked_the_humans(self, goals_repo):
+        decl = load(goals_repo)
+        assert set(decl.goals) == {"GOL-see", "GOL-grasp"}
+        assert decl.goal_interfaces["IFC-see__grasp"].from_goal == "GOL-see"
+        assert {"CTR-pick-success", "TST-pick", "POL-goals"} <= decl.goal_owned
+        assert "CTR-grasp-reachable" not in decl.goal_owned, "belief.yaml's contracts stay the agent's"
+        assert decl.is_scorable("CTR-pick-success") and decl.is_scorable("CTR-cloud-fits-grasp")
+        assert next(iter(decl.policies)) == "POL-goals", "the goals are what a decision answers to"
+        assert decl.goal_policy_gap("POL-goals") is None
+        assert not [i for i in decl.issues if i.code.endswith("GOALS") or i.code.startswith("UNMEASURED")]
+
+    def test_an_uncommitted_goals_edit_takes_no_effect(self, goals_repo):
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8")
+        (goals_repo / "goals.yaml").write_text(text.replace("GOL-grasp", "GOL-reach"), encoding="utf-8")
+        decl = load(goals_repo)
+        assert "GOL-grasp" in decl.goals and "GOL-reach" not in decl.goals
+        assert any(i.code == "PENDING" and i.subject == "goals.yaml" for i in decl.issues)
+
+    def test_goals_yaml_in_effect_only_once_committed(self, repo):
+        from conftest import GOALS_YAML
+
+        (repo / "goals.yaml").write_text(GOALS_YAML, encoding="utf-8")
+        decl = load(repo)
+        assert not decl.goals
+        assert any(i.code == "UNCOMMITTED" and i.subject == "goals.yaml" for i in decl.issues)
+
+    def test_a_goal_measured_by_what_the_agent_writes_is_reported(self, goals_repo):
+        """A goal whose measure, or the test behind it, lives in belief.yaml can be met by an edit
+        the agent makes, and a goals policy naming such a contract is not what the human approved."""
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8")
+        text = (text.replace("measure: CTR-see-e2e", "measure: CTR-grasp-reachable")
+                    .replace("evaluable_by: [TST-pick]", "evaluable_by: [TST-grasp-ik]")
+                    .replace("- {slice: CTR-see-e2e, require: supported}",
+                             "- {slice: CTR-grasp-reachable, require: supported}"))
+        (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+        git(goals_repo, "commit", "-q", "-am", "measure by the agent's contracts")
+        decl = load(goals_repo)
+        codes = {(i.code, i.subject) for i in decl.issues}
+        assert ("UNMEASURED_GOAL", "GOL-see") in codes
+        assert ("MEASURE_OUTSIDE_GOALS", "CTR-pick-success") in codes
+        assert ("POLICY_OUTSIDE_GOALS", "POL-goals") in codes
+        assert "belief.yaml" in decl.goal_policy_gap("POL-goals")
+
+    def test_a_goal_rests_on_the_components_that_serve_it(self, goals_repo):
+        decl = load(goals_repo)
+        assert decl.components_of_subject("GOL-grasp") == ["CMP-grasp"]
+        assert decl.components_of_subject("IFC-see__grasp") == ["CMP-grasp", "CMP-perception"]
+        assert decl.code_paths_for_subject("GOL-grasp") == ["grasp.py"]
+        assert decl.code_paths_for_subject("CMP-grasp") == ["grasp.py"], "a component's own claims, as before"
+
+    def test_an_id_in_both_files_is_reported_and_goals_yaml_wins(self, goals_repo):
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8")
+        text = text.replace("contracts:\n", "contracts:\n  - id: CTR-grasp-reachable\n    subject: GOL-grasp\n"
+                            "    kind: gate\n    metrics: [{id: passed, unit: bool}]\n"
+                            "    acceptance: {rule: \"passed == true\"}\n    evaluable_by: [TST-pick]\n", 1)
+        (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+        git(goals_repo, "commit", "-q", "-am", "claim a contract id belief.yaml uses")
+        decl = load(goals_repo)
+        assert any(i.code == "DUPLICATE_ID" and i.subject == "CTR-grasp-reachable" for i in decl.issues)
+        assert decl.contracts["CTR-grasp-reachable"].subject == "GOL-grasp"
+        assert "CTR-grasp-reachable" in decl.goal_owned
+
+    def test_a_component_naming_an_undeclared_goal_is_reported(self, repo):
+        from conftest import GOAL_TAGGED_YAML
+
+        (repo / "belief.yaml").write_text(GOAL_TAGGED_YAML, encoding="utf-8")
+        git(repo, "commit", "-q", "-am", "tag components before any goals.yaml")
+        codes = {(i.code, i.subject) for i in load(repo).issues}
+        assert ("UNKNOWN_GOAL", "CMP-grasp") in codes and ("UNKNOWN_GOAL", "CMP-perception") in codes

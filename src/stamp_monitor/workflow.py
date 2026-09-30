@@ -7,9 +7,11 @@ a failure genuinely caused by a broken rig should be invalidated, and it is the 
 many amendments that says something. Findings name the records, so a human can read them.
 
   - reclassifications that remove only adverse results
-  - an adoption or rollback with no approver, or approved by the actor that requested it
+  - an adoption or rollback with no approver, or approved by the actor that requested it --
+    unless the human's commit of goals.yaml approved its criteria, which the record names
   - a decision resting on evidence measured on a dirty tree
   - an adoption whose evidence has gone stale since it was recorded
+  - a commit by the agent to the goal set (goals.yaml and the tests it runs) since the human's last
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from component_belief.declarations import load as load_components
+from component_belief.goals import goal_history
 from component_belief.staleness import CodeStaleness
 from component_belief.store import STORE_DIR, Store
 
@@ -54,7 +57,20 @@ def workflow(root: Path) -> list[Finding]:
         _asymmetry(ledger, directory, records, findings)
         _approval(directory, decisions, events, findings)
     _decisions_on_evidence(root, findings)
+    _goal_set(root, findings)
     return findings
+
+
+def _goal_set(root: Path, findings: list[Finding]) -> None:
+    """The guard refuses these; one that got through (hook not installed, --no-verify) is here.
+    Asked of git, not the working tree: an agent that deleted goals.yaml changed the goal set too."""
+    changes, _ = goal_history(root)
+    for change in changes:
+        findings.append(Finding(
+            "GOAL_SET_CHANGED_BY_AGENT", WARN, change["sha"],
+            f"the agent changed {', '.join(change['files'][:4])} in your goal set "
+            f"({change['subject'][:80]}); an adoption under your goals policy needs an approver "
+            "until you commit the goal set yourself"))
 
 
 def _asymmetry(ledger: str, directory: str, records: list[dict], findings: list[Finding]) -> None:
@@ -91,6 +107,8 @@ def _approval(directory: str, decisions: list[dict], events: list[dict], finding
         approver = str(d.get("approver") or "")
         actor = actors.get((d.get("change_id"), d.get("status"), d.get("approver")), "")
         subject = f"{directory}/{d.get('id')}"
+        if not approver and d.get("criteria_committed"):
+            continue      # approved by the human's commit of goals.yaml, named in the record
         if not approver:
             findings.append(Finding("UNAPPROVED_ADOPTION", BLOCK, subject,
                                     f"{d.get('status')} recorded with no approver"))

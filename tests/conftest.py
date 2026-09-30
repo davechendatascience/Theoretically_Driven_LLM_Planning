@@ -60,6 +60,82 @@ policies:
 """
 
 
+#: The human's goals for the same system: two goals, the hand-over between them, and the contracts,
+#: tests and policy that measure them -- all declared here, none in belief.yaml.
+GOALS_YAML = """
+goals:
+  - id: GOL-see
+    outcome: The scene is segmented well enough to grasp from
+    measure: CTR-see-e2e
+  - id: GOL-grasp
+    outcome: The arm picks up the object it is asked for
+    measure: CTR-pick-success
+
+interfaces:
+  - id: IFC-see__grasp
+    from: GOL-see
+    to: GOL-grasp
+    hands_over: segmented clouds in camera_optical, one per object
+    measure: CTR-cloud-fits-grasp
+
+contracts:
+  - id: CTR-see-e2e
+    subject: GOL-see
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-see]
+  - id: CTR-pick-success
+    subject: GOL-grasp
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-pick]
+  - id: CTR-cloud-fits-grasp
+    subject: IFC-see__grasp
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-cloud-fits]
+
+tests:
+  - id: TST-see
+    layer: e2e
+    targets: [GOL-see]
+    run: python eval/see.py $OUT
+    metrics: [passed]
+  - id: TST-pick
+    layer: e2e
+    targets: [GOL-grasp]
+    run: python eval/pick.py $OUT
+    metrics: [passed]
+  - id: TST-cloud-fits
+    layer: interface
+    targets: [IFC-see__grasp]
+    run: python eval/cloud_fits.py $OUT
+    metrics: [passed]
+
+policies:
+  - id: POL-goals
+    criteria:
+      - {slice: CTR-see-e2e, require: supported}
+      - {slice: CTR-pick-success, require: supported}
+      - {slice: CTR-cloud-fits-grasp, require: supported}
+"""
+
+#: belief.yaml with each component naming the goal it serves, and CMP-grasp claiming its code.
+GOAL_TAGGED_YAML = BASE_YAML.replace(
+    "    remediation: Retune segmentation thresholds\n",
+    "    remediation: Retune segmentation thresholds\n    goal: GOL-see\n",
+).replace(
+    "    remediation: Retune approach sampling\n",
+    "    remediation: Retune approach sampling\n    goal: GOL-grasp\n    code: [grasp.py]\n",
+)
+
+EVAL_PY = "import json, sys\njson.dump({'trials': [{'metrics': {'passed': True}}]}, open(sys.argv[1], 'w'))\n"
+AGENT_TRAILER = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+
+
 def git(root: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["git", "-c", "user.email=t@example.com", "-c", "user.name=test", *args],
@@ -75,6 +151,28 @@ def repo(tmp_path: Path) -> Path:
     git(tmp_path, "add", "belief.yaml")
     git(tmp_path, "commit", "-q", "-m", "declare")
     return tmp_path
+
+
+@pytest.fixture
+def goals_repo(repo: Path) -> Path:
+    """The repo after the human committed goals.yaml by hand (no agent trailer) and the agent
+    tagged its components with the goals they serve."""
+    (repo / "belief.yaml").write_text(GOAL_TAGGED_YAML, encoding="utf-8")
+    (repo / "grasp.py").write_text("# v1\n", encoding="utf-8")
+    (repo / "eval").mkdir()
+    for name in ("see", "pick", "cloud_fits"):
+        (repo / "eval" / f"{name}.py").write_text(EVAL_PY, encoding="utf-8")
+    (repo / "goals.yaml").write_text(GOALS_YAML, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "my goals")
+    return repo
+
+
+def commit_as_agent(repo: Path, path: str, text: str, message: str = "agent change") -> None:
+    """A commit the agent makes: it carries the trailer Claude Code writes on its commits."""
+    (repo / path).write_text(text, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "--no-verify", "-m", message + AGENT_TRAILER)
 
 
 @pytest.fixture

@@ -296,3 +296,38 @@ def test_the_cli_exits_nonzero_on_a_block(project, capsys):
     assert main(["workflow"]) == 1
     assert "SELF_APPROVAL" in capsys.readouterr().out
     assert json.loads((project / ".belief" / "decisions.jsonl").read_text().splitlines()[0])["approver"] == "agent"
+
+
+# --- goals ------------------------------------------------------------------------------------
+
+class TestGoals:
+    @pytest.fixture
+    def goals(self, goals_repo, monkeypatch):
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(goals_repo))
+        return goals_repo
+
+    def test_an_adoption_your_goals_approved_is_not_self_approval(self, goals):
+        from component_belief import server
+
+        for tid in ("TST-see", "TST-pick", "TST-cloud-fits"):
+            server.run_test(tid)
+        assert server.decide("CHG-1").startswith("ADOPT recorded")
+        found = codes(workflow(goals))
+        assert "UNAPPROVED_ADOPTION" not in found and "SELF_APPROVAL" not in found
+
+    def test_an_agent_commit_to_the_goal_set_is_a_finding_until_you_commit_it(self, goals):
+        from conftest import commit_as_agent
+
+        commit_as_agent(goals, "eval/pick.py", "# always pass\n", "loosen the pick check")
+        assert codes(workflow(goals)).get("GOAL_SET_CHANGED_BY_AGENT") == WARN
+        (goals / "eval" / "pick.py").write_text("# restored\n", encoding="utf-8")
+        git(goals, "commit", "-q", "-am", "put the pick check back")
+        assert "GOAL_SET_CHANGED_BY_AGENT" not in codes(workflow(goals))
+
+    def test_a_change_to_a_serving_component_reaches_the_goal_it_serves(self, goals):
+        commit(goals, "grasp.py", "# v2\n", "change the planner")
+        result = impact(goals, "HEAD~1")
+        assert result.components == {"CMP-grasp": ["grasp.py"]}
+        assert {"CTR-pick-success", "CTR-cloud-fits-grasp"} <= set(result.contracts), \
+            "a goal and the hand-over into it rest on the components that serve them"
+        assert result.policies["POL-goals"] == ["CTR-pick-success", "CTR-cloud-fits-grasp"]

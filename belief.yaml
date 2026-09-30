@@ -25,7 +25,8 @@ components:
     failure_modes:
       - {id: FM-worktree-leak, observable: an uncommitted threshold change alters a verdict}
       - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
-    remediation: Tighten validate(); the fatal-code set in Declarations.is_scorable
+      - {id: FM-goal-measured-by-agent, observable: a goal whose measure or its test lives in belief.yaml loads with no issue}
+    remediation: Tighten validate() and _validate_goals(); the fatal-code set in Declarations.is_scorable
     code:
       - src/component_belief/declarations.py
       - src/component_belief/expr.py
@@ -157,6 +158,21 @@ components:
     code:
       - src/stamp_monitor/
 
+  - id: CMP-goals
+    purpose: Keep goals.yaml -- the goals, the interfaces between them and how each is measured -- the human's
+    testable_capability: >-
+      Refuses an agent-trailered commit that changes goals.yaml or a file its tests name, and
+      passes the human's; records any agent commit to the goal set since the human's last; and
+      withdraws the goals policy's standing approval while one exists
+    failure_modes:
+      - {id: FM-goal-set-leak, observable: an agent commit changing a goal's test file is let through the guard}
+      - {id: FM-freed-by-removal, observable: removing a test from goals.yaml frees its file in the same commit}
+      - {id: FM-stale-ratification, observable: an adoption under the goals policy records without an approver after the agent changed the goal set}
+      - {id: FM-human-blocked, observable: a commit the human types is refused}
+    remediation: goals.goal_set, check_commit, goal_history and ratification_gap
+    code:
+      - src/component_belief/goals.py
+
   - id: CMP-plugin
     purpose: Ship the three servers, the two workflow skills and the verifier as one Claude Code plugin any project can enable, at a pinned version
     testable_capability: >-
@@ -285,6 +301,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-stamp-monitor]
 
+  - id: CTR-goal-set-stays-human
+    subject: CMP-goals
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-goals]
+
   - id: CTR-plugin-pinned-and-rooted
     subject: CMP-plugin
     claim_type: capability
@@ -360,6 +384,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py]
 
+  - id: TST-goals
+    layer: component
+    targets: [CMP-goals]
+    run: python tools/pytest_trials.py $OUT -- tests/test_goals.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
   - id: TST-plugin
     layer: component
     targets: [CMP-plugin]
@@ -382,5 +414,6 @@ policies:
       - {slice: CTR-monitor-read-only, require: supported}
       - {slice: CTR-surface-intact, require: supported}
       - {slice: CTR-plugin-pinned-and-rooted, require: supported}
+      - {slice: CTR-goal-set-stays-human, require: supported}
       - {safety_gates: all_passed}
     weights: null

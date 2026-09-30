@@ -38,21 +38,31 @@ point, and the ranking is by *decision relevance*, not by lowest score.
    estimate promotes it. "We don't know yet, n=3, need 5 more" is a complete
    and useful reply.
 
-4. **Escalate for `decide()`.** An `adopt` or `rollback` verdict will not
-   record without `approver=`. Present the verdict, get explicit human
+4. **Decide under the human's goals.** When the project has a `goals.yaml`,
+   `decide()` answers to its policy by default, and an `adopt` or `rollback`
+   under it records with no approver: the human approved its criteria by
+   committing them. Any other `adopt` or `rollback`, or one the server says is
+   not covered, needs `approver=`: present the verdict, get explicit human
    approval, then pass their name. Never supply it yourself.
 
 ## Declarations
 
-Components, interfaces, contracts, tests, priors, and policies live in
-`belief.yaml` — **not** behind tools. The server reads it from git HEAD, so
-your edits to that file do nothing until a human commits them. If you need a
-new contract or a changed threshold, edit the file and *tell the user it needs
-committing*; do not work around the gate.
+Two files, loaded from git HEAD, never behind tools:
 
-`status(view="graph")` will say `PENDING` when the working tree has
-uncommitted edits. That is not an error to fix — it is the gate reporting that
-your edit is not in effect.
+- **`belief.yaml` is yours.** Components (each may name the `goal:` it
+  serves), their contracts, tests, thresholds and policies. Edit it and commit
+  it as you work, with the evidence that motivated the change; an uncommitted
+  edit is `PENDING` and not in effect.
+- **`goals.yaml` is the human's.** Goals, the interfaces between them, and the
+  contracts, tests and policy that measure them. Never commit it or a file its
+  tests name: the commit hook refuses a commit carrying your trailer that does.
+  If you believe a goal, a threshold on it or an interface is wrong or out of
+  reach, say so with `note(subject="GOL-...", text=...)` -- what you would
+  change and the evidence ids behind it -- and carry on with what you can do.
+  The human reads it in `status(view="goals")`.
+
+`status(view="goals")` is also your check: every goal met, insufficient,
+stale or not met, with the test to run for each.
 
 ## Citations
 
@@ -65,7 +75,8 @@ records. A number without its handle is narration.
 
 - Write a belief directly — no such tool exists.
 - Make an assertion count as evidence — `note()` is inert by construction.
-- Approve your own contract, threshold, prior, or weight change.
+- Change a goal, how it is measured, or the interface between two goals.
+- Name an approver the human did not give you.
 - Pool evidence across incompatible conditions.
 
 These are not obstacles to route around. They are the reason a number from

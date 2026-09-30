@@ -25,6 +25,9 @@ from .expr import ExprError, looks_like_implementation_detail, referenced_names
 from .ids import content_hash
 
 DECLARATION_FILE = "belief.yaml"
+#: The declarations the human owns: goals, the interfaces between them, and what measures each.
+#: Loaded from git HEAD beside belief.yaml, which the agent writes; see goals.py for the guard.
+GOALS_FILE = "goals.yaml"
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ class Component:
     failure_modes: list[dict[str, Any]] = field(default_factory=list)
     remediation: str = ""
     code: list[str] = field(default_factory=list)
+    goal: str = ""                  # the GOL- this component serves, if goals.yaml declares one
 
     @property
     def implemented(self) -> bool:
@@ -69,6 +73,24 @@ class Interface:
     timing: dict[str, Any] = field(default_factory=dict)
     producer_guarantees: list[str] = field(default_factory=list)
     consumer_assumptions: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Goal:
+    """An outcome the human wants, and the contract that says when it is met."""
+    id: str
+    outcome: str = ""
+    measure: str = ""
+
+
+@dataclass
+class GoalInterface:
+    """What one goal's system hands another, and the contract that checks the hand-over."""
+    id: str
+    from_goal: str = ""
+    to_goal: str = ""
+    hands_over: str = ""
+    measure: str = ""
 
 
 CONTRACT_KINDS = ("rate", "gate")
@@ -166,6 +188,10 @@ class Declarations:
     priors: dict[str, Prior] = field(default_factory=dict)
     policies: dict[str, Policy] = field(default_factory=dict)
     artifacts: list[str] = field(default_factory=list)   # roots holding generated, untracked output
+    goals: dict[str, Goal] = field(default_factory=dict)
+    goal_interfaces: dict[str, GoalInterface] = field(default_factory=dict)
+    goal_owned: set[str] = field(default_factory=set)   # contract, test and policy ids from goals.yaml
+    goals_blob: str = ""            # goals.yaml's blob at HEAD, when it is committed
     issues: list[Issue] = field(default_factory=list)
     source: str = "none"            # git-HEAD | none
     pending: bool = False           # working tree differs from HEAD
@@ -201,25 +227,53 @@ class Declarations:
             if any(path == entry or fnmatch(path, entry) for entry in comp.code)
         )
 
-    def code_paths_for_subject(self, subject_id: str) -> list[str]:
-        """The code a contract's evidence measured: a component's own claims, or for an
-        interface both sides' -- a change to either end can break the join."""
-        comp = self.components.get(subject_id)
-        if comp is not None:
-            return list(comp.code)
+    def subject_declared(self, subject_id: str) -> bool:
+        return any(subject_id in nodes for nodes in
+                   (self.components, self.interfaces, self.goals, self.goal_interfaces))
+
+    def components_of_subject(self, subject_id: str) -> list[str]:
+        """The components a subject's evidence rests on: a component itself; both ends of an
+        interface; every component that names a goal; both goals' components for the interface
+        between them. A change to any of them can change what the evidence measured."""
+        if subject_id in self.components:
+            return [subject_id]
         iface = self.interfaces.get(subject_id)
-        if iface is None:
-            return []
-        paths: list[str] = []
-        for cid in (iface.producer, iface.consumer):
-            paths += self.components[cid].code if cid in self.components else []
-        return paths
+        if iface is not None:
+            return [c for c in (iface.producer, iface.consumer) if c in self.components]
+        if subject_id in self.goals:
+            return sorted(cid for cid, comp in self.components.items() if comp.goal == subject_id)
+        between = self.goal_interfaces.get(subject_id)
+        if between is not None:
+            return sorted(set(self.components_of_subject(between.from_goal))
+                          | set(self.components_of_subject(between.to_goal)))
+        return []
+
+    def code_paths_for_subject(self, subject_id: str) -> list[str]:
+        """The code a contract's evidence measured: the claims of every component it rests on."""
+        return [p for cid in self.components_of_subject(subject_id) for p in self.components[cid].code]
+
+    def goal_policy_gap(self, policy_id: str) -> str | None:
+        """Why a decision under this policy is not covered by the human's commit of goals.yaml,
+        or None when it is: the policy, every contract it names and every test measuring those
+        are declared in goals.yaml, so none of them is something the agent wrote."""
+        if policy_id not in self.goal_owned:
+            return f"{policy_id} is declared in {DECLARATION_FILE}, not {GOALS_FILE}"
+        for criterion in self.policies[policy_id].criteria:
+            contract_id = criterion.get("slice")
+            if not contract_id:
+                continue
+            if contract_id not in self.goal_owned:
+                return f"its criterion {contract_id} is declared in {DECLARATION_FILE}"
+            for tid in self.contracts[contract_id].evaluable_by if contract_id in self.contracts else []:
+                if tid not in self.goal_owned:
+                    return f"{contract_id} is measured by {tid}, declared in {DECLARATION_FILE}"
+        return None
 
 
-def _git_show(root: Path, ref: str) -> str | None:
+def _git_show(root: Path, ref: str, name: str = DECLARATION_FILE) -> str | None:
     try:
         out = subprocess.run(
-            ["git", "show", f"{ref}:{DECLARATION_FILE}"],
+            ["git", "show", f"{ref}:{name}"],
             cwd=root, capture_output=True, text=True, timeout=15,
             encoding="utf-8", errors="replace",
             stdin=subprocess.DEVNULL,
@@ -245,17 +299,38 @@ def load(root: Path) -> Declarations:
             ))
         return decl
 
-    decl = _parse(committed)
+    goals_committed = _git_show(root, "HEAD", GOALS_FILE)
+    goals_path = root / GOALS_FILE
+    goals_worktree = goals_path.read_text(encoding="utf-8") if goals_path.exists() else None
+
+    decl = _parse(committed, goals_committed)
     decl.source = "git-HEAD"
     decl.raw_present = True
-    decl.pending = worktree is not None and worktree != committed
-    if decl.pending:
+    if goals_committed is not None:
+        decl.goals_blob = (_git_rev(root, f"HEAD:{GOALS_FILE}") or "")[:12]
+    elif goals_worktree is not None:
         decl.issues.append(Issue(
-            "PENDING", DECLARATION_FILE,
-            "working tree differs from HEAD; the uncommitted edits are not in effect",
+            "UNCOMMITTED", GOALS_FILE,
+            "goals.yaml exists but is not committed; your goals take effect only once you commit it",
         ))
+    for name, head, tree in ((DECLARATION_FILE, committed, worktree),
+                             (GOALS_FILE, goals_committed, goals_worktree)):
+        if head is not None and tree is not None and tree != head:
+            decl.pending = True
+            decl.issues.append(Issue(
+                "PENDING", name, "working tree differs from HEAD; the uncommitted edits are not in effect",
+            ))
     decl.issues.extend(check_code_paths(decl, root))
     return decl
+
+
+def _git_rev(root: Path, spec: str) -> str | None:
+    try:
+        out = subprocess.run(["git", "rev-parse", spec], cwd=root, capture_output=True, text=True,
+                             timeout=15, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() if out.returncode == 0 else None
 
 
 def check_code_paths(decl: Declarations, root: Path) -> list[Issue]:
@@ -272,7 +347,7 @@ def check_code_paths(decl: Declarations, root: Path) -> list[Issue]:
     return issues
 
 
-def _parse(text: str) -> Declarations:
+def _parse(text: str, goals_text: str | None = None) -> Declarations:
     try:
         data = yaml.safe_load(text) or {}
     except yaml.YAMLError as exc:
@@ -301,8 +376,50 @@ def _parse(text: str) -> Declarations:
         decl.policies[p.id] = p
     decl.artifacts = [str(a) for a in (data.get("artifacts") or [])]
 
+    if goals_text is not None:
+        _merge_goals(decl, goals_text)
     decl.issues.extend(validate(decl))
     return decl
+
+
+def _merge_goals(decl: Declarations, text: str) -> None:
+    """goals.yaml joins the same declarations, and every id it declares is marked as the human's.
+
+    Its contracts, tests and policies use belief.yaml's schema; its policies come first, so the
+    goals are what a decision, a diagnosis and a plan answer to unless another policy is named.
+    """
+    try:
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as exc:
+        decl.issues.append(Issue("MALFORMED", GOALS_FILE, str(exc)))
+        return
+    if not isinstance(data, dict):
+        decl.issues.append(Issue("MALFORMED", GOALS_FILE, "top level must be a mapping"))
+        return
+    for raw in data.get("goals") or []:
+        goal = Goal(**_only(raw, Goal))
+        decl.goals[goal.id] = goal
+    for raw in data.get("interfaces") or []:
+        raw = raw or {}
+        between = GoalInterface(id=str(raw.get("id", "")), from_goal=str(raw.get("from", "")),
+                                to_goal=str(raw.get("to", "")), hands_over=str(raw.get("hands_over", "")),
+                                measure=str(raw.get("measure", "")))
+        if between.id in decl.interfaces:
+            decl.issues.append(Issue("DUPLICATE_ID", between.id,
+                                     f"declared in both {DECLARATION_FILE} and {GOALS_FILE}"))
+        decl.goal_interfaces[between.id] = between
+    policies: dict[str, Policy] = {}
+    for section, cls, target in (("contracts", Contract, decl.contracts), ("tests", Test, decl.tests),
+                                 ("policies", Policy, policies)):
+        for raw in data.get(section) or []:
+            node = cls(**_only(raw, cls))
+            if node.id in target or (section == "policies" and node.id in decl.policies):
+                decl.issues.append(Issue("DUPLICATE_ID", node.id,
+                                         f"declared in both {DECLARATION_FILE} and {GOALS_FILE}; "
+                                         f"the one in {GOALS_FILE} is in effect"))
+            target[node.id] = node
+            decl.goal_owned.add(node.id)
+    decl.policies = {**policies, **{k: v for k, v in decl.policies.items() if k not in policies}}
 
 
 def _only(raw: dict[str, Any], cls: type) -> dict[str, Any]:
@@ -342,8 +459,14 @@ def validate(decl: Declarations) -> list[Issue]:
             # find by set difference (2.5).
             issues.append(Issue("UNBACKED_ASSUMPTION", iid, f"consumer assumes {assumption!r}, producer does not guarantee it"))
 
+    for cid, comp in decl.components.items():
+        if comp.goal and comp.goal not in decl.goals:
+            issues.append(Issue("UNKNOWN_GOAL", cid, f"serves {comp.goal}, which {GOALS_FILE} does not declare"))
+
+    issues.extend(_validate_goals(decl))
+
     for cid, contract in decl.contracts.items():
-        if contract.subject not in decl.components and contract.subject not in decl.interfaces:
+        if not decl.subject_declared(contract.subject):
             issues.append(Issue("UNKNOWN_REF", cid, f"subject {contract.subject} is not declared"))
         if contract.kind not in CONTRACT_KINDS:
             issues.append(Issue("BAD_KIND", cid, f"kind {contract.kind!r} must be one of {', '.join(CONTRACT_KINDS)}"))
@@ -398,7 +521,7 @@ def validate(decl: Declarations) -> list[Issue]:
         if not test.run:
             issues.append(Issue("NOT_RUNNABLE", tid, "no run command"))
         for target in test.targets:
-            if target not in decl.components and target not in decl.interfaces:
+            if not decl.subject_declared(target):
                 issues.append(Issue("UNKNOWN_REF", tid, f"target {target} is not declared"))
 
     for contract_id in decl.priors:
@@ -411,4 +534,43 @@ def validate(decl: Declarations) -> list[Issue]:
             if slice_ref and slice_ref not in decl.contracts:
                 issues.append(Issue("UNKNOWN_REF", pid, f"criterion names unknown contract {slice_ref}"))
 
+    return issues
+
+
+def _validate_goals(decl: Declarations) -> list[Issue]:
+    """What the human declares must be measured by what the human declares.
+
+    A goal whose measure lives in belief.yaml, or is scored by a test declared there, can be met
+    by an edit the agent makes; so can a goals policy that names such a contract. Each is reported
+    against the goal, where the human reads it. Advisory, like every declaration issue that is
+    not about scoring evidence: the decision rule is where it bites (decide asks for an approver).
+    """
+    issues: list[Issue] = []
+    measured = [(gid, g.measure, "UNMEASURED_GOAL") for gid, g in decl.goals.items()]
+    measured += [(iid, i.measure, "UNMEASURED_INTERFACE") for iid, i in decl.goal_interfaces.items()]
+    for owner, measure, code in measured:
+        if not measure:
+            issues.append(Issue(code, owner, "declares no measure; nothing says when it is met"))
+        elif measure not in decl.contracts:
+            issues.append(Issue(code, owner, f"measure {measure} is not a declared contract"))
+        elif measure not in decl.goal_owned:
+            issues.append(Issue(code, owner, f"measure {measure} is declared in {DECLARATION_FILE}, "
+                                f"which the agent writes; declare it in {GOALS_FILE}"))
+        elif decl.contracts[measure].subject != owner:
+            issues.append(Issue(code, owner, f"measure {measure} is a contract on "
+                                f"{decl.contracts[measure].subject}, not on {owner}"))
+    for iid, between in decl.goal_interfaces.items():
+        for end in (between.from_goal, between.to_goal):
+            if end not in decl.goals:
+                issues.append(Issue("UNKNOWN_REF", iid, f"end {end or '(none)'} is not a declared goal"))
+    for cid in sorted(decl.goal_owned & set(decl.contracts)):
+        outside = [t for t in decl.contracts[cid].evaluable_by if t not in decl.goal_owned]
+        if outside:
+            issues.append(Issue("MEASURE_OUTSIDE_GOALS", cid, f"measured by {', '.join(outside)}, "
+                                f"declared in {DECLARATION_FILE}: the agent could change how "
+                                "your goal is measured"))
+    for pid in sorted(decl.goal_owned & set(decl.policies)):
+        gap = decl.goal_policy_gap(pid)
+        if gap:
+            issues.append(Issue("POLICY_OUTSIDE_GOALS", pid, gap))
     return issues

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "component-belief-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Component belief-update MCP: evidence-grounded belief state for a system graph"
 requires-python = ">=3.11"
 dependencies = [
@@ -20,6 +20,7 @@ component-belief-mcp = "component_belief.server:main"
 consistency-belief-mcp = "consistency_belief.server:main"
 stamp-monitor-mcp = "stamp_monitor.server:main"
 stamp-monitor = "stamp_monitor.cli:main"
+tdlp-guard = "component_belief.goals:guard_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
