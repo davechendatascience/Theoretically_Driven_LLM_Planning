@@ -143,6 +143,15 @@ def git(root: Path, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+@pytest.fixture(autouse=True)
+def _not_inside_a_plugin(monkeypatch):
+    """A suite launched through the tdlp plugin inherits CLAUDE_PLUGIN_ROOT, which tells the runner
+    to drop the server's own interpreter from a test's PATH. A test that runs a declared command
+    would then find whatever other `python` the machine has, or none. Each test builds the
+    environment it means to test; tests of the plugin case set the variable themselves."""
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A git repo with belief.yaml committed — declarations load from HEAD."""
