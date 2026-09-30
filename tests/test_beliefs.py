@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import shutil
+
+import pytest
+
 from component_belief.declarations import load
 from component_belief.model import (
     STATE_INSUFFICIENT,
@@ -241,22 +245,32 @@ def test_the_read_hook_records_what_a_run_opened(repo, monkeypatch):
     assert "reader.py" not in [p for p in stamps if stamps[p].prune_candidate()]
 
 
-def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
+def test_the_hook_is_woven_into_a_command_that_sets_pythonpath():
     """A declared command of the form `env PYTHONPATH=... python ...` replaces the environment the
-    runner prepared. Recording nothing then reads exactly like a run that opened no files."""
+    runner prepared, so the hook's directory is put inside the command's own assignment."""
+    import os
     from pathlib import Path
 
-    from component_belief import readlog, server
-    from component_belief.store import Store
-    from conftest import git
-
-    import os
+    from component_belief import readlog
 
     hook, sep = str(Path("/hook")), os.pathsep      # the platform's own spelling of both
     woven = readlog.weave("env PYTHONPATH=third_party:. python x.py", Path("/hook"))
     assert woven.startswith(f"env PYTHONPATH={hook}{sep}third_party:. ")
     assert readlog.weave('PYTHONPATH="a:b" python x.py', Path("/hook")) == f'PYTHONPATH="{hook}{sep}a:b" python x.py'
     assert readlog.weave("python x.py", Path("/hook")) == "python x.py"
+
+
+@pytest.mark.skipif(shutil.which("env") is None,
+                    reason="a run line of the form `env VAR=... cmd` needs a POSIX `env` on PATH; "
+                           "cmd.exe, which runs declared tests on Windows, has none unless Git's "
+                           "usr/bin is on PATH")
+def test_the_hook_survives_a_command_that_sets_pythonpath(repo, monkeypatch):
+    """End to end: the run records what such a command opened. Recording nothing would read exactly
+    like a run that opened no files. Where no `env` exists the command cannot run at all, so this is
+    reported as not applicable rather than as the hook failing."""
+    from component_belief import readlog, server
+    from component_belief.store import Store
+    from conftest import git
 
     (repo / "lib").mkdir(exist_ok=True)
     (repo / "lib" / "data.txt").write_text("payload", encoding="utf-8")
