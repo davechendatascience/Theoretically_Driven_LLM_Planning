@@ -59,6 +59,29 @@ does not fetch it on its own.
   interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
 * **Skills.** They load as `/tdlp:component-belief` and `/tdlp:consistency-belief`.
 
+### Moving a project that registered the servers by hand
+
+1. Once per machine: `claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning`.
+2. In the project: `claude plugin install tdlp@tdlp --scope project`, and commit `.claude/settings.json`.
+3. Remove the hand registrations, **every scope at once**: the three entries in the project's
+   `.mcp.json`, and on each machine `claude mcp remove <name> -s local` for `component-belief`,
+   `consistency-belief` and `stamp-monitor`. Removing one scope and not the other leaves the other
+   in charge, such as a Linux path on a Windows machine.
+4. Delete any copies of the two skills or the verifier under the project's `.claude/`. The plugin
+   ships them as `/tdlp:component-belief`, `/tdlp:consistency-belief` and `consistency-verifier`;
+   a copy is a second, unversioned rulebook.
+5. Rename tool ids wherever they are written, such as permission allowlists, hooks, `CLAUDE.md`
+   and your own agents: `mcp__component-belief__run_test` becomes
+   `mcp__plugin_tdlp_component-belief__run_test`, and likewise for the other two servers.
+6. Check each `run:` line's interpreter. A plain `python` now resolves to the project's `.venv`
+   when it has one; a conda environment needs naming (`conda run -n env python ...`).
+7. Restart the session (or `/reload-plugins`). `claude mcp list` should show three
+   `plugin:tdlp:*` servers as connected, and `status(view="belief")` your own contracts.
+
+Nothing in the ledgers moves. `belief.yaml`, `consistency.yaml`, `.belief/` and `.consistency/` are
+read as they are, and evidence stays current, because staleness is judged by content, not by which
+server recorded it.
+
 To work on the harness itself, install it editable and register the servers by hand, all three at
 the **same** project root: the joins exist only when the ledgers describe one repository.
 
