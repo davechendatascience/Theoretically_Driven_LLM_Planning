@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0053\result.json -- tests/test_goals.py -q -p no:asyncio
+exit=0
+test=TST-goals@7f00c63a
+at=2026-09-30T17:54:12+00:00
