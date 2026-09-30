@@ -154,7 +154,7 @@ Patterns in recorded history, not verdicts on intent; each finding names the rec
 
 ### Surfaces
 
-- MCP server `stamp-monitor` (`stamp-monitor-mcp`), registered in `.mcp.json`.
+- MCP server `stamp-monitor` (`stamp-monitor-mcp`), shipped in the `tdlp` plugin (`plugin/.mcp.json`).
 - CLI `stamp-monitor impact|audit|workflow`, exiting 1 on a `[block]` finding from `audit` or
   `workflow`, for git hooks, CI, and Claude Code hooks.
 
