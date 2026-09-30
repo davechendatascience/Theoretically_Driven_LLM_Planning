@@ -6,7 +6,7 @@
     {
       "name": "tdlp",
       "source": "./plugin",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "description": "The three belief servers, their workflow skills and the file-blind verifier, pinned to a release tag."
     }
   ]

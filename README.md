@@ -29,7 +29,7 @@ watches the joins between them and writes nothing.
 [component-belief](#component-belief-does-it-work) ·
 [stamp-monitor](#stamp-monitor-is-the-evidence-still-current) ·
 [How the ledgers join](#how-the-ledgers-join) · [Systems-engineering view](#the-systems-engineering-view) ·
-[Reference](#reference)
+[Reference](#reference) · [Changelog](#changelog)
 
 ---
 
@@ -97,7 +97,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.3.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.4.0" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -306,7 +306,7 @@ declarations in [`belief.yaml`](belief.yaml).
 * **Gates and rates.** A deterministic procedure — a pytest suite — is `kind: gate`: read from its latest run, every case passing is `supported`, any failing is `refuted`, with no interval and no `n_min` for reruns to climb. A stochastic process is a rate contract with a Beta-Binomial interval, and sparse data is `insufficient_evidence`.
 * **Diagnosis before optimisation.** Bottlenecks are ranked by decision relevance, never by lowest score, and a component no test observes is reported as a coverage limit rather than blamed.
 * **Components claim their code.** `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` is *planned*.
-* **Content stamps.** Before a test's command starts, the runner records the git blob id of every file the evidence could rest on — the components' claimed `code:`, the files the test names on its `run:` line or in `reads:` — plus what the run opened. Every trial carries the stamp's digest. Content rather than revision, so evidence from uncommitted edits later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and weakening the test itself stales what it produced. Trials recorded before stamps fall back to `git diff <sw_revision> HEAD`. Design: [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
+* **Content stamps.** Before a test's command starts, the runner records the git blob id of every file the evidence could rest on — the components' claimed `code:`, the files the test names on its `run:` line or in `reads:` — plus what the run opened. Every trial carries the stamp's digest. Content rather than revision, so evidence from uncommitted edits later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and weakening the test itself stales what it produced. A declared input git ignores — a checkpoint, a dataset, a directory of demonstrations — has no blob at HEAD, so it is stamped by its content digest instead, and the evidence stays current while the file on disk still has it: retrain the checkpoint and the evidence goes stale, restore the same bytes and it counts again. Trials recorded before stamps fall back to `git diff <sw_revision> HEAD`. Design: [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
 * **Runs record what they read.** Each `run_test` installs an audit hook through `sitecustomize` (chaining to any the environment already had), so the run reports each project file it opened for reading — an import from cached bytecode counts as reading its source. Files a non-Python child opens are declared with `reads:`.
 * **Every file carries a verdict.** `status(view="artifacts")` joins git history, the run ledger, the declarations and the filesystem. A file nothing claims, nothing ran, and no live evidence rests on is a prune candidate; a generated artifact is *kept*, *prunable*, or *undecidable* — with the source of each fact named, because "RUN-0140 opened it" is a fact and "its mtime is three weeks old" is a hint.
 
@@ -413,25 +413,27 @@ the coverage view says so.
 
 ## The systems-engineering view
 
-Read as a V-model, the three servers cover definition down to component test, joined by
-traceability and configuration control.
+Read as a V-model, the three servers cover stakeholder needs down to component test, joined by
+traceability and configuration control. The human owns the top of the V; the agent owns the rest.
 
 | Stage | Artifact | Method |
 |---|---|---|
+| Needs and validation | goals and the interfaces between them in `goals.yaml`, each with the contract that says it is met; `status(view="goals")` | test (typically `layer: e2e`), criteria committed by the human |
 | Requirements | axioms and definitions in `consistency.yaml` | inspection, at commit |
 | Architecture | components and interfaces in `belief.yaml`; lemmas | analysis by probe; set difference for unbacked assumptions |
 | Component design | branches, each with premises and `evidence: CTR-...` | analysis by `verify_step`, from the declarations only |
 | Build | `code:` claims per component; `status(view="artifacts")` | inspection |
 | Component, integration, system test | contracts and tests by `layer`; `run_test`; `.belief/` | test |
 | Traceability | a branch's `subject` and cited contract; `status(view="coverage")` on both sides | mechanical |
-| Configuration control | declarations from git HEAD; a content stamp on every run; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
-| Change control | `audit_change`, STALE on restatement, `amend`, `decide(approver=)`; `stamp-monitor impact` | mechanical, plus a human approver |
+| Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
+| Change control | `audit_change`, STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
 | Configuration audit | `stamp-monitor audit` and `workflow` | mechanical, read-only |
 | Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
-| Release gate | `POL-consistency-gate`: each branch proven **and** its cited contract supported | both ledgers |
+| Release gate | `POL-consistency-gate`: each branch proven **and** its cited contract supported; the goals policy in `goals.yaml` | both ledgers, and the human's goals |
 
-Not represented yet: needs and validation (nothing sits above an axiom), interface-level design
-claims (`IFC-` is not an admissible subject), and a failure-mode-to-metric check.
+Not represented yet: a trace from a goal into the design ledger (an axiom naming the goal it
+serves), interface-level design claims (`IFC-` is not an admissible subject), and a
+failure-mode-to-metric check.
 
 ---
 
@@ -509,3 +511,90 @@ The suites assert the invariants above, not the implementation:
 10. A falsification argued from a source file is refused before anything is recorded; a decision names the revision it was taken at.
 11. Evidence is bound to the content it measured: discarded uncommitted edits, a weakened test, or an edited stamp make it stale; a rewritten history with the same bytes does not.
 12. The monitor writes nothing, and reports a damaged ledger line, a changed artifact, and an agent approving its own adoption.
+13. An import rests on a local artifact the server copied and hashed, from a test its contract lists; a fabricated import cannot move a gate or reach an adoption.
+14. As a plugin, all three servers read the project Claude Code reports, install from their own version's tag, and never lend a test the plugin's own interpreter.
+15. An agent-trailered commit to the goal set is refused and one the human types passes; an adoption under the goals policy needs no approver until the agent touches the goal set.
+16. A declared input git ignores is judged by its content on disk: changed or missing, its evidence is stale; the same bytes again, current.
+
+---
+
+## Changelog
+
+Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
+0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
+change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.4.0 — 2026-10-01 · evidence on files git does not track
+
+- A declared input git ignores is stamped by its content digest and judged against the file on
+  disk. This covers a checkpoint, a dataset or a directory of demonstrations, whether in `reads:`
+  or named as a file on the run line. Retrain the checkpoint and its evidence goes stale; restore
+  the same bytes and it counts again; delete it and the reason says so. Before, a gitignored
+  checkpoint never entered the stamp, so retraining it staled nothing, and an untracked dataset
+  left its evidence stale forever.
+- A file git neither tracks nor ignores stays stale until it is committed or ignored, and the
+  reason now says exactly that instead of calling it an uncommitted edit.
+- Digests are cached by size and modification time, so a large file is hashed once per change.
+
+### 0.3.0 — 2026-10-01 · goals the human owns
+
+- **`goals.yaml`** (`746dc2a`) holds the goals, the interfaces between them, and the contracts,
+  tests and policy that measure them. Only the human commits it. The agent owns `belief.yaml` and
+  `consistency.yaml` and commits them as it works. A component names the goal it serves, so a
+  goal's evidence goes stale with that code.
+- **The guard, `tdlp-guard install`,** is a commit-msg hook. It refuses a commit that carries the
+  agent's trailer and changes the goal set.
+- **`status(view="goals")`** is the one view to check in with. `note(subject="GOL-…")` is how the
+  agent proposes a goal change.
+- **`decide`** records an adoption under the goals policy without an approver, since the human's
+  commit approved it. That holds until the agent touches the goal set; `workflow` reports any
+  such commit.
+- **`impact`** now reaches a contract through every component its subject rests on. Goals and
+  interfaces were missed before.
+- The PYTHONPATH read-hook test runs end to end only where `env` exists (`6491778`). The last
+  hand-registered servers gave way to the plugin (`3bc2f68`).
+
+### 0.2.0 — 2026-09-30 · one plugin, and imports that hold to their definition
+
+- **`ingest`** (`b2cabd2`) requires a test the contract lists and a local artifact, which it copies
+  and hashes itself, and `audit` checks imported artifacts. Before, one call naming a made-up test
+  and a missing file could turn a gate supported and let `decide` record an adoption, with `audit`
+  and `workflow` both clean.
+- **The plugin `tdlp`** (`d733b29`) ships the three servers, both skills and the verifier as one
+  Claude Code plugin. The servers install with `uvx` from a release tag and read the project
+  Claude Code reports. A declared test runs in the project's environment, not the plugin's.
+  `UV_LINK_MODE=copy` avoids broken installs under OneDrive.
+- `a3812c2` enables the plugin for this project and adds the migration steps for a project that
+  registered the servers by hand.
+
+### 0.1.0 — 2026-08-31 to 2026-09-23 · three ledgers, applied to themselves
+
+- **component-belief** (`edf8945`, 2026-08-31) holds evidence-grounded belief per contract slice.
+  Beta-Binomial rates keep "insufficient" as an answer, and diagnosis comes before optimising.
+  Its first self-hosted run is `41f48ee`.
+- **consistency-belief** (`bbdacd5`, 2026-09-21) builds axioms → lemmas → branches, verified by
+  falsification probes. Staged proposals persist and trials bind to the statement they verified
+  (`243250b`), and only a falsified probe refutes (`627dde7`).
+- **The join** (2026-09-23): a branch names the component it governs (`41fd0b1`) and the contract
+  that measures it (`1677af7`), and `POL-consistency-gate` needs both. The verifier reasons from
+  declarations only (`c3dbae9`), is served its probe, and has independence counted (`3782055`).
+  It runs in a context that cannot open a file (`81c35fb`).
+- **Evidence and its currency**: gate contracts read their latest run (`6822fc9`); a run records
+  what it opened (`5e16d92`) and every file carries a stamp (`e138229`). Evidence is bound to the
+  content it measured, not the revision (`105e434`).
+- **stamp-monitor** (`2a3dea5`) is a read-only view across both ledgers: impact, audit, workflow.
+- **Self-application**: both ledgers declare this repository (`81c35fb`). Eight verifier passes
+  narrowed the design to convergence (`d54e2a5` to `cd0dbd6`), and the identity model was stated
+  once (`f2f9fab` to `a69b43e`).
+
+### damped-plan — 2026-08-17 to 2026-08-31 · the predecessor, retired
+
+This was a planning MCP (`6d8cb13`) whose own version numbers are unrelated to the ones above.
+
+- It had a PreToolUse gate hook, an allowlisted command runner with evidence capture (`96ffa28`)
+  and a plan-reviewer agent.
+- It had a predictive layer of contracts, posterior checks and the dominant residual (`1c9303d`),
+  and a research loop with a human-supervised gate (`cda5b4e`).
+- It recorded its own gaps, among them "the missing human-only ultimate goal" (`5cdfb8b`,
+  2026-08-21), which `goals.yaml` answers in 0.3.0.
+- Retired (`3deaca3`) on 2026-08-31, the day component-belief (`edf8945`) replaced it.

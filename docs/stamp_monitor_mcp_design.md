@@ -188,9 +188,13 @@ The monitor is triggered, not continuously running. Useful triggers, none instal
 
 ## Not yet
 
-- **Environment and data scopes** are declared, not built in: `reads: [uv.lock, pyproject.toml]` on
-  a test makes a dependency bump stale its evidence today. No interpreter, platform, or hardware
-  fingerprint is stamped.
+- **Environment scopes** are declared, not built in: `reads: [uv.lock, pyproject.toml]` on a test
+  makes a dependency bump stale its evidence today. No interpreter, platform, or hardware
+  fingerprint is stamped. **Data outside git is built in:** a declared input git ignores (a
+  checkpoint, a dataset, a directory of demonstrations, in `reads:` or named as a file on the run
+  line) is stamped under `outside` with its content digest, and the evidence stays current while
+  the file on disk still has it. Digests are cached by size and mtime in `.belief/cache/`. A file
+  git neither tracks nor ignores stays stale until it is committed or ignored.
 - **API and behavioral scopes** (surviving an internal refactor) are not attempted; a wrong
   fine-grained scope is worse than a conservative path-level one.
 - **Unversioned evidence**: a trial with neither stamp nor revision is treated as current, not

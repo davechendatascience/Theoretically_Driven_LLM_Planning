@@ -305,6 +305,95 @@ class TestContentStamps:
         assert sl.state == STATE_STALE and "no longer matches the digest" in sl.stale_reasons[0]
 
 
+class TestInputsOutsideGit:
+    """A checkpoint, a dataset or generated demonstrations that git ignores has no blob at HEAD, so
+    the run stamps its content and the evidence is judged against the file on disk."""
+
+    @pytest.fixture
+    def data_repo(self, code_repo: Path) -> Path:
+        (code_repo / ".gitignore").write_text("ckpt/\ndata/\n", encoding="utf-8")
+        (code_repo / "ckpt").mkdir()
+        (code_repo / "ckpt" / "teacher.pt").write_bytes(b"weights-v1")
+        (code_repo / "data" / "demos").mkdir(parents=True)
+        for name in ("ep1.json", "ep2.json"):
+            (code_repo / "data" / "demos" / name).write_text(f"[{name}]", encoding="utf-8")
+        (code_repo / "check.py").write_text(CHECK_PY, encoding="utf-8")
+        (code_repo / "belief.yaml").write_text(
+            CLAIMED_YAML.replace('run: "echo ok"', 'run: "python check.py $OUT ckpt/teacher.pt"')
+            .replace("    capture: [lighting, model_revision]\n",
+                     "    capture: [lighting, model_revision]\n    reads: [data/demos]\n"),
+            encoding="utf-8")
+        git(code_repo, "add", "-A")
+        git(code_repo, "commit", "-q", "-m", "a test resting on a checkpoint and a dataset git ignores")
+        return code_repo
+
+    run = staticmethod(TestContentStamps.run)
+    slice_now = staticmethod(TestContentStamps.slice_now)
+
+    def test_a_run_stamps_what_it_rests_on_outside_git(self, data_repo):
+        import json
+
+        from component_belief.store import Store
+
+        result = self.run(data_repo)
+        stamp = json.loads((Store(data_repo).artifacts_dir / result["run_id"] / "stamp.json")
+                           .read_text(encoding="utf-8"))
+        assert set(stamp["outside"]) == {"ckpt/teacher.pt", "data/demos/ep1.json", "data/demos/ep2.json"}
+        assert "ckpt/teacher.pt" not in stamp["files"], "no blob at HEAD to compare it with"
+        sl = self.slice_now(data_repo)
+        assert sl.state != STATE_STALE and sl.n_stale == 0
+
+    def test_retraining_the_checkpoint_stales_it(self, data_repo):
+        self.run(data_repo)
+        (data_repo / "ckpt" / "teacher.pt").write_bytes(b"weights-v2-retrained")
+        sl = self.slice_now(data_repo)
+        assert sl.state == STATE_STALE
+        assert "ckpt/teacher.pt changed on disk since RUN-0001" in sl.stale_reasons[0]
+
+    def test_the_same_bytes_again_are_current(self, data_repo):
+        """Judged by content, not by modification time: restoring the checkpoint restores it."""
+        self.run(data_repo)
+        (data_repo / "ckpt" / "teacher.pt").write_bytes(b"weights-v2-retrained")
+        assert self.slice_now(data_repo).state == STATE_STALE
+        (data_repo / "ckpt" / "teacher.pt").write_bytes(b"weights-v1")
+        assert self.slice_now(data_repo).state != STATE_STALE
+
+    def test_a_file_changed_inside_a_declared_directory_stales_it(self, data_repo):
+        self.run(data_repo)
+        (data_repo / "data" / "demos" / "ep2.json").write_text("[regenerated]", encoding="utf-8")
+        sl = self.slice_now(data_repo)
+        assert sl.state == STATE_STALE and "data/demos/ep2.json" in sl.stale_reasons[0]
+
+    def test_a_missing_input_is_stale(self, data_repo):
+        self.run(data_repo)
+        (data_repo / "ckpt" / "teacher.pt").unlink()
+        sl = self.slice_now(data_repo)
+        assert sl.state == STATE_STALE and "ckpt/teacher.pt is missing on disk" in sl.stale_reasons[0]
+
+    def test_a_large_input_is_hashed_once_per_change(self, data_repo):
+        from component_belief.staleness import ContentDigests
+
+        self.run(data_repo)
+        cached = ContentDigests(data_repo)
+        assert "ckpt/teacher.pt" in cached._load(), "the run left its digests in the ledger's cache"
+
+    def test_an_input_git_neither_tracks_nor_ignores_says_what_to_do(self, code_repo):
+        """An untracked source file is not yet part of anything reviewed: it stays stale, and the
+        reason says how to settle it rather than calling it an uncommitted edit."""
+        (code_repo / "check.py").write_text(CHECK_PY, encoding="utf-8")
+        (code_repo / "belief.yaml").write_text(
+            CLAIMED_YAML.replace('run: "echo ok"', 'run: "python check.py $OUT"')
+            .replace("    capture: [lighting, model_revision]\n",
+                     "    capture: [lighting, model_revision]\n    reads: [fixtures.json]\n"),
+            encoding="utf-8")
+        git(code_repo, "add", "-A")
+        git(code_repo, "commit", "-q", "-m", "a test reading a file nobody committed")
+        (code_repo / "fixtures.json").write_text("{}", encoding="utf-8")
+        self.run(code_repo)
+        sl = self.slice_now(code_repo)
+        assert sl.state == STATE_STALE and "neither committed nor ignored" in sl.stale_reasons[0]
+
+
 # --- through the server ----------------------------------------------------------------------
 
 class TestServerSurface:

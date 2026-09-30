@@ -21,6 +21,12 @@ measured:
 Trials recorded before stamps existed, and imported trials, carry no stamp and fall back to the
 revision check: one `git diff --name-only <revision> HEAD` per distinct revision.
 
+A declared input that git ignores -- a checkpoint, a dataset, generated demonstrations -- has no
+blob at HEAD to compare with, so it is judged by its content on disk instead: the run stamps its
+digest under `outside`, and the trial stays current while the file still has it. A file git
+neither tracks nor ignores is left to the HEAD comparison, and stays stale until it is committed
+or ignored: an untracked source file is not yet part of what anyone reviewed.
+
 Nothing here decides what to do about staleness: the model reports the slice as stale, the policy
 refuses to adopt on it, and the plan schedules the re-run. A component that claims no code
 cannot go stale through its code -- one more reason to claim it.
@@ -28,6 +34,7 @@ cannot go stale through its code -- one more reason to claim it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
 import subprocess
@@ -110,13 +117,89 @@ def named_paths(command: str, reads: list[str], known: set[str]) -> list[str]:
     return sorted({p for p in known for e in entries if matches(p, e)})
 
 
+def ignored_inputs(root: Path, command: str, reads: list[str]) -> list[str]:
+    """The declared inputs git ignores: files under a `reads:` entry (a file, a directory or a
+    glob), and files the run line names, that git is told to leave out.
+
+    Run-line tokens count only when they name an existing file, so `.` in `PYTHONPATH=lib:.` or a
+    directory such as `.venv` never pulls in everything beneath it; a directory is declared in
+    `reads:`, where it was meant."""
+    specs = [e.replace("\\", "/").removeprefix("./").rstrip("/") for e in reads]
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    for token in tokens:
+        token = token.split("::", 1)[0].replace("\\", "/").removeprefix("./")
+        if token and not token.startswith("-") and "$" not in token and (root / token).is_file():
+            specs.append(token)
+    specs = [s for s in specs if s and s not in (".", "..")]
+    if not specs:
+        return []          # an empty pathspec would list every ignored file in the repository
+    listed = _split0(_git(root, "ls-files", "--others", "--ignored", "--exclude-standard", "-z",
+                          "--", *specs, *_EXCLUDE))
+    return sorted(p for p in listed if (root / p).is_file())
+
+
+class ContentDigests:
+    """Content digests of files git does not track, cached by (size, mtime) under the ledger's
+    cache: a checkpoint of several gigabytes is hashed once per change, not on every read."""
+
+    FILE = "digests.json"
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self.path = root / STORE_DIR / "cache" / self.FILE
+        self._cache: dict[str, list[Any]] | None = None
+        self._changed = False
+
+    def _load(self) -> dict[str, list[Any]]:
+        if self._cache is None:
+            try:
+                self._cache = json.loads(self.path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                self._cache = {}
+        return self._cache
+
+    def digest(self, rel: str) -> str | None:
+        """sha256 of the file's bytes (16 hex), or None when it is not on disk."""
+        path = self.root / rel
+        try:
+            info = path.stat()
+        except OSError:
+            return None
+        cache = self._load()
+        hit = cache.get(rel)
+        if hit and hit[0] == info.st_size and hit[1] == info.st_mtime_ns:
+            return str(hit[2])
+        sha = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                sha.update(chunk)
+        cache[rel] = [info.st_size, info.st_mtime_ns, sha.hexdigest()[:16]]
+        self._changed = True
+        return cache[rel][2]
+
+    def save(self) -> None:
+        if not self._changed:
+            return
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._cache, sort_keys=True), encoding="utf-8")
+            self._changed = False
+        except OSError:
+            pass           # a cache that cannot be written only costs a re-hash next time
+
+
 class Snapshot:
     """The content of the tree a run is about to measure, taken before the command starts."""
 
     def __init__(self, root: Path, head: str, blobs: dict[str, str | None], dirty: list[str],
-                 claimed: list[str], named: list[str]) -> None:
+                 claimed: list[str], named: list[str],
+                 outside: dict[str, str | None] | None = None) -> None:
         self.root, self.head, self.blobs = root, head, blobs
         self.dirty, self.claimed, self.named = dirty, claimed, named
+        self.outside = outside or {}
 
     @classmethod
     def take(cls, root: Path, claimed: list[str], command: str, reads: list[str]) -> "Snapshot | None":
@@ -138,13 +221,16 @@ class Snapshot:
         for path in edited + untracked:
             blobs[path] = hashed.get(path)          # None: deleted in the working tree
         named = named_paths(command, reads, set(blobs))
-        return cls(root, head, blobs, sorted(set(edited + untracked)), list(claimed), named)
+        digests = ContentDigests(root)
+        outside = {p: digests.digest(p) for p in ignored_inputs(root, command, reads)}
+        digests.save()
+        return cls(root, head, blobs, sorted(set(edited + untracked)), list(claimed), named, outside)
 
     def stamp(self, opened: list[str]) -> dict[str, Any]:
         """The record to keep: only the files some evidence could rest on."""
         keep = set(self.named) | {p for p in opened if p in self.blobs}
         keep |= {p for p in self.blobs if any(matches(p, e) for e in self.claimed)}
-        return {
+        stamp = {
             "version": STAMP_VERSION,
             "head": self.head,
             "claimed": sorted(set(self.claimed)),
@@ -153,6 +239,9 @@ class Snapshot:
             "dirty": sorted(p for p in self.dirty if p in keep),
             "files": {p: self.blobs.get(p) for p in sorted(keep)},
         }
+        if self.outside:
+            stamp["outside"] = dict(sorted(self.outside.items()))
+        return stamp
 
 
 def write_stamp(artifact_dir: Path, stamp: dict[str, Any]) -> str:
@@ -171,6 +260,8 @@ class CodeStaleness:
         self._head: dict[str, str] | None | bool = False
         self._stamps: dict[str, dict[str, Any] | str] = {}
         self._changed: dict[str, set[str] | None] = {}
+        self._digests = ContentDigests(root)
+        self._outside: dict[str, str | None] = {}    # stamp digest -> why its ignored inputs moved
 
     def head(self) -> dict[str, str] | None:
         if self._head is False:
@@ -215,14 +306,41 @@ class CodeStaleness:
         changed = sorted(p for p in watch if files.get(p) != head.get(p))
         if changed:
             dirty = [p for p in changed if p in (stamp.get("dirty") or [])]
+            limbo = [p for p in dirty if head.get(p) is None and files.get(p) is not None]
+            if limbo:
+                return (f"{_shown(limbo)} is neither committed nor ignored by git "
+                        f"({trial.get('run_id')}): commit it, or gitignore it to have it judged "
+                        "by its content on disk")
             if dirty:
                 return (f"{_shown(dirty)} was measured with uncommitted edits HEAD does not have "
                         f"({trial.get('run_id')})")
             return f"{_shown(changed)} changed since {trial.get('run_id')} ({stamp.get('head', '')[:7]})"
 
+        moved = self._outside_reason(stamp, trial)
+        if moved:
+            return moved
+
         # A path claimed after the run was stamped has no recorded content: judge it by revision.
         uncovered = [e for e in code_paths if e not in covered]
         return self._revision_reason(uncovered, trial) if uncovered else None
+
+    def _outside_reason(self, stamp: dict[str, Any], trial: dict[str, Any]) -> str | None:
+        """Declared inputs git ignores, compared by content with what the run hashed. Once per
+        run: every trial of a run shares its stamp."""
+        outside: dict[str, str | None] = stamp.get("outside") or {}
+        if not outside:
+            return None
+        key = str(trial.get("stamp") or "")
+        if key not in self._outside:
+            now = {p: self._digests.digest(p) for p in outside}
+            self._digests.save()
+            gone = [p for p in sorted(outside) if now[p] is None and outside[p] is not None]
+            moved = [p for p in sorted(outside) if now[p] != outside[p] and p not in gone]
+            run = trial.get("run_id")
+            self._outside[key] = (
+                f"{_shown(moved)} changed on disk since {run} (not in git: judged by its content)"
+                if moved else f"{_shown(gone)} is missing on disk since {run}" if gone else None)
+        return self._outside[key]
 
     # ---------- the fallback for unstamped trials ----------
 

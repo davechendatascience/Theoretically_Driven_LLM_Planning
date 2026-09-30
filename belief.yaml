@@ -99,6 +99,7 @@ components:
       - {id: FM-silent-pooling, observable: incompatible trials land in one slice}
       - {id: FM-premature-verdict, observable: a verdict is issued below n_min}
       - {id: FM-stale-counted, observable: a trial measured before a claimed file changed still counts as current}
+      - {id: FM-blind-outside-git, observable: a trial resting on a declared input git ignores stays current after that file changes, or is never current}
     remediation: model.eligible() and the slice key in compute_slices(); staleness.CodeStaleness
     code:
       - src/component_belief/model.py
