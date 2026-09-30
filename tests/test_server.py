@@ -106,6 +106,46 @@ class TestRunner:
         assert result["exit_code"] != 0
         assert result["outcome_counts"] == {"fail": 1}
 
+    @staticmethod
+    def _tool_env(tmp_path_factory, monkeypatch):
+        """A server interpreter in an isolated tool environment outside the project, as uvx
+        installs one; its directory leads PATH, as uvx leaves it."""
+        tool = tmp_path_factory.mktemp("uv-cache") / "tool-env"
+        own = tool / ("Scripts" if os.name == "nt" else "bin")
+        monkeypatch.setattr("sys.executable", str(own / "python"))
+        return tool, own
+
+    def test_a_plugin_server_runs_tests_with_the_projects_python(self, repo, tmp_path_factory, monkeypatch):
+        from component_belief.runner import project_environment
+
+        tool, own = self._tool_env(tmp_path_factory, monkeypatch)
+        project_bin = repo / ".venv" / ("Scripts" if os.name == "nt" else "bin")
+        project_bin.mkdir(parents=True)
+        env = project_environment(repo, {"PATH": os.pathsep.join([str(own), "/usr/bin"]),
+                                         "VIRTUAL_ENV": str(tool), "CLAUDE_PLUGIN_ROOT": "p"})
+        entries = env["PATH"].split(os.pathsep)
+        assert entries[0] == str(project_bin)
+        assert str(own) not in entries and "/usr/bin" in entries
+        assert env["VIRTUAL_ENV"] == str(repo / ".venv")
+
+    def test_a_plugin_server_never_lends_tests_its_own_python(self, repo, tmp_path_factory, monkeypatch):
+        """No project .venv: the harness's interpreter still leaves PATH, so `python` is whatever
+        the client inherited -- or missing, which fails loudly -- never the harness's own."""
+        from component_belief.runner import project_environment
+
+        tool, own = self._tool_env(tmp_path_factory, monkeypatch)
+        env = project_environment(repo, {"PATH": os.pathsep.join([str(own), "/usr/bin"]),
+                                         "VIRTUAL_ENV": str(tool), "CLAUDE_PLUGIN_ROOT": "p"})
+        assert env["PATH"].split(os.pathsep) == ["/usr/bin"]
+        assert "VIRTUAL_ENV" not in env
+
+    def test_outside_a_plugin_the_servers_environment_is_left_alone(self, repo, tmp_path_factory, monkeypatch):
+        from component_belief.runner import project_environment
+
+        tool, own = self._tool_env(tmp_path_factory, monkeypatch)
+        inherited = {"PATH": os.pathsep.join([str(own), "/usr/bin"]), "VIRTUAL_ENV": str(tool)}
+        assert project_environment(repo, inherited) == inherited
+
     def test_artifacts_are_written(self, repo):
         emit_yaml(repo, "echo hello")
         decl = load(repo)

@@ -7,9 +7,9 @@ and git. Tool schemas are standing context in every session, so there are three,
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
+from component_belief.project import project_root as resolve_root
 from mcp.server.fastmcp import FastMCP
 
 from . import render_findings
@@ -35,10 +35,7 @@ mcp = FastMCP("stamp-monitor", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:
-    for var in ("STAMP_MONITOR_ROOT", "BELIEF_PROJECT_ROOT"):
-        if os.environ.get(var):
-            return Path(os.environ[var]).resolve()
-    return Path.cwd().resolve()
+    return resolve_root("STAMP_MONITOR_ROOT", "BELIEF_PROJECT_ROOT")
 
 
 @mcp.tool()

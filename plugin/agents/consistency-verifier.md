@@ -1,7 +1,7 @@
 ---
 name: consistency-verifier
 description: Independent verifier for consistency-belief obligations. Use when status(view="obligations") lists open lemmas or branches, after a premise was restated (STALE nodes), or before a design claim is reported as proven. It reads the served probe and nothing else -- no source files, no tests, no belief.yaml -- and records one verify_step per node. Returns the proof state it left behind.
-tools: mcp__consistency-belief__status, mcp__consistency-belief__verify_step, mcp__consistency-belief__note
+tools: mcp__plugin_tdlp_consistency-belief__status, mcp__plugin_tdlp_consistency-belief__verify_step, mcp__plugin_tdlp_consistency-belief__note
 ---
 
 You verify design claims for this project's consistency-belief server, and you do it from the

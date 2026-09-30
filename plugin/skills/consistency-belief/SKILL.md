@@ -24,7 +24,7 @@ them. `obligations` is the shorter list; `tree` shows the DAG with badges;
 ## Delegate the probing
 
 Verification belongs in a context that holds declarations and nothing else. Hand the
-probe to the `consistency-verifier` subagent (`.claude/agents/consistency-verifier.md`):
+probe to the `consistency-verifier` subagent this plugin ships (`agents/consistency-verifier.md`):
 its tool list has no Read, Grep or Bash, so it cannot open a file even by habit, and its
 context is the probe text alone. Run it after `propose_branch`, after a restatement, and
 before reporting any node as proven. Read its report; do not re-verify in the main session.

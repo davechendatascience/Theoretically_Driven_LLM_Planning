@@ -35,13 +35,36 @@ watches the joins between them and writes nothing.
 
 ## Quick start
 
+The three servers, the two workflow skills and the `consistency-verifier` subagent ship as one
+Claude Code plugin, `tdlp`, pinned to a release tag. Add this repository as a marketplace once per
+machine, then enable the plugin in each project that uses it:
+
+```bash
+claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning
+cd /path/to/your/project
+claude plugin install tdlp@tdlp --scope project   # writes .claude/settings.json -- commit it
+```
+
+Enabling it per project keeps the tools out of every other project's context. On another machine,
+add the marketplace once and run the same install; a project that lists the plugin in its settings
+does not fetch it on its own.
+
+* **Which project.** Every server reads the project Claude Code reports (`${CLAUDE_PROJECT_DIR}`),
+  so all three describe the same repository.
+* **Which version.** The servers install with `uvx` from the tag `tdlp--v<version>`, so edits here
+  reach a project only when a release is tagged and the plugin updated
+  (`claude plugin update tdlp@tdlp`).
+* **Which Python a test gets.** A declared test's `run:` line runs in the project's environment:
+  its `.venv` if it has one, else the PATH Claude Code inherited, never the plugin's own
+  interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
+* **Skills.** They load as `/tdlp:component-belief` and `/tdlp:consistency-belief`.
+
+To work on the harness itself, install it editable and register the servers by hand, all three at
+the **same** project root: the joins exist only when the ledgers describe one repository.
+
 ```bash
 pip install -e .          # or: uv sync
 ```
-
-Register the servers with Claude Code via `.mcp.json` (the included one registers all three, with
-this repository's author's paths — replace them with yours). Point all three at the **same**
-project root: the joins exist only when the ledgers describe one repository.
 
 ```json
 {
@@ -154,8 +177,8 @@ status(view="probe")  →  verify_step(target, trials=[...])  →  status(view="
 statement, the derivation rule, the three strategies (counterexample, entailment, negation) and the
 call that records them — so the verifier assembles nothing and has no reason to open a file.
 Independence is counted as distinct (strategy, actor) pairs: one strategy repeated by one actor is
-recorded but does not close an obligation. `.claude/agents/consistency-verifier.md` runs this loop
-in a context that cannot open a file; `.claude/skills/consistency-belief/SKILL.md` says when to
+recorded but does not close an obligation. `plugin/agents/consistency-verifier.md` runs this loop
+in a context that cannot open a file; `plugin/skills/consistency-belief/SKILL.md` says when to
 hand it work.
 
 ### Tools (eight)
@@ -348,7 +371,8 @@ src/
     declarations.py                  git-HEAD loader, validation, code claims
     model.py                         belief slices; gate and rate contracts
     staleness.py                     content stamps and freshness (shared with both other servers)
-    runner.py / readlog.py           test execution, artifact capture, the read hook
+    runner.py / readlog.py           test execution in the project's environment, artifact capture, the read hook
+    project.py                       which project root all three servers read
     diagnose.py / planning.py        bottleneck ranking; round test selection
     decide.py                        policy evaluation and the human approval gate
     stamps.py / views.py / render.py the artifacts view; status views
@@ -360,11 +384,18 @@ src/
     server.py / cli.py               MCP server; the same reports from a shell
 tools/pytest_trials.py               pytest → trials adapter
 tests/                               the suites belief.yaml declares as tests
-.claude/
+.claude-plugin/marketplace.json      this repository as a plugin marketplace, listing `tdlp`
+plugin/                              the `tdlp` Claude Code plugin
+  .claude-plugin/plugin.json         name and version (one version: plugin, marketplace, package, tag)
+  .mcp.json                          the three servers, installed with uvx from tag tdlp--v<version>
   agents/consistency-verifier.md     verifier subagent: consistency-belief tools only, no file access
   skills/component-belief/SKILL.md   the empirical loop, four rules
   skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate
 ```
+
+A release: bump `version` in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`, the marketplace
+entry and the tag in `plugin/.mcp.json` together (`TST-plugin` fails if any disagree), commit, then
+`claude plugin tag plugin --push`.
 
 ### Tests
 

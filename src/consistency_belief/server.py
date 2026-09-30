@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from component_belief.project import project_root as resolve_root
 from mcp.server.fastmcp import FastMCP
 
 from .decide import ADOPT, active_policy, evaluate_consistency_policy
@@ -128,7 +129,7 @@ def subject_hint(ctx: Any, subject: str) -> str:
 
 
 def project_root() -> Path:
-    return Path(os.environ.get("CONSISTENCY_PROJECT_ROOT", os.environ.get("BELIEF_PROJECT_ROOT", os.getcwd()))).resolve()
+    return resolve_root("CONSISTENCY_PROJECT_ROOT", "BELIEF_PROJECT_ROOT")
 
 
 def _actor() -> str:

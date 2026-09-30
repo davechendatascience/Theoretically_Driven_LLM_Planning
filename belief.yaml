@@ -157,6 +157,22 @@ components:
     code:
       - src/stamp_monitor/
 
+  - id: CMP-plugin
+    purpose: Ship the three servers, the two workflow skills and the verifier as one Claude Code plugin any project can enable, at a pinned version
+    testable_capability: >-
+      Every server installs from the release tag of the plugin's own version and reads the
+      project Claude Code reports; the verifier holds only consistency-belief tools its server
+      registers; all three servers resolve the same project root
+    failure_modes:
+      - {id: FM-wrong-root, observable: a server enabled in one project reads another project's ledger, or an empty one}
+      - {id: FM-version-drift, observable: the plugin, the marketplace entry, the package and the pinned tag name different versions}
+      - {id: FM-toolless-verifier, observable: the verifier names a tool its server does not register}
+    remediation: component_belief.project.project_root; plugin/.mcp.json; plugin/agents/consistency-verifier.md
+    code:
+      - plugin/
+      - .claude-plugin/marketplace.json
+      - src/component_belief/project.py
+
 interfaces:
   - id: IFC-declarations__model
     producer: CMP-declarations
@@ -269,6 +285,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-stamp-monitor]
 
+  - id: CTR-plugin-pinned-and-rooted
+    subject: CMP-plugin
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-plugin]
+
 tests:
   - id: TST-declarations
     layer: component
@@ -336,6 +360,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py]
 
+  - id: TST-plugin
+    layer: component
+    targets: [CMP-plugin]
+    run: python tools/pytest_trials.py $OUT -- tests/test_plugin.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py, pyproject.toml]
+
 priors: []
 
 policies:
@@ -349,5 +381,6 @@ policies:
       - {slice: CTR-diagnosis-refuses-blind-optimisation, require: supported}
       - {slice: CTR-monitor-read-only, require: supported}
       - {slice: CTR-surface-intact, require: supported}
+      - {slice: CTR-plugin-pinned-and-rooted, require: supported}
       - {safety_gates: all_passed}
     weights: null

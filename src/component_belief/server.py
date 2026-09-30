@@ -17,6 +17,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
+from .project import project_root as resolve_root
 from .render import basis_line, bullet, envelope
 from .runner import _git_revision, _sha256, run_test as execute_test
 from .store import VALIDITY, Store
@@ -53,7 +54,7 @@ mcp = FastMCP("component-belief", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:
-    return Path(os.environ.get("BELIEF_PROJECT_ROOT", os.getcwd())).resolve()
+    return resolve_root("BELIEF_PROJECT_ROOT")
 
 
 def _actor() -> str:

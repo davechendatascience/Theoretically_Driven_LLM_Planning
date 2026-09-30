@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,49 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()[:16]
 
 
+def _inside(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _same_dir(entry: str, directory: Path) -> bool:
+    try:
+        return Path(entry).resolve() == directory.resolve()
+    except OSError:
+        return False
+
+
+def project_environment(root: Path, env: dict[str, str]) -> dict[str, str]:
+    """The environment a declared test runs in: the project's, not the harness's.
+
+    Installed as a plugin, the server runs from an isolated tool environment (`uvx`) whose
+    interpreter leads PATH, so `python` on a run line would be the harness's own -- no pytest and
+    none of the project's packages -- and every gate would fail for a reason that is not the
+    project's. Claude Code names a plugin server's install in CLAUDE_PLUGIN_ROOT; then, and only
+    then, the harness's interpreter directory is dropped from the test's PATH. Outside a plugin
+    the server runs from whatever environment its user chose, and that is left alone. Either way
+    a project `.venv`, if there is one, leads PATH, and the rest is as the client inherited it.
+    """
+    env = dict(env)
+    path_key = next((k for k in env if k.upper() == "PATH"), "PATH")
+    entries = [e for e in env.get(path_key, "").split(os.pathsep) if e]
+    own = Path(sys.executable).parent
+    if env.get("CLAUDE_PLUGIN_ROOT") and not _inside(own, root):
+        entries = [e for e in entries if not _same_dir(e, own)]
+        if env.get("VIRTUAL_ENV") and _same_dir(env["VIRTUAL_ENV"], own.parent):
+            del env["VIRTUAL_ENV"]
+    venv = root / ".venv"
+    bindir = venv / ("Scripts" if os.name == "nt" else "bin")
+    if bindir.is_dir():
+        entries = [str(bindir)] + [e for e in entries if not _same_dir(e, bindir)]
+        env["VIRTUAL_ENV"] = str(venv)
+    env[path_key] = os.pathsep.join(entries)
+    return env
+
+
 def _substitute_out(command: str, out_path: Path) -> str:
     """Expand the $OUT placeholder ourselves.
 
@@ -107,7 +151,7 @@ def run_test(
     artifact_dir = store.artifact_dir(run_id)
     out_path = artifact_dir / RESULT_FILENAME
 
-    env = dict(os.environ)
+    env = project_environment(root, dict(os.environ))
     env["OUT"] = str(out_path)
     env["BELIEF_RUN_ID"] = run_id
     env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log",

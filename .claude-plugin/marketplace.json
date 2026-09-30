@@ -1,0 +1,13 @@
+{
+  "name": "tdlp",
+  "owner": {"name": "David Chen"},
+  "description": "The Theoretically Driven LLM Planning harness, as one Claude Code plugin.",
+  "plugins": [
+    {
+      "name": "tdlp",
+      "source": "./plugin",
+      "version": "0.2.0",
+      "description": "The three belief servers, their workflow skills and the file-blind verifier, pinned to a release tag."
+    }
+  ]
+}
