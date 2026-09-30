@@ -1,0 +1,17 @@
+[
+ "pyproject.toml",
+ "src/component_belief/__init__.py",
+ "src/component_belief/declarations.py",
+ "src/component_belief/expr.py",
+ "src/component_belief/goals.py",
+ "src/component_belief/ids.py",
+ "src/component_belief/model.py",
+ "src/component_belief/render.py",
+ "src/component_belief/staleness.py",
+ "src/component_belief/stats.py",
+ "src/component_belief/store.py",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "tests/conftest.py",
+ "tests/test_goals.py",
+ "tools/pytest_trials.py"
+]
