@@ -1,0 +1,40 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_goals_stay_mine::test_the_agent_cannot_commit_a_change_to_how_my_goal_is_measured"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_goals_stay_mine::test_my_commit_is_the_approval_so_the_agent_can_adopt_without_asking"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_goals_stay_mine::test_once_the_agent_touches_my_goals_it_has_to_ask_again"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_goals_stay_mine::test_the_agent_proposes_a_goal_change_and_i_see_it_in_one_view"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
