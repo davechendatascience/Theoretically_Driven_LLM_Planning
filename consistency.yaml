@@ -212,14 +212,15 @@ definitions:
   - id: DEF-belief-eligible
     term: Belief-eligible evidence
     meaning: >-
-      A trial record with provenance measured -- the server ran a declared
-      test, captured its artifact with the artifact's hash, and took the
-      record's metrics from that artifact -- or imported -- brought in with its
-      source, an artifact and the artifact's hash -- and in either case
-      recorded against a contract that a declared test can measure. Every
-      record carries exactly one provenance: measured, imported or asserted. A
-      record that is neither measured nor imported, a note among them, is
-      asserted.
+      A trial record with provenance measured -- the server ran a declared test,
+      captured its artifact with the artifact's hash, and took the record's
+      metrics from that artifact, or, where the run wrote none and its test
+      declares the metric passed, took passed alone from the exit code the
+      server captured -- or imported -- brought in with its source, an artifact
+      and the artifact's hash -- and in either case recorded against a contract
+      that a declared test can measure. Every record carries exactly one
+      provenance: measured, imported or asserted. A record that is neither
+      measured nor imported, a note among them, is asserted.
 
   - id: DEF-premise-graph
     term: Premise graph
@@ -642,11 +643,11 @@ branches:
       run wrote into that artifact, or, when it wrote none and its test declares
       passed, passed alone from the exit code the server captured; and a record
       is scored from the metrics it carries alone, so one lacking a metric its
-      contract's rule reads is excluded and given no value. By
-      DEF-belief-eligible such a record is belief-eligible, and by
+      contract's rule reads is excluded and given no value. DEF-belief-eligible
+      takes a measured record's metrics from the same two sources, and by
       AXM-no-belief-write-path, under the declarations in effect, a measured
-      belief moves only through such evidence, so a value supplied for a missing
-      metric would move a belief through something no record carries. evidence:
+      belief moves only through belief-eligible evidence; a value supplied for a
+      metric no record carries would come from neither source. evidence:
       CTR-surface-intact
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
