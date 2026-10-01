@@ -15,14 +15,16 @@
 # and every branch's subject must be one of them.
 
 components:
-  - {id: CMP-declarations, note: belief.yaml loaded from git HEAD and validated}
-  - {id: CMP-consistency-declarations, note: consistency.yaml loaded from git HEAD and joined to belief.yaml}
-  - {id: CMP-proof-dag, note: the DAG kernel and the verification state over it}
-  - {id: CMP-trial-ledger, note: the append-only record of proposals, trials, decisions and withdrawals}
-  - {id: CMP-belief-model, note: belief slices from evidence, priors and the model version}
-  - {id: CMP-diagnosis, note: bottleneck ranking and the decision policy}
-  - {id: CMP-runner, note: test execution, artifact capture and the tool surface}
-  - {id: CMP-stamp-monitor, note: the read-only monitor over both ledgers}
+  - {id: CMP-declarations, note: "belief.yaml loaded from git HEAD and validated"}
+  - {id: CMP-consistency-declarations, note: "consistency.yaml loaded from git HEAD and joined to belief.yaml"}
+  - {id: CMP-proof-dag, note: "the DAG kernel and the verification state over it"}
+  - {id: CMP-trial-ledger, note: "the append-only record of proposals, trials, decisions and withdrawals"}
+  - {id: CMP-belief-model, note: "belief slices from evidence, priors and the model version"}
+  - {id: CMP-diagnosis, note: "bottleneck ranking and the decision policy"}
+  - {id: CMP-runner, note: "test execution, artifact capture and the tool surface"}
+  - {id: CMP-stamp-monitor, note: "the read-only monitor over both ledgers"}
+  - {id: CMP-goals, note: "the guard and the record that keep the goal set the human's"}
+  - {id: CMP-plugin, note: "the one plugin any project enables, pinned to a release"}
 
 axioms:
   - id: AXM-axiomatic-grounding
@@ -130,6 +132,30 @@ axioms:
       ranking itself is unresolved, and optimising anything on it turns
       missing measurement into apparent progress. Design rules 7.3 and 7.5 of
       component-belief.
+
+  - id: AXM-goal-set-is-human
+    domain: integrity
+    statement: >-
+      Only the human changes the goal set. An agent commit that would change it
+      is refused, and one that is made anyway does not stand as the human's
+      approval: it is reported until the human next commits the goal set.
+    rationale: >-
+      GOL-goals-stay-mine in goals.yaml: my goals and how they are measured
+      change only by my commit. The line is drawn against drift -- an agent
+      that, stuck, relaxes a measure and sincerely reports progress -- and an
+      agent commit is known by a trailer the agent keeps, so it holds against
+      drift and not against an agent working around it on purpose.
+
+  - id: AXM-pinned-and-rooted
+    domain: integrity
+    statement: >-
+      A project runs the harness as one release published it, and the harness
+      measures that project: it reads that project's declarations and ledger,
+      and runs that project's tests in that project's environment.
+    rationale: >-
+      GOL-any-project in goals.yaml. A server that drifted to unreleased code,
+      read the repository it was installed from, or ran a test with its own
+      interpreter would report on something other than the project asking.
 
 definitions:
   - id: DEF-proof-obligation
@@ -246,6 +272,27 @@ definitions:
       the same id. It is removed when its id is neither declared at the head
       revision nor staged in the ledger.
 
+  - id: DEF-goal-set
+    term: Goal set
+    meaning: >-
+      goals.yaml, and every file git tracks that a test declared in goals.yaml
+      names on its run line or in reads:. A commit changes the goal set when
+      it changes such a file, a test counting as declared when goals.yaml
+      declares it either before or after the commit.
+
+  - id: DEF-agent-commit
+    term: Agent commit
+    meaning: >-
+      A commit whose message carries the agent's trailer, Co-Authored-By:
+      Claude. Every other commit is the human's.
+
+  - id: DEF-release
+    term: Release
+    meaning: >-
+      The code at the git tag tdlp--v<version>, where <version> is the one
+      version that the plugin's manifest, its marketplace entry and the
+      package all name.
+
   - id: DEF-report
     term: Report
     meaning: >-
@@ -276,8 +323,9 @@ lemmas:
   - id: LMA-blast-radius-propagation
     statement: >-
       Consider a change that restates or removes one node r, as DEF-restatement
-      defines them, and nothing else: no other id is restated or removed, and no
-      id that had no candidate gains one. When r is restated, a trial of r, or
+      defines them, and nothing else: no other id is restated or removed, no id
+      that had no candidate gains one, and no trial is recorded and no
+      amendment appended. When r is restated, a trial of r, or
       of a node that depends on r, that recorded a fingerprint of r other than
       r's new one is not current. When r is removed, no trial of r or of a node
       that depends on r is current. Either way, for a node other than r that
@@ -285,7 +333,11 @@ lemmas:
       it, whether each of its trials is current does not change.
     premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial, DEF-restatement]
     derivation_rule: >-
-      By DEF-current-trial fingerprints are compared id for id, so a trial that
+      The change records no trial and appends no amendment, so every trial
+      there was is still there and its validity after amendments is what it
+      was: of the three conditions DEF-current-trial sets, only the second and
+      third can change. By DEF-current-trial fingerprints are compared id for
+      id, so a trial that
       recorded fingerprints is current only if the one it recorded for r, as its
       target's or as that of a node its target depends on, is r's fingerprint
       now; by DEF-restatement a restatement changes r's statement or cited
@@ -552,6 +604,51 @@ branches:
       unchanged. So no proof state changes. evidence: CTR-monitor-read-only
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-goal-guard
+    subject: CMP-goals
+    claim_type: contract
+    statement: >-
+      An agent commit that changes the goal set is refused. One made anyway is
+      reported until the human next commits the goal set, and while one is
+      reported, an adoption under a policy declared in goals.yaml needs a
+      human named as its approver.
+    premises: [AXM-goal-set-is-human, AXM-commit-is-approval, DEF-goal-set, DEF-agent-commit]
+    derivation_rule: >-
+      DEF-goal-set says which files make up the goal set and when a commit
+      changes it, judging the tests goals.yaml declares both before and after
+      the commit, so a commit cannot free a file by removing the test that
+      names it; DEF-agent-commit says which commits are the agent's. By
+      AXM-goal-set-is-human such a commit is refused, and one made anyway is
+      reported until the human next commits the goal set. By
+      AXM-commit-is-approval a declaration takes effect from the committed
+      revision, so a policy declared in goals.yaml was approved by the human's
+      commit of it; by AXM-goal-set-is-human an agent commit made since does
+      not stand as that approval, so while one is reported, an adoption under
+      the policy rests on no approval of the human's and needs the human named
+      as its approver. evidence: CTR-goal-set-stays-human
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-plugin-pinned
+    subject: CMP-plugin
+    claim_type: contract
+    statement: >-
+      Every server the plugin starts installs from the release whose version
+      the plugin's manifest names and is pointed at the project that enabled
+      it, and a declared test runs with that project's environment ahead of
+      the harness's own.
+    premises: [AXM-pinned-and-rooted, DEF-release]
+    derivation_rule: >-
+      By AXM-pinned-and-rooted a project runs the harness as one release
+      published it, and by DEF-release a release is the code at the tag of the
+      one version the plugin's manifest names, so every server the plugin
+      starts installs from that tag. By AXM-pinned-and-rooted the harness
+      reads the declarations and ledger of the project it measures, so each
+      server is pointed at the project that enabled it; and it runs that
+      project's tests in that project's environment, so a declared test runs
+      with that environment ahead of the harness's own.
+      evidence: CTR-plugin-pinned-and-rooted
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -563,3 +660,5 @@ policies:
       - {target: BRN-diagnosis-coverage-first, require: proven, evidence: supported}
       - {target: BRN-runner-captures, require: proven, evidence: supported}
       - {target: BRN-monitor-moves-nothing, require: proven, evidence: supported}
+      - {target: BRN-goal-guard, require: proven, evidence: supported}
+      - {target: BRN-plugin-pinned, require: proven, evidence: supported}
