@@ -7,7 +7,7 @@ from graph topology and immutable verification trials.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from .graph import ProofDAG
 from .ids import set_hash
@@ -79,6 +79,7 @@ def compute_consistency(
     trials: list[dict[str, Any]],
     targets: list[str] | None = None,
     stale_ancestors: set[str] | None = None,
+    legacy: Callable[[str, str], tuple[str, dict[str, str]] | None] | None = None,
 ) -> list[ConsistencySlice]:
     """Compute verification status slices for all targetable nodes."""
     stale_set = stale_ancestors or set()
@@ -106,7 +107,7 @@ def compute_consistency(
         grounded, ground_issues = dag.is_grounded(target_id)
         anc = dag.ancestors(target_id)
         axioms = sorted(dag.axiomatic_basis(target_id))
-        target_trials, n_superseded, stale_trials = _partition(dag, node, by_target.get(target_id, []))
+        target_trials, n_superseded, stale_trials = _partition(dag, node, by_target.get(target_id, []), legacy)
         restated = _restated_premises(dag, target_id, stale_trials)
 
         n_trials = len(target_trials)
@@ -199,17 +200,32 @@ def compute_consistency(
     return slices
 
 
-def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
+def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]],
+               legacy: Callable[[str, str], tuple[str, dict[str, str]] | None] | None = None,
+               ) -> tuple[list[dict[str, Any]], int, list[dict[str, Any]]]:
     """Split a node's trials into those that vouch for it as it stands now, a count of those
     that verified an earlier statement, and those recorded before a premise upstream was
-    restated. Trials recorded before fingerprints existed carry none and count as current."""
+    restated.
+
+    A trial recorded before trials carried fingerprints is judged by the ones its target and
+    its premises had in the build when it was made (DEF-current-trial), which `legacy`
+    reconstructs from history; one whose target that build did not hold verified something
+    that cannot be recovered, and is set aside like a superseded one. Without `legacy` -- no
+    history to read -- such a trial counts as current, as it always had."""
     current_statement = node.fingerprint()
     current_basis = dag.basis_fingerprints(node.id)
     current, superseded, stale = [], 0, []
     for t in trials:
         if "statement_sha" not in t:
-            current.append(t)
-        elif t["statement_sha"] != current_statement:
+            if legacy is None:
+                current.append(t)
+                continue
+            then = legacy(node.id, str(t.get("timestamp") or ""))
+            if then is None:
+                superseded += 1
+                continue
+            t = {**t, "statement_sha": then[0], "basis": then[1]}
+        if t["statement_sha"] != current_statement:
             superseded += 1
         elif t.get("basis") is not None and t["basis"] != current_basis:
             stale.append(t)

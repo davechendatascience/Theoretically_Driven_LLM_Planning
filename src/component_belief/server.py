@@ -12,10 +12,12 @@ import json
 import os
 import re
 import shutil
+import time
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+import anyio
+from mcp.server.fastmcp import Context as ToolContext, FastMCP
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
 from .declarations import GOALS_FILE
@@ -118,7 +120,6 @@ def status(
     return view_belief(ctx, subject, since)
 
 
-@mcp.tool()
 def run_test(
     test_id: str,
     conditions: dict[str, Any] | None = None,
@@ -172,6 +173,62 @@ def run_test(
         from .render import slice_line
         lines += ["", "updated:"] + [slice_line(s) for s in slices]
     return envelope("\n".join(lines), basis_line(slices))
+
+
+#: How often a running test tells the client it is still running. A stdio tool call that sends
+#: nothing for 30 minutes is aborted by the client's idle timeout, and a test can run for hours.
+HEARTBEAT_S = 60.0
+_ONE_RUN = anyio.Lock()            # one test at a time: a run takes the next run id
+
+
+@mcp.tool(name="run_test")
+async def run_test_tool(
+    test_id: str,
+    conditions: dict[str, Any] | None = None,
+    repro: dict[str, Any] | None = None,
+    ctx: ToolContext | None = None,
+) -> str:
+    """Run a declared test and record its trials as measured evidence.
+
+    The server executes the command and captures the artifact itself; nothing
+    is transcribed. The command may write structured trials to $OUT, one JSON
+    file: {"trials": [{"metrics": {...}, "conditions": {...}}]}, a list of
+    trials, or one {"metrics": ...}. If it does not, one trial is synthesised
+    from the exit code and the reply says what was wrong with $OUT. A long run
+    reports progress every minute, so the client does not take it for idle.
+
+    conditions: captured metadata for bucketing, e.g. {"lighting": "low"}.
+    repro:      reproducibility fields, e.g. {"model_revision": "v3", "seed": 7}.
+    """
+    async with _ONE_RUN:
+        return await _with_heartbeat(ctx, test_id, lambda: run_test(test_id, conditions, repro))
+
+
+async def _with_heartbeat(ctx: ToolContext | None, what: str, work: Any) -> Any:
+    """Run a blocking call in a worker thread and, each HEARTBEAT_S, tell the client it is still
+    running: a progress notification when the request carried a progress token, and a log
+    message either way, since a client need not send one. Neither changes what the call returns."""
+    if ctx is None:
+        return await anyio.to_thread.run_sync(work)
+    started = time.monotonic()
+
+    async def beat() -> None:
+        while True:
+            await anyio.sleep(HEARTBEAT_S)
+            minutes = (time.monotonic() - started) / 60
+            note = f"{what}: still running, {minutes:.0f} min"
+            try:
+                await ctx.report_progress(minutes, None, note)
+                await ctx.info(note)
+            except Exception:           # a heartbeat that cannot be sent must not fail the run
+                pass
+
+    async with anyio.create_task_group() as group:
+        group.start_soon(beat)
+        try:
+            return await anyio.to_thread.run_sync(work)
+        finally:
+            group.cancel_scope.cancel()
 
 
 def _local_file(root: Path, uri: str) -> tuple[Path | None, str]:
@@ -251,7 +308,9 @@ def ingest(
             "subject": contract.subject,
             "contract_id": contract.id,
             "test_id": test.id,
-            "test_ref": record.get("test_ref") or test.ref,
+            # a version the caller names is kept; a bare test id names none, and the evidence is
+            # then of the test as declared now -- a ref with no version cannot go stale with it
+            "test_ref": record["test_ref"] if "@" in str(record.get("test_ref") or "") else test.ref,
             "run_id": run_id,
             "system_version": record["repro"].get("sw_revision", ""),
             "provenance": "imported",

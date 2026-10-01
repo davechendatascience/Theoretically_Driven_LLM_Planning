@@ -40,6 +40,9 @@ class Issue:
         return f"{self.code} {self.subject}: {self.message}"
 
 
+FAILURE_MODE_KEYS = ("id", "observable", "observed_by", "case")
+
+
 @dataclass
 class Component:
     id: str
@@ -148,6 +151,14 @@ class Test:
     mandatory: bool = False
     cost: float = 1.0
     timeout_s: int = 900
+    same_as: list[str] = field(default_factory=list)  # earlier versions mapped to this one (3.5)
+
+    def measures_as(self, ref: str) -> bool:
+        """Whether a trial recorded under `ref` is evidence from this test as it stands: this
+        version, or an earlier one the declaration maps to it explicitly -- an edit that left the
+        procedure the same, said so where the reviewer of the edit reads it."""
+        version = ref.rsplit("@", 1)[-1]
+        return version == self.version or version in {v.rsplit("@", 1)[-1] for v in self.same_as}
 
     @property
     def version(self) -> str:
@@ -226,6 +237,20 @@ class Declarations:
             cid for cid, comp in self.components.items()
             if any(path == entry or fnmatch(path, entry) for entry in comp.code)
         )
+
+    def failure_mode_observers(self) -> dict[tuple[str, str], list[str]]:
+        """Each declared failure mode, by (component, failure mode id), and the declared contracts
+        it names in `observed_by:` -- the risk register's link from what can go wrong to what
+        would see it. A failure mode with none is one nothing is declared to watch."""
+        out: dict[tuple[str, str], list[str]] = {}
+        for cid, comp in self.components.items():
+            for fm in comp.failure_modes:
+                if not isinstance(fm, dict) or not fm.get("id"):
+                    continue
+                named = fm.get("observed_by") or []
+                named = [named] if isinstance(named, str) else [str(n) for n in named]
+                out[(cid, str(fm["id"]))] = [n for n in named if n in self.contracts]
+        return out
 
     def subject_declared(self, subject_id: str) -> bool:
         return any(subject_id in nodes for nodes in
@@ -458,6 +483,22 @@ def validate(decl: Declarations) -> list[Issue]:
             # Advisory, not fatal: the most common integration bug, free to
             # find by set difference (2.5).
             issues.append(Issue("UNBACKED_ASSUMPTION", iid, f"consumer assumes {assumption!r}, producer does not guarantee it"))
+
+    for cid, comp in decl.components.items():
+        for fm in comp.failure_modes:
+            stray = sorted(k for k, v in fm.items() if v is None and k not in FAILURE_MODE_KEYS) \
+                if isinstance(fm, dict) else []
+            if stray:
+                # `{id: FM-x, observable: a, b}` parses as observable "a" plus a key "b": the
+                # sentence was cut at its comma, and nothing else says so
+                issues.append(Issue("SPLIT_VALUE", cid, f"failure mode {fm.get('id')} has stray "
+                                    f"key(s) {stray}: an unquoted comma in a flow mapping cut a "
+                                    "value short; quote it"))
+            named = fm.get("observed_by") if isinstance(fm, dict) else None
+            for ref in ([named] if isinstance(named, str) else named or []):
+                if ref not in decl.contracts:
+                    issues.append(Issue("UNKNOWN_REF", cid, f"failure mode {fm.get('id')} is "
+                                        f"observed_by {ref}, which is not a declared contract"))
 
     for cid, comp in decl.components.items():
         if comp.goal and comp.goal not in decl.goals:

@@ -196,6 +196,16 @@ def empty_repo(tmp_path: Path) -> Path:
 _counter = itertools.count(1)
 
 
+def _declared_ref(test_id: str) -> str:
+    """The version BASE_YAML declares the test at: a trial recorded by an earlier version of its
+    test is stale (design rule 3.5), so a made-up version would read as a changed test."""
+    from component_belief.declarations import _parse
+    return _parse(BASE_YAML).tests[test_id].ref
+
+
+GRASP_TEST_REF = _declared_ref("TST-grasp-ik")
+
+
 def trial(
     *,
     contract="CTR-grasp-reachable",
@@ -216,7 +226,7 @@ def trial(
         "subject": "CMP-grasp",
         "contract_id": contract,
         "test_id": "TST-grasp-ik",
-        "test_ref": "TST-grasp-ik@abc",
+        "test_ref": GRASP_TEST_REF,
         "run_id": run_id,
         "provenance": provenance,
         "outcome": outcome,

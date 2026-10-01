@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .declarations import COMPONENT_ID, Declarations, contract_beliefs, load as load_declarations
+from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarations, _git_show, _parse,
+                           contract_beliefs,
+                           load as load_declarations)
 from .graph import ProofDAG, ProofNode
+from .ids import content_hash
 from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
 from .probes import probe_text
@@ -41,8 +45,41 @@ class Context:
         staged_issues = _add_in_dependency_order(dag, staged + list(staged_nodes or []))
 
         trials = store.effective_trials()
-        slices = compute_consistency(dag, trials)
+        slices = compute_consistency(dag, trials, legacy=HistoricalBuilds(root, store).fingerprints)
         return cls(root=root, store=store, decl=decl, dag=dag, slices=slices, staged_issues=staged_issues)
+
+
+class HistoricalBuilds:
+    """The premise graph as it stood when a trial was made, for the trials made before trials
+    recorded fingerprints: consistency.yaml as the last commit before that moment held it, and
+    the proposals staged by then. One build per distinct (revision, staged set), cached."""
+
+    def __init__(self, root: Path, store: Store) -> None:
+        self.root, self.store = root, store
+        self._builds: dict[tuple[str, str], ProofDAG] = {}
+
+    def _revision(self, when: str) -> str:
+        out = subprocess.run(
+            ["git", "log", "-1", "--format=%H", f"--before={when}", "HEAD", "--", DECLARATION_FILE],
+            cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            stdin=subprocess.DEVNULL, timeout=60)
+        return out.stdout.strip() if out.returncode == 0 else ""
+
+    def build_at(self, when: str) -> ProofDAG:
+        revision = self._revision(when) if when else ""
+        staged = self.store.staged_proposals(until=when) if when else []
+        key = (revision, content_hash([(p["id"], p.get("claim"), p.get("premises")) for p in staged], 12))
+        if key not in self._builds:
+            text = _git_show(self.root, revision) if revision else None
+            dag = ProofDAG.from_declarations(_parse(text) if text else Declarations())
+            _add_in_dependency_order(dag, [staged_node(p) for p in staged if p["id"] not in dag.nodes])
+            self._builds[key] = dag
+        return self._builds[key]
+
+    def fingerprints(self, target_id: str, when: str) -> tuple[str, dict[str, str]] | None:
+        dag = self.build_at(when)
+        node = dag.get(target_id)
+        return None if node is None else (node.fingerprint(), dag.basis_fingerprints(target_id))
 
 
 def staged_node(proposal: dict[str, Any]) -> ProofNode:
@@ -203,7 +240,7 @@ def view_probe(ctx: Context, subject: str | None = None) -> str:
     the one verify_step call that records them. Nothing here comes from the implementation."""
     slices = {s.target_id: s for s in ctx.slices}
     if subject:
-        if subject in ctx.decl.components:
+        if ctx.decl.subject_known(subject):
             targets = sorted(nid for nid, n in ctx.dag.nodes.items()
                              if n.kind == "branch" and n.subject == subject)
             if not targets:
@@ -300,9 +337,9 @@ def view_coverage(ctx: Context) -> str:
     for nid, node in ctx.dag.nodes.items():
         if node.kind not in ("branch", "lemma") or not node.subject:
             continue
-        if node.subject in decl.components:
+        if decl.subject_known(node.subject):
             designs.setdefault(node.subject, []).append(nid)
-        elif COMPONENT_ID.fullmatch(node.subject):
+        elif COMPONENT_ID.fullmatch(node.subject) or BOUNDARY_ID.fullmatch(node.subject):
             removed.append(nid)
         else:
             unattached.append(nid)
@@ -360,6 +397,8 @@ def view_coverage(ctx: Context) -> str:
         lines += [f"no design, no code claimed ({len(bare)}):", "  " + ", ".join(bare),
                   "  -- either planned (allowed) or built and unclaimed: a component whose code exists "
                   "claims it with code: in belief.yaml, and a design over it belongs here", ""]
+    lines += _boundary_lines(decl, designs, line)
+    lines += _requirement_lines(decl)
     def subject_block(title: str, ids: list[str]) -> list[str]:
         if not ids:
             return []
@@ -374,12 +413,13 @@ def view_coverage(ctx: Context) -> str:
         return out
 
     lines += subject_block(
-        "BROKEN -- the component is gone from belief.yaml; these designs govern nothing", removed)
+        "BROKEN -- the subject is gone from belief.yaml or goals.yaml; these designs govern "
+        "nothing", removed)
     lines += subject_block(
-        "unattached -- the subject is prose, not a component id", unattached)
+        "unattached -- the subject is prose, not a component, interface or goal id", unattached)
 
     issues = [i for i in decl.issues
-              if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE",
+              if i.code in ("REMOVED_SUBJECT", "UNATTACHED_SUBJECT", "UNKNOWN_EVIDENCE", "UNKNOWN_GOAL",
                             "REMOVED_COMPONENT", "UNLISTED_SUBJECT", "MISSING_EVIDENCE",
                             "UNKNOWN_DEFINITION", "THRESHOLD_DRIFT")]
     if issues:
@@ -391,6 +431,57 @@ def view_coverage(ctx: Context) -> str:
            "every implemented component has a declared design")
     return envelope("\n".join(lines).rstrip(),
                     f"basis: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source} · next: {nxt}")
+
+
+def _boundary_lines(decl: Declarations, designs: dict[str, list[str]], line: Any) -> list[str]:
+    """The interfaces and goals, with the design claims over them.
+
+    A component's design says why it works; an interface's, why the producer's guarantees suffice
+    for its consumer; a goal's, why the system meets the outcome. Integration and validation are
+    where a V-model checks those, and a boundary with no design claim is listed as one, not
+    counted as a defect: the measure on it may be all it needs."""
+    if not decl.boundaries:
+        return []
+    out: list[str] = []
+    for kind, title in (("interface", "interfaces"), ("goal", "goals")):
+        ids = sorted(b for b, ref in decl.boundaries.items() if ref.kind == kind)
+        if not ids:
+            continue
+        claimed = [b for b in ids if designs.get(b)]
+        out.append(f"{title} ({len(ids)}, {len(claimed)} with a design claim):")
+        for bid in claimed:
+            ref = decl.boundaries[bid]
+            measure = f"  [{', '.join(ref.contracts)}]" if ref.contracts else "  [no contract]"
+            out.append(f"  {bid}{measure}")
+            out += [line(n) for n in sorted(designs[bid])]
+        bare = [b for b in ids if not designs.get(b)]
+        if bare:
+            unmeasured = [b for b in bare if not decl.boundaries[b].contracts]
+            out.append(f"  no design claim: {', '.join(bare)}")
+            if unmeasured:
+                out.append(f"  and no contract either: {', '.join(unmeasured)}")
+        out.append("")
+    return out
+
+
+def _requirement_lines(decl: Declarations) -> list[str]:
+    """Each requirement traced to the need it states: an axiom names the goal in goals.yaml whose
+    requirement it is. One that names none is a requirement no need asked for -- or one whose
+    need was never written down, which is the case worth seeing."""
+    if not decl.goal_ids or not decl.axioms:
+        return []
+    by_goal: dict[str, list[str]] = {}
+    for aid, axm in sorted(decl.axioms.items()):
+        for goal in axm.goals:
+            by_goal.setdefault(goal, []).append(aid)
+    untraced = sorted(aid for aid, axm in decl.axioms.items() if not axm.goals)
+    out = [f"requirements traced to goals ({len(decl.axioms) - len(untraced)} of {len(decl.axioms)} axioms):"]
+    for gid in sorted(decl.goal_ids):
+        out.append(f"  {gid}: {', '.join(by_goal.get(gid, [])) or 'no axiom states a requirement of it'}")
+    if untraced:
+        out.append(f"  tracing to no goal: {', '.join(untraced)}")
+    out.append("")
+    return out
 
 
 def view_component_audit(ctx: Context, component_id: str) -> str:
@@ -415,7 +506,7 @@ def view_component_audit(ctx: Context, component_id: str) -> str:
     def others_on(node_id: str) -> list[str]:
         return sorted({n.subject for d in ctx.dag.descendants(node_id)
                        if (n := ctx.dag.nodes[d]).kind == "branch"
-                       and n.subject in ctx.decl.components and n.subject != component_id})
+                       and ctx.decl.subject_known(n.subject) and n.subject != component_id})
 
     comp = ctx.decl.components.get(component_id)
     lines = [f"What {component_id} rests on"]
@@ -454,7 +545,7 @@ def view_audit(ctx: Context, subject: str | None = None) -> str:
     if not subject:
         return ("Supply subject=<node_id> for a blast radius, or subject=<CMP-id> for what a "
                 "component's designs rest on.")
-    if subject in ctx.decl.components:
+    if ctx.decl.subject_known(subject):
         return view_component_audit(ctx, subject)
 
     node = ctx.dag.get(subject)

@@ -156,12 +156,16 @@ class Store:
     def events(self) -> list[dict[str, Any]]:
         return list(self._read(self.events_path))
 
-    def staged_proposals(self) -> list[dict[str, Any]]:
+    def staged_proposals(self, until: str | None = None) -> list[dict[str, Any]]:
         """Every branch proposed through propose_branch and not since withdrawn, latest proposal
         per id, in the order the ids were first proposed. They persist here until a declaration
-        at git HEAD with the same id takes their place, or until withdraw retires one."""
+        at git HEAD with the same id takes their place, or until withdraw retires one.
+
+        `until` (an ISO timestamp) gives the proposals as they stood at that moment instead."""
         proposals: dict[str, dict[str, Any]] = {}
         for event in self.events():
+            if until is not None and str(event.get("timestamp") or "") > until:
+                continue
             payload = event.get("payload", {})
             node_id = payload.get("id")
             if not node_id:

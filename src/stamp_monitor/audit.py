@@ -36,10 +36,12 @@ def _digest(data: bytes) -> str:
 
 def _artifact_matches(path: Path, recorded: str) -> bool:
     """The runner hashed the bytes it wrote. A checkout on another platform may have rewritten
-    line endings since, which changes the bytes and not the record -- so LF-normalised content
-    counts as the same artifact. Anything else does not."""
+    line endings since, in either direction, which changes the bytes and not the record: a run on
+    Windows hashed CRLF that git stores, and Linux checks out, as LF. So the content with its line
+    endings as LF, or as CRLF, counts as the same artifact. Anything else does not."""
     data = path.read_bytes()
-    return recorded in (_digest(data), _digest(data.replace(b"\r\n", b"\n")))
+    lf = data.replace(b"\r\n", b"\n")
+    return recorded in (_digest(data), _digest(lf), _digest(lf.replace(b"\n", b"\r\n")))
 
 
 def _parse_ledger(path: Path, findings: list[Finding]) -> list[dict]:
@@ -145,7 +147,9 @@ def _artifacts(root: Path, trials: list[dict], findings: list[Finding]) -> None:
             unhashed.add(str(t.get("run_id")))
         if key in checked:
             continue
-        path = root / key[0]
+        # a run recorded on Windows wrote its path with backslashes, which name no file elsewhere:
+        # 43 present artifacts in this repository read as gone on Linux until the separator was read
+        path = root / key[0].replace("\\", "/")
         if not path.exists():
             checked[key] = "missing"
             findings.append(Finding("ARTIFACT_MISSING", BLOCK, str(t.get("run_id")),

@@ -22,6 +22,9 @@ DECLARATION_FILE = "consistency.yaml"
 
 _EVIDENCE_ID = re.compile(r"\b(?:CMP|CTR)-[A-Za-z0-9][A-Za-z0-9-]*\b")
 COMPONENT_ID = re.compile(r"CMP-[A-Za-z0-9][A-Za-z0-9-]*")
+#: An interface (belief.yaml's between components, goals.yaml's between goals) or a goal: the two
+#: subjects above a component a design claim can govern.
+BOUNDARY_ID = re.compile(r"(?:IFC|GOL)-[A-Za-z0-9][A-Za-z0-9_-]*")
 _NUMBER = re.compile(r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?")
 
 #: The states a policy criterion may require of a cited contract (`evidence:`), as
@@ -45,10 +48,19 @@ class Axiom:
     statement: str = ""
     domain: str = "general"
     rationale: str = ""
+    goal: Any = None               # the goal(s) in goals.yaml whose requirement this states
 
     @property
     def ref(self) -> str:
         return f"{self.id}@{content_hash(self.statement, 8)}"
+
+    @property
+    def goals(self) -> list[str]:
+        """A requirement traces to the need it serves. Not part of a fingerprint: retracing an
+        axiom to another goal restates nothing a verifier judged."""
+        if not self.goal:
+            return []
+        return [str(g) for g in self.goal] if isinstance(self.goal, list) else [str(self.goal)]
 
 
 @dataclass
@@ -136,6 +148,21 @@ class ComponentRef:
 
 
 @dataclass
+class BoundaryRef:
+    """An interface or a goal, seen from the design side: a subject a design claim may govern
+    besides a component. An interface's design says why a producer's guarantees suffice for its
+    consumer; a goal's says why the system meets the outcome. Either is owned where it is declared
+    -- belief.yaml for the interfaces between components, goals.yaml for goals and the interfaces
+    between them -- and imported here, like a component."""
+
+    id: str
+    kind: str                      # interface | goal
+    about: str = ""                # semantics, hands_over or outcome
+    declared_in: str = ""          # belief.yaml | goals.yaml
+    contracts: list[str] = field(default_factory=list)
+
+
+@dataclass
 class Declarations:
     axioms: dict[str, Axiom] = field(default_factory=dict)
     definitions: dict[str, Definition] = field(default_factory=dict)
@@ -149,6 +176,14 @@ class Declarations:
     components: dict[str, ComponentRef] = field(default_factory=dict)
     components_source: str = "none"  # git-HEAD | none | unavailable
     governs: dict[str, ComponentImport] = field(default_factory=dict)
+    boundaries: dict[str, BoundaryRef] = field(default_factory=dict)
+
+    @property
+    def goal_ids(self) -> set[str]:
+        return {bid for bid, b in self.boundaries.items() if b.kind == "goal"}
+
+    def subject_known(self, subject: str) -> bool:
+        return subject in self.components or subject in self.boundaries
 
     def issues_for(self, subject: str) -> list[Issue]:
         return [i for i in self.issues if i.subject == subject]
@@ -224,27 +259,42 @@ def load(root: Path) -> Declarations:
             "PENDING", DECLARATION_FILE,
             "working tree differs from HEAD; the uncommitted edits are not in effect",
         ))
-    decl.components, decl.components_source = load_components(root)
+    decl.components, decl.boundaries, decl.components_source = import_subjects(root)
     decl.issues.extend(validate_links(decl))
     decl.issues.extend(check_scored_definitions(decl))
     return decl
 
 
 def load_components(root: Path) -> tuple[dict[str, ComponentRef], str]:
-    """Read the components component-belief declares in the same repository, at git HEAD.
+    components, _boundaries, source = import_subjects(root)
+    return components, source
 
-    One-way and read-only: the design ledger needs to know which components exist and which are
+
+def import_subjects(root: Path) -> tuple[dict[str, ComponentRef], dict[str, BoundaryRef], str]:
+    """Read what component-belief declares in the same repository, at git HEAD: the components,
+    and the interfaces and goals a design may govern beside them.
+
+    One-way and read-only: the design ledger needs to know which subjects exist and which are
     built, and it asks the ledger that owns that fact. A project with no belief.yaml keeps working
     -- the subject of a branch is then simply unchecked.
     """
     try:
         from component_belief import declarations as components
     except ImportError:                                     # component-belief not installed
-        return {}, "unavailable"
+        return {}, {}, "unavailable"
 
     decl = components.load(root)
     if decl.source == "none":
-        return {}, "none"
+        return {}, {}, "none"
+    boundaries: dict[str, BoundaryRef] = {}
+    for iid, iface in decl.interfaces.items():
+        boundaries[iid] = BoundaryRef(iid, "interface", iface.semantics, "belief.yaml")
+    for iid, between in decl.goal_interfaces.items():
+        boundaries[iid] = BoundaryRef(iid, "interface", between.hands_over, "goals.yaml")
+    for gid, goal in decl.goals.items():
+        boundaries[gid] = BoundaryRef(gid, "goal", goal.outcome, "goals.yaml")
+    for ref in boundaries.values():
+        ref.contracts = sorted(c.id for c in decl.contracts_for_subject(ref.id))
     refs = {
         cid: ComponentRef(
             id=cid,
@@ -255,7 +305,7 @@ def load_components(root: Path) -> tuple[dict[str, ComponentRef], str]:
         )
         for cid, comp in decl.components.items()
     }
-    return refs, decl.source
+    return refs, boundaries, decl.source
 
 
 def check_scored_definitions(decl: Declarations) -> list[Issue]:
@@ -302,6 +352,13 @@ def validate_links(decl: Declarations) -> list[Issue]:
         return []
     issues: list[Issue] = []
     known = set(decl.components) | {c for ref in decl.components.values() for c in ref.contracts}
+    known |= set(decl.boundaries) | {c for ref in decl.boundaries.values() for c in ref.contracts}
+    if decl.goal_ids:
+        for aid, axm in decl.axioms.items():
+            for goal in axm.goals:
+                if goal not in decl.goal_ids:
+                    issues.append(Issue("UNKNOWN_GOAL", aid,
+                                        f"states a requirement of {goal}, which goals.yaml does not declare"))
 
     for cid in decl.governs:
         if cid not in decl.components:
@@ -319,6 +376,15 @@ def validate_links(decl: Declarations) -> list[Issue]:
             ))
         if not brn.subject:
             issues.append(Issue("UNATTACHED_SUBJECT", bid, "branch declares no subject component"))
+        elif brn.subject in decl.boundaries:
+            pass                     # an interface or a goal: a subject above a component
+        elif BOUNDARY_ID.fullmatch(brn.subject):
+            issues.append(Issue(
+                "REMOVED_SUBJECT", bid,
+                f"subject {brn.subject!r} is not declared in belief.yaml or goals.yaml any more -- "
+                "the interface or goal was removed or renamed, so this design governs nothing; "
+                "repoint it, re-declare it, or prune the branch",
+            ))
         elif brn.subject not in decl.components:
             if COMPONENT_ID.fullmatch(brn.subject):
                 # It was a component id once. Say so loudly: the design now governs nothing.
@@ -331,8 +397,9 @@ def validate_links(decl: Declarations) -> list[Issue]:
             else:
                 issues.append(Issue(
                     "UNATTACHED_SUBJECT", bid,
-                    f"subject {brn.subject!r} is prose, not a component id; name the component this "
-                    "design governs, or declare it in belief.yaml (one with no code: is planned)",
+                    f"subject {brn.subject!r} is prose, not a component, interface or goal id; name "
+                    "what this design governs, or declare it in belief.yaml (a component with no "
+                    "code: is planned)",
                 ))
         cited = {m for m in _EVIDENCE_ID.findall(brn.derivation_rule or "")}
         for ref in sorted(cited - known):
@@ -432,6 +499,11 @@ def _parse(text: str) -> Declarations:
     for raw in data.get("components") or []:
         c = ComponentImport(id=raw, note="") if isinstance(raw, str) else ComponentImport(**_only(raw, ComponentImport))
         decl.governs[c.id] = c
+        stray = sorted(k for k, v in raw.items() if v is None and k not in ComponentImport.__dataclass_fields__) \
+            if isinstance(raw, dict) else []
+        if stray:
+            decl.issues.append(Issue("SPLIT_VALUE", c.id, f"stray key(s) {stray}: an unquoted comma "
+                                     "in a flow mapping cut the note short; quote it"))
     for raw in data.get("policies") or []:
         p = Policy(**_only(raw, Policy))
         decl.policies[p.id] = p

@@ -217,6 +217,35 @@ def view_no_declarations(ctx: Context, view: str) -> str:
                     no_declarations_next(decl))
 
 
+def _unmeasured_cases(ctx: Context, active: dict[str, Any]) -> list[str]:
+    """A failure mode may name, beside its contract, the test case that would fail if it occurred
+    (`case:`, as the trial records it). Then the link is checked against the ledger rather than
+    taken on trust: the contract's latest trial of that case must exist and have passed."""
+    wanted: dict[tuple[str, str], tuple[str, str]] = {}
+    for cid, comp in active.items():
+        for fm in comp.failure_modes:
+            if isinstance(fm, dict) and fm.get("case") and fm.get("observed_by"):
+                named = fm["observed_by"]
+                for contract in ([named] if isinstance(named, str) else named):
+                    wanted[(contract, str(fm["case"]))] = (cid, str(fm.get("id")))
+    if not wanted:
+        return []
+    latest: dict[tuple[str, str], dict[str, Any]] = {}
+    for t in ctx.store.effective_trials():
+        case = str(((t.get("conditions") or {}).get("raw") or {}).get("case") or "")
+        key = (str(t.get("contract_id")), case.split("[", 1)[0])
+        if key in wanted and str(t.get("timestamp") or "") >= str(latest.get(key, {}).get("timestamp") or ""):
+            latest[key] = t
+    out = []
+    for (contract, case), (cid, fm) in sorted(wanted.items(), key=lambda kv: kv[1]):
+        trial = latest.get((contract, case))
+        if trial is None:
+            out.append(f"  {cid}/{fm}: {contract} has no trial of {case}")
+        elif trial.get("outcome") != "pass" or trial.get("validity") != "valid":
+            out.append(f"  {cid}/{fm}: {case} did not pass in {trial.get('run_id')}")
+    return out
+
+
 def view_graph(ctx: Context, since: str | None = None) -> str:
     decl = ctx.decl
     active = decl.active_components()
@@ -235,6 +264,22 @@ def view_graph(ctx: Context, since: str | None = None) -> str:
 
     unbacked = [i for i in decl.issues if i.code == "UNBACKED_ASSUMPTION"]
     lines += ["", "unbacked assumptions:", bullet(i.render() for i in unbacked)]
+
+    # The same set difference one level down: a failure mode a component declares, and no contract
+    # declared to observe it. Advisory, like an unbacked assumption -- a risk register entry with
+    # no detection behind it, not a defect in what is measured.
+    observers = decl.failure_mode_observers()
+    unwatched: dict[str, list[str]] = {}
+    for (cid, fm), seen_by in sorted(observers.items()):
+        if cid in active and not seen_by:
+            unwatched.setdefault(cid, []).append(fm)
+    n_active = sum(1 for (cid, _fm) in observers if cid in active)
+    lines += ["", f"failure modes no contract observes ({sum(map(len, unwatched.values()))} of "
+                  f"{n_active}; a failure mode names its contracts in observed_by:):"]
+    lines += [f"  {cid}: {', '.join(fms)}" for cid, fms in sorted(unwatched.items())] or ["  (none)"]
+    unmeasured = _unmeasured_cases(ctx, active)
+    if unmeasured:
+        lines += ["", "failure modes whose named case is not measured passing:"] + unmeasured
 
     fatal = [i for i in decl.issues if i.code not in ("UNBACKED_ASSUMPTION", "NOT_A_NODE", "PENDING")]
     if fatal:
@@ -407,6 +452,8 @@ def view_cycle(ctx: Context, policy_id: str | None = None) -> dict[str, Any]:
             "provenance": _tally(trials, "provenance"),
             "uncovered_contracts": unobserved_contracts(decl, slices),
             "unbacked_assumptions": [i.render() for i in decl.issues if i.code == "UNBACKED_ASSUMPTION"],
+            "unobserved_failure_modes": sorted(f"{cid}/{fm}" for (cid, fm), seen_by
+                                               in decl.failure_mode_observers().items() if not seen_by),
             "test_versions": {t.id: t.version for t in decl.tests.values()},
         },
         "3_beliefs": [slice_dict(s) for s in slices],

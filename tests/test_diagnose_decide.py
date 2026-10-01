@@ -285,3 +285,31 @@ def test_unproven_safety_gate_is_more_testing_refuted_gate_is_reject(repo):
 
     decl, refuted = prepare(repo, [trial(ik=False) for _ in range(30)])
     assert evaluate_policy(decl, active_policy(decl), refuted).status == REJECT
+
+
+def test_a_stale_slice_cannot_satisfy_an_adopt_criterion(repo):
+    """FM-adopt-on-stale: evidence that predates a change to the code it measured holds a decision
+    for a re-run; it never adopts."""
+    from component_belief.decide import MORE_TESTING, active_policy, evaluate_policy
+    from component_belief.staleness import CodeStaleness
+    from conftest import BASE_YAML, git
+
+    (repo / "grasp.py").write_text("# v1\n", encoding="utf-8")
+    (repo / "belief.yaml").write_text(BASE_YAML.replace(
+        "    remediation: Retune approach sampling\n",
+        "    remediation: Retune approach sampling\n    code: [grasp.py]\n"), encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "claim the code")
+    revision = git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
+    trials = []
+    for _ in range(30):
+        t = trial()
+        t["repro"] = {"model_revision": "v3", "sw_revision": revision}
+        trials.append(t)
+    (repo / "grasp.py").write_text("# v2\n", encoding="utf-8")
+    git(repo, "commit", "-qam", "change the planner")
+    decl = load(repo)
+    slices = compute_slices(decl, trials, staleness=CodeStaleness(repo))
+    verdict = evaluate_policy(decl, active_policy(decl), slices)
+    assert verdict.status == MORE_TESTING
+    assert any("stale" in m for m in verdict.missing)

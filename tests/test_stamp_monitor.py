@@ -149,6 +149,46 @@ class TestAudit:
         path.write_bytes(path.read_bytes().replace(b"\n", b"\r\n"))
         assert "ARTIFACT_HASH_MISMATCH" not in codes(audit(project))
 
+    def test_a_run_hashed_on_windows_and_checked_out_as_lf_is_not_tampering(self, project):
+        """The other direction: the runner on Windows hashed CRLF, git stored LF, and the clone
+        here holds LF. 43 artifacts in this repository read as tampered until both counted."""
+        import hashlib
+        import json
+
+        from component_belief.store import Store
+
+        result = run(project)
+        path = Store(project).artifacts_dir / result["run_id"] / "result.json"
+        crlf = path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        ledger = project / ".belief" / "evidence.jsonl"
+        records = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+        for record in records:
+            if record.get("run_id") == result["run_id"]:
+                record["artifact_hash"] = hashlib.sha256(crlf).hexdigest()[:16]
+        ledger.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+        assert "ARTIFACT_HASH_MISMATCH" not in codes(audit(project))
+        path.write_text("[]", encoding="utf-8")
+        assert codes(audit(project)).get("ARTIFACT_HASH_MISMATCH") == BLOCK, "an edit still is"
+
+    def test_a_run_recorded_on_windows_audits_clean_elsewhere(self, project):
+        """A run on Windows recorded its artifact path with backslashes. The file is present in
+        every clone, and the audit read 43 of them in this repository as gone."""
+        import json
+
+        run(project)
+        ledger = project / ".belief" / "evidence.jsonl"
+        lines = []
+        for line in ledger.read_text(encoding="utf-8").splitlines():
+            record = json.loads(line)
+            if record.get("artifact_uri"):
+                record["artifact_uri"] = record["artifact_uri"].replace("/", "\\")
+            lines.append(json.dumps(record))
+        ledger.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        assert "ARTIFACT_MISSING" not in codes(audit(project))
+
+    def test_a_run_records_its_artifact_path_the_same_on_every_platform(self, project):
+        assert "\\" not in run(project)["artifact_uri"]
+
     def test_an_edited_stamp_and_a_damaged_ledger_line_are_caught(self, project):
         from component_belief.store import Store
 

@@ -113,6 +113,21 @@ def compat_for(contract: Contract, trial: dict[str, Any]) -> tuple[str, dict[str
     return content_hash(fields, 6), fields
 
 
+def _test_changed(decl: Declarations, trial: dict[str, Any]) -> str | None:
+    """A trial measured by an earlier version of its test (design rule 3.5): the test's run line
+    or metrics have changed since, so it is evidence from another measurement procedure. Its
+    files are covered by the content stamp; this covers the declaration. A trial that names no
+    version (an import may carry the bare test id), or a test no longer declared, is left to the
+    stamp: there is nothing to compare."""
+    test = decl.tests.get(str(trial.get("test_id") or ""))
+    recorded = str(trial.get("test_ref") or "")
+    if test is None or "@" not in recorded or test.measures_as(recorded):
+        return None
+    return (f"measured by {recorded}; the test is now {test.ref} ({trial.get('run_id')}) -- re-run "
+            f"it, or map the old version with same_as: [{recorded.rsplit('@', 1)[-1]}] if the "
+            "edit left the procedure the same")
+
+
 def score_trial(contract: Contract, trial: dict[str, Any]) -> tuple[bool | None, str]:
     """Did this trial pass its contract?
 
@@ -196,7 +211,8 @@ def compute_slices(
             bundle["exclusions"][reason] = bundle["exclusions"].get(reason, 0) + 1
             continue
 
-        stale = (staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
+        stale = (_test_changed(decl, trial) or
+                 staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
                  if staleness is not None else None)
         if stale:
             bundle["stale"] += 1

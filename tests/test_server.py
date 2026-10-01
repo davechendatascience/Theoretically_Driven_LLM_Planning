@@ -47,6 +47,43 @@ def emit_yaml(repo, run_command):
     git(repo, "commit", "-q", "-m", "runnable test")
 
 
+class TestFailureModes:
+    """Row 9's risk register: each failure mode a component declares, and the contract -- and the
+    case -- that would see it. The graph lists those nothing observes, and checks a named case
+    against the ledger instead of taking the link on trust."""
+
+    def _declare(self, repo, fm):
+        yaml = (repo / "belief.yaml").read_text().replace(
+            "failure_modes: [{id: FM-unreachable, observable: IK returns nothing}]", f"failure_modes: [{fm}]")
+        (repo / "belief.yaml").write_text(yaml, encoding="utf-8")
+        git(repo, "add", "belief.yaml")
+        git(repo, "commit", "-q", "-m", "a failure mode's observer")
+
+    def test_a_failure_mode_nothing_observes_is_listed(self, project):
+        graph = server.status(view="graph")
+        assert "failure modes no contract observes (2 of 2" in graph
+        assert "CMP-grasp: FM-unreachable" in graph
+
+    def test_a_named_case_is_checked_against_the_ledger(self, project):
+        from conftest import trial
+
+        self._declare(project, "{id: FM-unreachable, observable: IK returns nothing, "
+                               "observed_by: CTR-grasp-reachable, case: tests.test_ik::test_reach}")
+        graph = server.status(view="graph")
+        assert "CMP-grasp: FM-unreachable" not in graph.split("no contract observes")[1].split("\n\n")[0]
+        assert "CTR-grasp-reachable has no trial of tests.test_ik::test_reach" in graph
+
+        measured = trial()
+        measured["conditions"]["raw"]["case"] = "tests.test_ik::test_reach[low]"
+        Store(project).append_trials([measured])
+        assert "not measured passing" not in server.status(view="graph")
+
+    def test_an_observer_that_is_not_a_contract_is_reported(self, project):
+        self._declare(project, "{id: FM-unreachable, observable: IK returns nothing, observed_by: CTR-nope}")
+        decl = load(project)
+        assert any(i.code == "UNKNOWN_REF" and "CTR-nope" in i.message for i in decl.issues)
+
+
 class TestRunner:
     def test_structured_trials_become_measured_evidence(self, repo):
         script = repo / "emit.py"
@@ -97,6 +134,43 @@ class TestRunner:
         slices = compute_slices(decl, store.effective_trials())
         assert slices[0].n_valid == 0
         assert slices[0].exclusions == {"missing_metrics": 1}
+
+    def test_a_long_run_tells_the_client_it_is_still_running(self, project, monkeypatch):
+        """A stdio tool call that sends nothing for 30 minutes is aborted by the client's idle
+        timeout. The tool runs the test in a worker thread and beats while it runs: progress when
+        the client gave a token, a log message either way."""
+        import anyio
+
+        emit_yaml(project, 'python -c "import time; time.sleep(0.6)"')
+        monkeypatch.setattr(server, "HEARTBEAT_S", 0.1)
+        beats = []
+
+        class Client:
+            async def report_progress(self, progress, total=None, message=None):
+                beats.append(("progress", message))
+
+            async def info(self, message, **extra):
+                beats.append(("info", message))
+
+        out = anyio.run(lambda: server.run_test_tool(test_id="TST-grasp-ik", ctx=Client()))
+        assert out.startswith("RUN-0001 TST-grasp-ik"), out
+        assert ("info", "TST-grasp-ik: still running, 0 min") in beats
+        assert any(kind == "progress" for kind, _ in beats)
+        n = len(beats)
+        anyio.run(lambda: anyio.sleep(0.3))
+        assert len(beats) == n, "the heartbeat stops with the run"
+
+    def test_every_measured_record_names_the_revision_it_ran_at(self, repo):
+        """FM-unversioned-run: a measured record carries the revision and whether the tree was
+        dirty, so staleness and a reader can tell which code it measured."""
+        emit_yaml(repo, "echo nothing-structured")
+        decl = load(repo)
+        store = Store(repo)
+        execute(repo, store, decl, decl.tests["TST-grasp-ik"])
+        head = git(repo, "rev-parse", "HEAD").stdout.strip()
+        [record] = store.effective_trials()
+        assert record["repro"]["sw_revision"] and head.startswith(record["repro"]["sw_revision"])
+        assert "sw_dirty" in record["repro"]
 
     @pytest.mark.parametrize("command, problem", [
         ("echo nothing-structured", "the test wrote no $OUT file"),
@@ -265,6 +339,15 @@ class TestToolSurface:
         assert copy.read_bytes() == original.read_bytes()
         assert t["artifact_hash"] == hashlib.sha256(original.read_bytes()).hexdigest()[:16]
         assert t["source_artifact"] == str(original.resolve())
+
+    def test_an_import_naming_a_bare_test_id_records_the_declared_version(self, project):
+        """412,060 imports in one project carried `test_ref: TST-x` with no version, which no
+        later edit of the test could ever make stale. The declared version is recorded instead."""
+        out = server.ingest(records=[complete_record(test_ref="TST-grasp-ik")], source="ci",
+                            artifact_uri=str(results_file(project)))
+        assert "ingested 1 record" in out
+        [t] = Store(project).effective_trials()
+        assert t["test_ref"] == load(project).tests["TST-grasp-ik"].ref
 
     def test_a_fabricated_import_cannot_adopt(self, project):
         """The probe that found the hole: an undeclared test, no hash, an artifact that does not

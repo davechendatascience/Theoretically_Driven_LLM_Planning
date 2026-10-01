@@ -210,7 +210,7 @@ def run_test(
 
     # a directory at $OUT is not an artifact the server can hash: stdout stands in, as for no file
     artifact = out_path if out_path.is_file() else artifact_dir / "stdout.txt"
-    artifact_uri = str(artifact.relative_to(root))
+    artifact_uri = artifact.relative_to(root).as_posix()    # the same path on every platform
     artifact_hash = _sha256(artifact)
 
     base_repro = {

@@ -66,7 +66,7 @@ stale or not met, with the test to run for each.
 
 ## Declaring contracts and tests
 
-Six facts decide whether a declaration measures what you meant.
+Eight facts decide whether a declaration measures what you meant.
 
 1. **A target is cleared by an interval, not a point estimate.** A rate
    slice is `supported` when the lower end of its 94% credible interval
@@ -114,6 +114,20 @@ Six facts decide whether a declaration measures what you meant.
    `PYTHONPATH` must prepend to it, as in
    `PYTHONPATH=x${PYTHONPATH:+:$PYTHONPATH}`. Otherwise its Python children
    record no reads.
+7. **Name what observes each failure mode.** Give it `observed_by:` (the
+   contract) and `case:` (the test case as its trials record it, e.g.
+   `tests.test_x.TestY::test_z`). `status(view="graph")` lists the failure
+   modes nothing observes and checks that each named case passed in its
+   latest trial. Quote a value with a comma in a `{...}` mapping: unquoted,
+   the comma cuts it short, and the server reports `SPLIT_VALUE`.
+8. **A test is its run line and metrics, and it has a time limit.**
+   - Editing a test's run line or metrics makes its earlier evidence stale.
+     If the edit left the procedure the same, say so: add `same_as:` with the
+     earlier version to the test.
+   - A test runs for at most `timeout_s` (default 900 seconds), then its
+     trials record as `error`. Declare a longer one for a long measure.
+     `run_test` reports progress every minute, so the client does not abort
+     it as idle.
 
 ## Citations
 

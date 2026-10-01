@@ -230,3 +230,16 @@ class TestGoals:
         git(repo, "commit", "-q", "-am", "tag components before any goals.yaml")
         codes = {(i.code, i.subject) for i in load(repo).issues}
         assert ("UNKNOWN_GOAL", "CMP-grasp") in codes and ("UNKNOWN_GOAL", "CMP-perception") in codes
+
+
+def test_a_value_cut_at_an_unquoted_comma_is_reported(repo):
+    """`{id: FM-x, observable: a, b}` is valid YAML that reads observable "a" and a stray key "b".
+    Four failure modes in this repository's own belief.yaml were cut that way, silently."""
+    from conftest import git
+
+    text = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        "observable: IK returns nothing}", "observable: IK returns nothing, or a pose behind the arm}")
+    (repo / "belief.yaml").write_text(text, encoding="utf-8")
+    git(repo, "commit", "-qam", "an observable with a comma")
+    split = [i for i in load(repo).issues if i.code == "SPLIT_VALUE"]
+    assert split and "or a pose behind the arm" in split[0].message

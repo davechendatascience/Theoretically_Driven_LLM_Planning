@@ -98,7 +98,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.2" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.0" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -444,11 +444,12 @@ traceability and configuration control. The human owns the top of the V; the age
 | Stage | Artifact | Method |
 |---|---|---|
 | Needs and validation | goals and the interfaces between them in `goals.yaml`, each with the contract that says it is met; `status(view="goals")` | test (typically `layer: e2e`), criteria committed by the human |
-| Requirements | axioms and definitions in `consistency.yaml` | inspection, at commit |
-| Architecture | components and interfaces in `belief.yaml`; lemmas | analysis by probe; set difference for unbacked assumptions |
+| Requirements | axioms and definitions in `consistency.yaml`, each axiom naming the goal whose requirement it states (`goal:`) | inspection, at commit; `status(view="coverage")` traces each goal to its axioms |
+| Architecture | components and interfaces in `belief.yaml`; lemmas; design claims over an interface (`subject: IFC-...`) or a goal | analysis by probe; set difference for unbacked assumptions |
 | Component design | branches, each with premises and `evidence: CTR-...` | analysis by `verify_step`, from the declarations only |
 | Build | `code:` claims per component; `status(view="artifacts")` | inspection |
-| Component, integration, system test | contracts and tests by `layer`; `run_test`; `.belief/` | test |
+| Component, integration, system test | contracts and tests by `layer`, an interface's contract on the interface itself; `run_test`; `.belief/` | test |
+| Risk register | failure modes in `belief.yaml`, each naming the contract and the case that observe it (`observed_by:`, `case:`) | mechanical: `status(view="graph")` lists the ones nothing observes and checks each named case passed in the ledger |
 | Traceability | a branch's `subject` and cited contract; `status(view="coverage")` on both sides | mechanical |
 | Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
 | Change control | `audit_change`, STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
@@ -456,9 +457,9 @@ traceability and configuration control. The human owns the top of the V; the age
 | Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
 | Release gate | `POL-consistency-gate`: each branch proven **and** its cited contract supported; the goals policy in `goals.yaml` | both ledgers, and the human's goals |
 
-Not represented yet: a trace from a goal into the design ledger (an axiom naming the goal it
-serves), interface-level design claims (`IFC-` is not an admissible subject), and a
-failure-mode-to-metric check.
+Every stage now has a home. This repository applies each to itself: every axiom names its goal,
+the goal interface carries a design claim, each component interface has an integration test,
+and each of its 35 failure modes names the case that would catch it.
 
 ---
 
@@ -549,6 +550,59 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.6.0 — 2026-10-01 · every stage of the V has a home
+
+- **Row 9 of the systems-engineering mapping.**
+  - A design claim may govern an interface (`subject: IFC-...`, from `belief.yaml` or
+    `goals.yaml`) or a goal, as well as a component.
+  - An axiom names the goal whose requirement it states (`goal:`). `goal:` is not part of the
+    fingerprint, so tracing an axiom restates nothing.
+  - `status(view="coverage")` lists interfaces and goals with and without a design claim, and
+    traces each goal to its axioms.
+  - A failure mode names the contract and the case that observe it (`observed_by:`, `case:`).
+    `status(view="graph")` lists those nothing observes and checks each named case passed in its
+    latest trial.
+- **A trial made before fingerprints is judged by the build it was made against.** Until now it
+  stayed current through any restatement upstream, which `AXM-blast-radius-invalidation` forbids.
+  It now counts as having recorded the fingerprints its nodes had then: `consistency.yaml` at the
+  last commit before it, plus the proposals staged by then. In a project with such trials (three
+  on this machine hold 104), a node whose premises were restated since goes STALE and needs
+  re-verifying.
+- **The configuration audit stops reporting present artifacts.** A run recorded on Windows wrote
+  its artifact path with backslashes and hashed CRLF bytes, which git stores, and Linux checks
+  out, as LF. 43 artifacts here read as missing, then as tampered. Both separators and both
+  line-ending directions now audit as what they are, and the runner records POSIX paths.
+- **A long `run_test` stays alive.** A stdio tool call that sends nothing for 30 minutes is
+  aborted by the client's idle timeout, and the server sent nothing while a test ran. The test
+  now runs in a worker thread, and the tool reports progress every minute: a progress
+  notification when the client sent a progress token, and a log message either way. Runs are
+  still one at a time. How long a test may run is its own `timeout_s` (default 900 seconds),
+  declared with the test.
+- **Evidence from an earlier version of its test is stale** (design rule 3.5). A test's version
+  is its run line and metrics. It was recorded on every trial and read by nothing, so a changed
+  run line pooled old and new procedures, and a gate read its latest run whatever the version.
+  An edit that left the procedure the same is mapped explicitly with `same_as: [<version>]` on the
+  test. An import that names only the test id records the declared version.
+- **A value cut at an unquoted comma is reported (`SPLIT_VALUE`).** `{id: FM-x, observable: a, b}`
+  reads as "a" plus a stray key. Four failure modes and three component notes here had been cut
+  that way.
+- **The design graph was re-verified until it held.** Eight verifier passes, each judged from the
+  served probes alone, found:
+  - one stale doubt (`LMA-blast-radius-propagation`);
+  - two refuted new designs (the goal guard and the plugin);
+  - claims wider than their premises;
+  - "when" where "exactly when" was meant;
+  - three places where the theory and the code disagreed. `AXM-no-belief-write-path` is now
+    scoped to the declarations in effect. `BRN-runner-captures` says the runner takes `passed`
+    from the exit code. `DEF-belief-eligible` agrees with that.
+
+  Each fix was audited before it was committed. The code commit followed the declarations.
+- This repository applies all of it to itself:
+  - an integration test for each of its four component interfaces;
+  - every failure mode traced to the case that catches it, with five new tests where none did;
+  - every axiom traced to a goal;
+  - design claims for the goal guard, the plugin and the goal interface.
 
 ### 0.5.2 — 2026-10-01 · what an adopting agent tripped on
 

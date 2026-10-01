@@ -162,3 +162,43 @@ def test_a_declared_minimum_of_zero_proves_nothing(mini_dag: ProofDAG):
     slices = compute_consistency(mini_dag, [], targets=["LMA-1"])
     assert slices[0].state == OBLIGATION
     assert slices[0].n_min == 1
+
+
+def test_a_gap_doubts_and_never_refutes(mini_dag: ProofDAG):
+    """FM-gap-refutes: an unstated assumption leaves a claim unproven, not false."""
+    from consistency_belief.model import DOUBTED
+
+    trials = [{"id": "TRL-1", "target_id": "LMA-1", "strategy": "counterexample", "outcome": "sound",
+               "passed": True, "validity": "valid"},
+              {"id": "TRL-2", "target_id": "LMA-1", "strategy": "entailment", "outcome": "gap",
+               "passed": False, "counterexample": "an unstated bound", "validity": "valid"}]
+    [sl] = compute_consistency(mini_dag, trials, targets=["LMA-1"])
+    assert sl.state == DOUBTED and sl.state != REFUTED
+    assert sl.counterexamples == [] and sl.gaps
+
+
+def test_a_trial_recorded_against_another_statement_is_not_carried(mini_dag: ProofDAG):
+    """FM-stale-carried: a trial counts only under the fingerprints it recorded -- the target's and
+    every premise's -- so a restated target or premise sets it aside, and a trial made before
+    fingerprints is judged by the ones its build had then."""
+    node = mini_dag.get("LMA-1")
+    now = (node.fingerprint(), mini_dag.basis_fingerprints("LMA-1"))
+    sound = {"target_id": "LMA-1", "outcome": "sound", "passed": True, "validity": "valid"}
+    current = [{**sound, "id": f"TRL-{s}", "strategy": s, "statement_sha": now[0], "basis": now[1]}
+               for s in ("counterexample", "entailment")]
+    assert compute_consistency(mini_dag, current, targets=["LMA-1"])[0].state == PROVEN
+
+    restated = [{**t, "statement_sha": "another-statement"} for t in current]
+    [sl] = compute_consistency(mini_dag, restated, targets=["LMA-1"])
+    assert sl.state != PROVEN and sl.n_superseded == 2
+
+    premise_moved = [{**t, "basis": {k: "earlier" for k in now[1]}} for t in current]
+    [sl] = compute_consistency(mini_dag, premise_moved, targets=["LMA-1"])
+    assert sl.state == STALE and sl.n_stale == 2
+
+    legacy = [{k: v for k, v in t.items() if k not in ("statement_sha", "basis")} for t in current]
+    then_same = compute_consistency(mini_dag, legacy, targets=["LMA-1"], legacy=lambda _id, _when: now)
+    assert then_same[0].state == PROVEN, "a legacy trial whose build matched still counts"
+    then_other = compute_consistency(mini_dag, legacy, targets=["LMA-1"],
+                                     legacy=lambda _id, _when: ("older", now[1]))
+    assert then_other[0].state != PROVEN, "and one made against another statement does not"

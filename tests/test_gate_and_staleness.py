@@ -446,3 +446,37 @@ class TestServerSurface:
         out = server.decide("CHG-1", approver="david")
         assert f"at HEAD {head(project)}" in out
         assert Store(project).decisions()[0]["head"] == head(project)
+
+
+class TestTestVersion:
+    """Design rule 3.5: a changed test is not evidence from the same measurement process. The
+    test's files are in the content stamp; its declaration -- run line and metrics -- is its
+    version, and evidence from an earlier one is stale, gate or rate alike."""
+
+    def test_a_trial_from_an_earlier_version_of_its_test_is_stale(self, gate_repo):
+        old = [trial(ik=False, run_id="RUN-0001")]
+        decl = load(gate_repo)
+        assert compute_slices(decl, old, staleness=CodeStaleness(gate_repo))[0].state == STATE_REFUTED
+
+        (gate_repo / "belief.yaml").write_text(
+            GATE_YAML.replace('run: "echo ok"', 'run: "echo ok --strict"'), encoding="utf-8")
+        git(gate_repo, "commit", "-qam", "change how the test runs")
+        decl = load(gate_repo)
+        [sl] = compute_slices(decl, old, staleness=CodeStaleness(gate_repo))
+        assert sl.state == STATE_STALE and "the test is now" in sl.stale_reasons[0]
+
+        new = {**trial(ik=True, run_id="RUN-0002"), "test_ref": decl.tests["TST-grasp-ik"].ref}
+        [sl] = compute_slices(decl, old + [new], staleness=CodeStaleness(gate_repo))
+        assert sl.state == STATE_SUPPORTED and sl.latest_run == "RUN-0002", \
+            "the gate reads the latest run of the test as it now stands"
+
+    def test_an_edit_that_kept_the_procedure_is_mapped_explicitly(self, gate_repo):
+        """Rule 3.5's "unless explicitly mapped": same_as names the earlier version, in the
+        declaration the edit's reviewer reads, and its evidence counts again."""
+        old = [trial(ik=True, run_id="RUN-0001")]
+        before = load(gate_repo).tests["TST-grasp-ik"].version
+        (gate_repo / "belief.yaml").write_text(GATE_YAML.replace(
+            'run: "echo ok"', f'run: "echo  ok"\n    same_as: [{before}]'), encoding="utf-8")
+        git(gate_repo, "commit", "-qam", "reformat the run line, same procedure")
+        [sl] = compute_slices(load(gate_repo), old, staleness=CodeStaleness(gate_repo))
+        assert sl.state == STATE_SUPPORTED

@@ -296,3 +296,50 @@ def test_scoring_a_definition_that_does_not_exist_is_reported(linked: Path):
 
     unknown = [i for i in load(linked).issues if i.code == "UNKNOWN_DEFINITION"]
     assert [i.subject for i in unknown] == ["CTR-motion-clear"]
+
+
+def test_an_interface_or_a_goal_is_a_subject_a_design_can_govern(tmp_path: Path):
+    """Row 9 of the systems-engineering mapping: a design claim about an interface -- why the
+    producer's guarantees suffice for its consumer -- or about a goal had nowhere to live, and each
+    requirement traced to no need. Both now import from the ledgers that declare them."""
+    git(tmp_path, "init", "-q")
+    belief = BELIEF + """
+interfaces:
+  - id: IFC-motion__gripper
+    producer: CMP-motion
+    consumer: CMP-gripper
+    semantics: a trajectory the gripper closes at its end
+"""
+    (tmp_path / "belief.yaml").write_text(belief, encoding="utf-8")
+    (tmp_path / "goals.yaml").write_text(
+        "goals:\n  - {id: GOL-carry, outcome: The arm carries what it is asked to}\n", encoding="utf-8")
+    (tmp_path / "consistency.yaml").write_text("""
+axioms:
+  - {id: AXM-safety, statement: The robot must not collide., goal: GOL-carry}
+  - {id: AXM-speed, statement: A carry ends within a minute., goal: [GOL-nowhere]}
+  - {id: AXM-untraced, statement: Something no goal asked for.}
+branches:
+  - {id: BRN-handover, subject: IFC-motion__gripper, statement: The gripper closes on a cleared path.,
+     premises: [AXM-safety], derivation_rule: "evidence: CTR-motion-clear"}
+  - {id: BRN-carry, subject: GOL-carry, statement: A carry never collides.,
+     premises: [AXM-safety], derivation_rule: "evidence: CTR-motion-clear"}
+  - {id: BRN-gone, subject: IFC-motion__nothing, statement: Something of a removed interface.,
+     premises: [AXM-safety], derivation_rule: "evidence: CTR-motion-clear"}
+""", encoding="utf-8")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-q", "-m", "an interface and a goal")
+
+    decl = load(tmp_path)
+    assert decl.boundaries["IFC-motion__gripper"].kind == "interface"
+    assert decl.boundaries["GOL-carry"].kind == "goal"
+    codes = {(i.code, i.subject) for i in decl.issues}
+    assert not {c for c in codes if c[1] in ("BRN-handover", "BRN-carry")}, codes
+    assert ("REMOVED_SUBJECT", "BRN-gone") in codes
+    assert ("UNKNOWN_GOAL", "AXM-speed") in codes and ("UNKNOWN_GOAL", "AXM-safety") not in codes
+
+    text = view_coverage(Context.build(tmp_path))
+    assert "interfaces (1, 1 with a design claim)" in text and "BRN-handover" in text
+    assert "goals (1, 1 with a design claim)" in text and "BRN-carry" in text
+    assert "requirements traced to goals (2 of 3 axioms)" in text
+    assert "GOL-carry: AXM-safety" in text and "tracing to no goal: AXM-untraced" in text
+    assert "BRN-gone" in text.split("BROKEN")[1]

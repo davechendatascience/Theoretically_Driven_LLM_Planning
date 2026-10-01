@@ -47,8 +47,10 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
 3. **Propose before you build.** A design change is a branch: `propose_branch(id, subject,
    premises, claim, rationale)` first. The server rejects cycles and unknown premises, and
    warns when a claim describes a function or class instead of what must hold of any
-   implementation. Subjects are belief.yaml's components; `status(view="coverage")` shows
-   which are governed, planned, or built with no design.
+   implementation. A subject is a component in belief.yaml, an interface (belief.yaml's
+   between components, goals.yaml's between goals) or a goal. An axiom names the goal
+   whose requirement it states (`goal:`). `status(view="coverage")` shows what is
+   governed, planned or built with no design, and which goals no axiom traces to.
 
 4. **Audit before you edit an axiom or lemma.** `audit_change(target_id, ...)` records the
    blast radius: every downstream node that becomes `STALE` and must be re-verified. Tell

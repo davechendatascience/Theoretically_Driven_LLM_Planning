@@ -338,7 +338,8 @@ def test_amend_reclassifies_without_editing(committed_repo: Path):
 
     from consistency_belief.store import Store
     raw = Store(committed_repo).raw_records()
-    assert any(r.get("id") == "TRL-0001" and r.get("outcome") == "falsified" for r in raw)
+    assert any(r.get("id") == "TRL-0001" and r.get("outcome") == "falsified"
+               and r.get("validity") == "valid" for r in raw), "the record itself is untouched"
     assert "Trial TRL-0001" in out
 
 
@@ -568,12 +569,13 @@ def joint_repo(committed_repo: Path) -> Path:
 
 
 def _measure(repo: Path, passed: bool, run_id: str) -> None:
+    from component_belief.declarations import load as load_beliefs
     from component_belief.store import Store as BeliefStore
 
     head = git(repo, "rev-parse", "--short", "HEAD").stdout.strip()
     BeliefStore(repo).append_trials([{
         "subject": "CMP-gpu-manager", "contract_id": "CTR-gpu-power", "test_id": "TST-gpu",
-        "test_ref": "TST-gpu@x", "run_id": run_id, "provenance": "measured",
+        "test_ref": load_beliefs(repo).tests["TST-gpu"].ref, "run_id": run_id, "provenance": "measured",
         "outcome": "pass" if passed else "fail", "metrics": {"passed": passed},
         "conditions": {"raw": {}}, "repro": {"sw_revision": head},
         "validity": "valid", "artifact_uri": "a", "artifact_hash": "h",
@@ -662,3 +664,49 @@ def test_restating_a_node_back_restores_the_trials_that_verified_that_statement(
 
     _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML, "restate it back")
     assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+
+
+def test_a_withdrawn_proposal_and_its_trials_stay_on_record(committed_repo: Path):
+    """FM-withdrawn-erased: withdrawing retires a staged proposal from the graph, and the ledger
+    keeps the proposal, its trials and the withdrawal itself."""
+    from consistency_belief.server import withdraw
+    from consistency_belief.store import Store
+
+    propose_branch(id="BRN-fan", subject="CMP-fan", premises=["LMA-compute-cap"],
+                   claim="The fan holds the die under 90C.", rationale="thermal headroom")
+    verify_step("BRN-fan", outcome="sound", rationale="ok")
+    assert "withdrawn" in withdraw("BRN-fan", reason="not going to be built")
+    tree = status("tree")
+    assert "BRN-fan [" not in tree, "out of the graph"
+    assert "BRN-fan" in tree.split("etired")[1], "and listed as retired, not dropped"
+
+    store = Store(committed_repo)
+    tools = [e.get("tool") for e in store.events() if (e.get("payload") or {}).get("id") == "BRN-fan"]
+    assert tools[:1] == ["propose_branch"] and "withdraw" in tools
+    assert any(r.get("target_id") == "BRN-fan" for r in store.raw_records()), "its trials stay"
+    assert store.withdrawn()["BRN-fan"] == "not going to be built"
+
+
+def test_a_trial_made_before_fingerprints_is_judged_by_its_build_then(committed_repo: Path):
+    """DEF-current-trial: a trial recorded before trials carried fingerprints counts as having
+    recorded the ones its target and premises had when it was made. It once stayed current through
+    any restatement, which AXM-blast-radius-invalidation forbids."""
+    import os
+    from consistency_belief.store import Store
+
+    def commit_at(text: str, when: str) -> None:
+        (committed_repo / "consistency.yaml").write_text(text, encoding="utf-8")
+        env = {**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when}
+        import subprocess
+        subprocess.run(["git", "commit", "-qam", f"at {when}"], cwd=committed_repo, env=env, check=True)
+
+    commit_at(SAMPLE_CONSISTENCY_YAML + "\n", "2026-01-01T00:00:00+00:00")
+    store = Store(committed_repo)
+    for strategy in ("counterexample", "entailment"):
+        store.append_trial({"target_id": "BRN-gpu-throttling", "strategy": strategy, "outcome": "sound",
+                            "passed": True, "counterexample": None, "reasoning": "legacy", "repro": {},
+                            "validity": "valid", "timestamp": "2026-01-02T00:00:00+00:00"})
+    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree"), "nothing changed since: it counts"
+
+    commit_at(SAMPLE_CONSISTENCY_YAML.replace("bounded at 100W", "bounded at 80W"), "2026-01-03T00:00:00+00:00")
+    assert "BRN-gpu-throttling [STALE]" in status("tree"), "a premise restated after it: it does not"

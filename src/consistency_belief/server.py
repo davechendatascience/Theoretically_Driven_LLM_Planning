@@ -16,7 +16,7 @@ from .graph import ProofNode
 from .model import compute_consistency
 from .probes import (STRATEGIES, STRATEGY_COUNTEREXAMPLE, build_probe_prompt, code_identifiers,
                      parse_probe_result, source_citations)
-from .declarations import COMPONENT_ID, contract_states, git_head
+from .declarations import BOUNDARY_ID, COMPONENT_ID, contract_states, git_head
 from .render import basis_line, bullet, envelope
 from .store import VALIDITY, Store
 from .views import (
@@ -117,15 +117,18 @@ def subject_hint(ctx: Any, subject: str) -> str:
     """A branch governs a component. Advisory, because a design may legitimately precede its
     component: say where the component is declared and that a planned one carries no code."""
     decl = ctx.decl
-    if decl.components_source != "git-HEAD" or subject in decl.components:
+    if decl.components_source != "git-HEAD" or decl.subject_known(subject):
         return ""
+    if BOUNDARY_ID.fullmatch(subject):
+        return (f"\nnote: neither belief.yaml nor goals.yaml at git HEAD declares {subject!r}, so "
+                "this design would govern nothing. Name a declared interface or goal, or declare it.")
     if COMPONENT_ID.fullmatch(subject):
         return (f"\nnote: belief.yaml at git HEAD declares no component {subject!r} -- it was removed "
                 "or renamed, so this design would govern nothing. Repoint it, or re-declare the "
                 "component there. status(view=\"coverage\") shows both ledgers side by side.")
-    return (f"\nnote: subject {subject!r} is prose, not a component id. Name the component this "
-            "design governs, or declare it in belief.yaml -- a component with no code: is a planned "
-            "one. status(view=\"coverage\") shows both ledgers side by side.")
+    return (f"\nnote: subject {subject!r} is prose, not a component, interface or goal id. Name "
+            "what this design governs, or declare it in belief.yaml -- a component with no code: "
+            "is a planned one. status(view=\"coverage\") shows both ledgers side by side.")
 
 
 def project_root() -> Path:
