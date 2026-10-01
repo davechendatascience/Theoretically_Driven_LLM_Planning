@@ -380,7 +380,16 @@ definitions:
       A trial record is set aside exactly when its validity, after the
       amendments appended to it, is anything other than valid -- quarantined,
       invalid or superseded. A set-aside record moves no measured belief. A
-      record that is not set aside counts.
+      record counts exactly when it is not set aside.
+
+  - id: DEF-audit
+    term: Audit
+    meaning: >-
+      The audit re-checks every artifact and every stamp that a measured or
+      imported record rests on, whether or not that record counts. An artifact
+      or stamp can no longer be audited exactly when the artifact is missing or
+      no longer matches the hash recorded for it, or the stamp is missing or no
+      longer matches the digest its trials recorded.
 
   - id: DEF-report
     term: Report
@@ -786,22 +795,23 @@ branches:
     subject: CMP-stamp-monitor
     claim_type: contract
     statement: >-
-      The audit reports every artifact that is missing or no longer matches
-      its recorded hash, and every stamp it cannot trust. Each such finding
-      blocks while a record resting on that artifact or stamp counts, and once
-      none does it is reported as information naming why those records were
-      set aside.
-    premises: [AXM-damage-blocks-while-it-counts, DEF-set-aside]
+      The audit reports every artifact or stamp a record rests on that can no
+      longer be audited. Each such finding blocks while a record resting on that
+      artifact or stamp counts; once none does, it does not block and is
+      reported as information naming why those records were set aside.
+    premises: [AXM-damage-blocks-while-it-counts, DEF-set-aside, DEF-audit]
     derivation_rule: >-
-      A missing artifact, an artifact that no longer matches its recorded hash
-      and a stamp that cannot be trusted are each an artifact or stamp that can
-      no longer be audited. By AXM-damage-blocks-while-it-counts the finding for
-      each blocks while any record resting on it counts, and once none does it
-      is still reported, with why those records were set aside, without
-      blocking, and it is never dropped. By DEF-set-aside a record counts
-      exactly when it is not set aside, which is read from its validity after
-      the amendments appended to it, so the audit judges a record by its
-      amendments and not by the record alone. evidence: CTR-monitor-read-only
+      By DEF-audit the audit re-checks every artifact and every stamp a measured
+      or imported record rests on, whether or not that record counts, and one
+      can no longer be audited exactly when the artifact is missing or no longer
+      matches the hash recorded for it, or the stamp is missing or no longer
+      matches the digest its trials recorded; so every such artifact or stamp
+      gives rise to a finding. By AXM-damage-blocks-while-it-counts that finding
+      blocks while any record resting on it counts, and once none does it is
+      still reported, with why those records were set aside, without blocking,
+      and it is never dropped. By DEF-set-aside a record counts exactly when it
+      is not set aside, read from its validity after the amendments appended to
+      it. evidence: CTR-monitor-read-only
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
