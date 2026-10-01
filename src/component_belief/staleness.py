@@ -4,9 +4,11 @@ speaking for the current one once that code has changed.
 consistency-belief marks a node STALE when a premise upstream is restated, and it knows a
 restatement by content: the hash of the statement. This is the empirical counterpart, and it
 binds evidence the same way. When a test runs, the runner stamps the exact content of every file
-the evidence depends on -- the components' claimed `code:`, the files the test itself names, and
-what the run opened -- as git blob ids, taken from the working tree as it actually stood. A trial
-is current while those blobs match HEAD and stale the moment one does not.
+the evidence depends on -- the components' claimed `code:` and the files the test itself names --
+as git blob ids, taken from the working tree as it actually stood. A trial is current while those
+blobs match HEAD and stale the moment one does not. What the run opened is stamped beside them for
+the artifacts view, and watched by nothing: a file a script reads is bound by claiming it or
+naming it in `reads:`.
 
 Content, not revision, because a revision says which commit was checked out and not what was
 measured:

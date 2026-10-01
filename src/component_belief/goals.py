@@ -44,6 +44,8 @@ from .staleness import named_paths
 RELEASES = "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning"
 AGENT_MARK = re.compile(r"(?im)^co-authored-by:\s*claude\b")
 GUARD_MARK = "# tdlp goal guard"
+#: The release a hook `tdlp-guard install` wrote runs, read back from the hook itself.
+_PINNED = re.compile(r"@tdlp--v([0-9][\w.+-]*)")
 _EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
@@ -140,11 +142,35 @@ def hooks_dir(root: Path) -> Path | None:
     return path if path.is_absolute() else root / path
 
 
-def guard_installed(root: Path) -> bool:
+def guard_version(root: Path) -> str | None:
+    """The release the installed guard runs: "" for one that runs its own command (a dev
+    checkout's), None when this clone has no guard."""
     directory = hooks_dir(root)
     hook = directory / "commit-msg" if directory else None
-    return bool(hook and hook.is_file()
-                and GUARD_MARK in hook.read_text(encoding="utf-8", errors="replace"))
+    if not (hook and hook.is_file()):
+        return None
+    text = hook.read_text(encoding="utf-8", errors="replace")
+    if GUARD_MARK not in text:
+        return None
+    pinned = _PINNED.search(text)
+    return pinned.group(1) if pinned else ""
+
+
+def guard_installed(root: Path) -> bool:
+    return guard_version(root) is not None
+
+
+def guard_line(root: Path, install_hint: str, absent: str) -> str:
+    """The guard as the goals view reports it. A guard pinned to an earlier release still runs,
+    with that release's rules, and upgrading the plugin does not touch it: "installed" alone read
+    as current in a clone whose hook was two releases behind."""
+    version = guard_version(root)
+    if version is None:
+        return f"{absent} in this clone -- run: {install_hint}"
+    if version and version != __version__:
+        return (f"installed in this clone, but it runs v{version} and this release is "
+                f"v{__version__} -- run: {install_hint} (it replaces the guard in place)")
+    return "installed in this clone"
 
 
 def release_command() -> str:
@@ -303,8 +329,7 @@ def view_goals(ctx: Any) -> str:
         issues = [i for i in decl.issues if i.subject == GOALS_FILE and i.code != "UNCOMMITTED"]
         if issues:
             body += ["", "issues:", bullet(i.render() for i in issues)]
-        body += ["", "guard: " + ("installed in this clone" if guard_installed(ctx.root)
-                                  else f"not installed in this clone -- run: {install_hint}")]
+        body += ["", "guard: " + guard_line(ctx.root, install_hint, "not installed")]
         return envelope("\n".join(body), f"basis: declarations · {GOALS_FILE} absent at HEAD")
 
     measures = [g.measure for g in decl.goals.values()] + [b.measure for b in decl.goal_interfaces.values()]
@@ -340,8 +365,7 @@ def view_goals(ctx: Any) -> str:
     lines += ["", "changes to your goal set by the agent since you last committed it:"]
     lines += [f"  {c['sha']}  {', '.join(c['files'][:4])} -- {c['subject'][:80]}" for c in changes] \
         or ["  (none)"]
-    lines += ["", "guard: " + ("installed in this clone" if guard_installed(ctx.root)
-                               else f"NOT INSTALLED in this clone -- run: {install_hint}")]
+    lines += ["", "guard: " + guard_line(ctx.root, install_hint, "NOT INSTALLED")]
     mine = yours_ids | decl.goal_owned | {GOALS_FILE}
     issues = [i for i in decl.issues if i.subject in mine or i.code == "UNKNOWN_GOAL"]
     if issues:

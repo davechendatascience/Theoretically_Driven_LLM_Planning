@@ -90,6 +90,24 @@ def test_audit_change_blast_radius(committed_repo: Path):
     assert "BRN-gpu-throttling" in audit_out
 
 
+def test_audit_change_says_when_nothing_restates(committed_repo: Path):
+    """A trial vouches for a statement and its premises, not for the derivation rule that cites a
+    contract. Told only the blast radius, an agent re-citing a CTR- reported the edit as one that
+    needed re-verification; the audit now says which kind of change it is."""
+    same = audit_change("LMA-compute-cap", proposed_statement="Compute power cannot\n  exceed 40W.",
+                        proposed_premises=["DEF-subsystem-power", "AXM-energy-budget"])
+    assert "Fingerprint unchanged" in same and "Own trials: kept" in same
+    assert "will become STALE" not in same and "BRN-gpu-throttling" in same
+
+    unsaid = audit_change("LMA-compute-cap")
+    assert "become STALE if its statement or premises change" in unsaid
+    assert "a CTR- citation" in unsaid and "restates nothing" in unsaid
+
+    restated = audit_change("LMA-compute-cap", proposed_statement="Compute power cannot exceed 30W.")
+    assert "(1 nodes will become STALE)" in restated and "Own trials: 0 set aside" in restated
+    assert "restates nothing" not in restated
+
+
 def test_propose_branch_rejects_cycle_and_unknown_premise(committed_repo: Path):
     # Unknown premise
     bad_premise_out = propose_branch(

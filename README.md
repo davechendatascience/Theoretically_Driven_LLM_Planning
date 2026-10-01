@@ -98,7 +98,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.1" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.2" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -331,7 +331,7 @@ declarations in [`belief.yaml`](belief.yaml).
 * **Gates and rates.** A deterministic procedure — a pytest suite — is `kind: gate`: read from its latest run, every case passing is `supported`, any failing is `refuted`, with no interval and no `n_min` for reruns to climb. A stochastic process is a rate contract with a Beta-Binomial interval, and sparse data is `insufficient_evidence`.
 * **Diagnosis before optimisation.** Bottlenecks are ranked by decision relevance, never by lowest score, and a component no test observes is reported as a coverage limit rather than blamed.
 * **Components claim their code.** `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` is *planned*.
-* **Content stamps.** Before a test's command starts, the runner records the git blob id of every file the evidence could rest on — the components' claimed `code:`, the files the test names on its `run:` line or in `reads:` — plus what the run opened. Every trial carries the stamp's digest. Content rather than revision, so evidence from uncommitted edits later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and weakening the test itself stales what it produced. A declared input git ignores — a checkpoint, a dataset, a directory of demonstrations — has no blob at HEAD, so it is stamped by its content digest instead, and the evidence stays current while the file on disk still has it: retrain the checkpoint and the evidence goes stale, restore the same bytes and it counts again. Trials recorded before stamps fall back to `git diff <sw_revision> HEAD`. Design: [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
+* **Content stamps.** Before a test's command starts, the runner records the git blob id of every file the evidence could rest on — the components' claimed `code:`, the files the test names on its `run:` line or in `reads:` — and records beside them what the run opened, which the artifacts view reads and staleness does not. Every trial carries the stamp's digest. Content rather than revision, so evidence from uncommitted edits later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and weakening the test itself stales what it produced. A declared input git ignores — a checkpoint, a dataset, a directory of demonstrations — has no blob at HEAD, so it is stamped by its content digest instead, and the evidence stays current while the file on disk still has it: retrain the checkpoint and the evidence goes stale, restore the same bytes and it counts again. Trials recorded before stamps fall back to `git diff <sw_revision> HEAD`. Design: [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
 * **Runs record what they read.** Each `run_test` installs an audit hook through `sitecustomize` (chaining to any the environment already had), so the run reports each project file it opened for reading — an import from cached bytecode counts as reading its source. Files a non-Python child opens are declared with `reads:`.
 * **Every file carries a verdict.** `status(view="artifacts")` joins git history, the run ledger, the declarations and the filesystem. A file nothing claims, nothing ran, and no live evidence rests on is a prune candidate; a generated artifact is *kept*, *prunable*, or *undecidable* — with the source of each fact named, because "RUN-0140 opened it" is a fact and "its mtime is three weeks old" is a hint.
 
@@ -549,6 +549,32 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.5.2 — 2026-10-01 · what an adopting agent tripped on
+
+- **`run_test` no longer crashes on a directory at `$OUT`.** It hashed `$OUT` as a file, so a
+  measure in several parts that made it a directory recorded nothing. Each way `$OUT` can be
+  wrong falls back to one trial built from the exit code, and the reply names which it was:
+  absent, a directory, not JSON, or a shape it does not accept.
+- **The goals view names a guard from an earlier release.** Upgrading the plugin leaves the
+  commit-msg hook on the release that installed it, and the view said "installed" either way.
+  Running the install command again replaces it; `--force` is only for a hook that is not the
+  guard.
+- **`audit_change` says whether anything restates.** A trial vouches for a node's statement and
+  premises, not its derivation rule. Given the proposal, the audit says whether the node's own
+  trials are kept and whether its dependents go stale. Without one, it says what a restatement
+  would cost, and that a change only to a citation costs nothing.
+- **`ingest` says why it refuses an artifact:** a URL, a missing path, a directory, or several
+  paths in one string. It has refused all four since 0.2.0, but only as "not a file".
+- **Skills.**
+  - component-belief has a new section, *Declaring contracts and tests*: what clears a target,
+    gates, compatibility keys, the `$OUT` format, what evidence is bound to, and keeping the
+    read hook through a wrapper script.
+  - adopt-goals adds what shapes a draft: a goal reads its worst slice, and which files become
+    the human's.
+  - consistency-belief: re-citing a contract restates nothing.
+- The staleness docs no longer say that a file the run opened makes its evidence stale. The stamp
+  records it, but nothing watches it.
 
 ### 0.5.1 — 2026-10-01 · the artifacts view reads a run line the way staleness does
 

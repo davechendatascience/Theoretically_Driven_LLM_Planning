@@ -98,6 +98,25 @@ class TestRunner:
         assert slices[0].n_valid == 0
         assert slices[0].exclusions == {"missing_metrics": 1}
 
+    @pytest.mark.parametrize("command, problem", [
+        ("echo nothing-structured", "the test wrote no $OUT file"),
+        ("python -c \"import os; os.makedirs(os.environ['OUT'])\"", "$OUT is a directory, not a file"),
+        ("python -c \"import os; open(os.environ['OUT'], 'w').write('{not json')\"",
+         "$OUT is not valid JSON"),
+        ("python -c \"import os; open(os.environ['OUT'], 'w').write('{}')\"",
+         "$OUT is JSON in none of the accepted shapes"),
+    ])
+    def test_a_result_it_cannot_read_is_named_not_crashed_on(self, repo, command, problem):
+        """A measure in several parts that made $OUT a directory crashed the run before anything
+        was recorded; each way $OUT can be wrong is now a fallback that says which it was."""
+        emit_yaml(repo, command)
+        decl = load(repo)
+        result = execute(repo, Store(repo), decl, decl.tests["TST-grasp-ik"])
+        assert result["synthesized_from_exit_code"] is True
+        assert result["result_problem"] == problem
+        if "directory" in problem:
+            assert result["artifact_uri"].endswith("stdout.txt"), "a directory is not hashed"
+
     def test_failing_command_records_a_failing_trial(self, repo):
         emit_yaml(repo, "exit 1")
         decl = load(repo)
@@ -204,12 +223,22 @@ class TestToolSurface:
     def test_ingest_requires_an_artifact(self, project):
         assert "artifact_uri is required" in server.ingest(records=[], source="ci", artifact_uri="")
 
-    @pytest.mark.parametrize("uri", ["ci://run/1", "out/never-written.json"])
-    def test_ingest_refuses_an_artifact_it_cannot_read(self, project, uri):
+    @pytest.mark.parametrize("uri, problem", [
+        ("ci://run/1", "it is a URL"),
+        ("out/never-written.json", "nothing exists at that path"),
+        ("out", "it is a directory"),
+        ("out/a.json out/b.json", "it names more than one path"),
+        ("out/a.json ; out/b.json", "it names more than one path"),
+    ])
+    def test_ingest_refuses_an_artifact_it_cannot_read(self, project, uri, problem):
         """DEF-belief-eligible: an import comes with an artifact and its hash. The server can
-        hash only bytes it can read, so a URL or a missing path imports nothing."""
+        hash only bytes it can read, one file of them, so a URL, a missing path, a directory or
+        two paths in one string imports nothing -- and the refusal says which it was."""
+        (project / "out").mkdir(exist_ok=True)
+        for name in ("a.json", "b.json"):
+            (project / "out" / name).write_text("[]", encoding="utf-8")
         out = server.ingest(records=[complete_record()], source="ci", artifact_uri=uri)
-        assert "not a file on this machine" in out
+        assert "not a file on this machine" in out and problem in out
         assert Store(project).effective_trials() == []
 
     def test_ingest_refuses_a_test_the_contract_does_not_list(self, project):

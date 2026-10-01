@@ -20,6 +20,26 @@ Only step 4 waits on the human. Nothing else in the procedure does.
   question only if the outcomes are not clear from them: "what should this project do, in a
   sentence per outcome?"
 
+## What shapes a draft
+
+The component-belief skill's *Declaring contracts and tests* applies to every measure you draft:
+what clears a target, gates, `$OUT`, what evidence is bound to. Two more facts matter only here.
+
+- **A goal reads its worst slice:** refuted, then stale, contested, insufficient, supported. A
+  slice is stale only when every trial in it is.
+  - Do not promote a contract that also holds controls or other systems' runs: their slices
+    become the goal's headline. A control is, for example, a blind twin expected to fail. Give
+    those runs a contract of their own in `belief.yaml`.
+  - Keep a version that moves, such as `policy_revision` or `teacher_revision`, out of the goal
+    contract's `compatibility_key`, and bind it instead: its checkpoint in `reads:`, its code
+    claimed. With the version in the key, every past version keeps a slice, and the goal reads
+    that slice's state -- stale, or not met -- for good. A version that is neither keyed nor
+    bound pools with the new one.
+- **Which files become the human's:** `goals.yaml`, and every tracked file a goal test's run line
+  or `reads:` names. This uses the same matching as staleness, so `cd dir && ...` hands over all
+  of `dir`. Files a named script calls do not become theirs. A thin wrapper script keeps the
+  tools you edit routinely as yours; a run line that names a tool hands it to the human.
+
 ## 2. Draft goals.yaml in the working tree -- never commit it
 
 - **Goals: two to five,** each an outcome the human would say in one sentence, not a component's
@@ -31,7 +51,8 @@ Only step 4 waits on the human. Nothing else in the procedure does.
     trials are keyed by contract id. The test's files become the human's, so promote only a test
     you would not edit in routine work.
   - **Draft an acceptance test** otherwise: a short file in `acceptance/` with its own
-    `conftest.py`, driving only the project's public surface, one criterion per test name.
+    `conftest.py`, driving only the project's public surface, one criterion per test name. For
+    a rate over episodes, write a script that puts the trials in `$OUT` instead.
     Keep it out of `tests/` and away from fixtures you edit: every file a goal's test names or
     `reads:` becomes the human's, and the guard refuses your commits to it.
 - **Interfaces:** one per hand-over between two goals' systems (`from`, `to`, `hands_over`), each
@@ -46,12 +67,15 @@ Only step 4 waits on the human. Nothing else in the procedure does.
 
 `uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v<version>" tdlp-guard install`
 (the goals view prints the exact command). From here a commit of yours that touches the goal
-set is refused, so the draft cannot slip into a commit of yours.
+set is refused, so the draft cannot slip into a commit of yours. Upgrading the plugin leaves the
+guard on the release that installed it. The goals view says so; run the command again, and it
+replaces the guard in place. Only a commit-msg hook that is not the guard needs `--force`.
 
 ## 4. Hand the draft to the human, and wait
 
 For each goal: the outcome in one line, how it is measured, and -- for a promoted measure -- its
-current state. Say which files become theirs. They edit what they like and commit
+current state. For a rate, also give the passes its target needs at the planned n. Say which
+files become theirs. They edit what they like and commit
 `goals.yaml` (and `acceptance/`) themselves. **This is the only step that waits on them.**
 
 ## 5. After their commit

@@ -15,7 +15,7 @@ import pytest
 
 from component_belief.declarations import load
 from component_belief.goals import (GuardError, check_commit, goal_history, goal_set,
-                                    guard_installed, install, ratification_gap)
+                                    guard_installed, guard_line, install, ratification_gap)
 from conftest import AGENT_TRAILER, commit_as_agent, git
 
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -85,6 +85,21 @@ class TestHook:
 
     def test_it_is_reported_as_installed(self, guarded):
         assert guard_installed(guarded)
+
+    def test_a_guard_from_an_earlier_release_says_so(self, goals_repo):
+        """Upgrading the plugin leaves the hook on the release that installed it; the view said
+        "installed" either way. Reinstalling replaces the guard in place, with no --force."""
+        from component_belief import __version__
+        from component_belief.goals import RELEASES
+
+        install(goals_repo)
+        assert guard_line(goals_repo, "HINT", "NOT INSTALLED") == "installed in this clone"
+        install(goals_repo, command=f'uvx --quiet --from "{RELEASES}@tdlp--v0.4.0" tdlp-guard check')
+        line = guard_line(goals_repo, "HINT", "NOT INSTALLED")
+        assert f"runs v0.4.0 and this release is v{__version__}" in line and "HINT" in line
+        install(goals_repo, command='"python" -m component_belief.goals check')
+        assert guard_line(goals_repo, "HINT", "NOT INSTALLED") == "installed in this clone", \
+            "a guard that runs its own command is pinned to no release"
 
     def test_another_hook_is_not_overwritten_unasked(self, goals_repo):
         hook = Path(git(goals_repo, "rev-parse", "--git-path", "hooks").stdout.strip())

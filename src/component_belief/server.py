@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -126,9 +127,10 @@ def run_test(
     """Run a declared test and record its trials as measured evidence.
 
     The server executes the command and captures the artifact itself; nothing
-    is transcribed. The command may write structured trials to $OUT as
-    {"trials": [{"metrics": {...}, "conditions": {...}}]}; if it does not, one
-    trial is synthesised from the exit code.
+    is transcribed. The command may write structured trials to $OUT, one JSON
+    file: {"trials": [{"metrics": {...}, "conditions": {...}}]}, a list of
+    trials, or one {"metrics": ...}. If it does not, one trial is synthesised
+    from the exit code and the reply says what was wrong with $OUT.
 
     conditions: captured metadata for bucketing, e.g. {"lighting": "low"}.
     repro:      reproducibility fields, e.g. {"model_revision": "v3", "seed": 7}.
@@ -156,8 +158,10 @@ def run_test(
     ]
     if result["synthesized_from_exit_code"]:
         lines.append(
-            "note: no $OUT file — one trial synthesised from the exit code. "
-            "Contracts needing declared metrics will exclude it rather than score it."
+            f"note: {result['result_problem']} — one trial synthesised from the exit code. "
+            "$OUT takes one JSON file: {\"trials\": [...]}, a list of trials, or one "
+            "{\"metrics\": ...}. Contracts needing declared metrics will exclude it rather "
+            "than score it."
         )
     if not result["contracts"]:
         lines.append(
@@ -170,14 +174,24 @@ def run_test(
     return envelope("\n".join(lines), basis_line(slices))
 
 
-def _local_file(root: Path, uri: str) -> Path | None:
-    """The file an import names, if it is one on this machine: a path in the project, or an
-    absolute one. A URL names nothing the server can read, so it names nothing here."""
+def _local_file(root: Path, uri: str) -> tuple[Path | None, str]:
+    """The file an import names -- a path in the project, or an absolute one -- or what it names
+    instead. The server copies and hashes one file, so a URL, a directory or several paths in one
+    string import nothing; each is named, because each is fixed differently."""
     if "://" in uri:
-        return None
+        return None, "it is a URL; download the artifact into the project first"
     path = Path(uri)
     path = (path if path.is_absolute() else root / path).resolve()
-    return path if path.is_file() else None
+    if path.is_file():
+        return path, ""
+    if path.is_dir():
+        return None, ("it is a directory; name the one file the records were read from, merging "
+                      "the files into one if they came from several")
+    parts = [p for p in re.split(r"[\s;,]+", uri) if p]
+    if len(parts) > 1 and any((root / p).exists() or Path(p).exists() for p in parts):
+        return None, ("it names more than one path; ingest each file's records in a call of its "
+                      "own, or merge the files into one")
+    return None, "nothing exists at that path"
 
 
 @mcp.tool()
@@ -204,13 +218,12 @@ def ingest(
     ctx = Context.build(root)
     if not artifact_uri:
         return "rejected: artifact_uri is required for imported evidence"
-    original = _local_file(root, artifact_uri)
+    original, problem = _local_file(root, artifact_uri)
     if original is None:
         # DEF-belief-eligible: an import is brought in with an artifact *and its hash*. A hash
         # the caller supplies is testimony; the server can only vouch for bytes it has read.
-        return (f"rejected: artifact_uri {artifact_uri!r} is not a file on this machine. The "
-                "server copies and hashes the artifact itself, so it must exist here -- download "
-                "a remote artifact into the project first")
+        return (f"rejected: artifact_uri {artifact_uri!r} is not a file on this machine: {problem}. "
+                "The server copies and hashes the one file the records came from itself")
 
     required = ("contract_id", "test_id", "outcome")
     accepted, rejected = [], []

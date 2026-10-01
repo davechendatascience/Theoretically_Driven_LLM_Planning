@@ -122,20 +122,28 @@ def _substitute_out(command: str, out_path: Path) -> str:
     return command
 
 
-def _parse_result(path: Path) -> list[dict[str, Any]] | None:
+def _parse_result(path: Path) -> tuple[list[dict[str, Any]] | None, str]:
+    """The trials a test wrote to $OUT, or None and what was wrong with it.
+
+    $OUT is one JSON file: {"trials": [...]}, a list of trials, or one {"metrics": ...}. The
+    reason goes back to the caller, because a missing file, a directory and malformed JSON are
+    three different fixes -- and a directory once crashed the run before anything was recorded.
+    """
     if not path.exists():
-        return None
+        return None, "the test wrote no $OUT file"
+    if not path.is_file():
+        return None, "$OUT is a directory, not a file"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+        return None, "$OUT is not valid JSON"
     if isinstance(data, dict) and isinstance(data.get("trials"), list):
-        return data["trials"]
+        return data["trials"], ""
     if isinstance(data, list):
-        return data
+        return data, ""
     if isinstance(data, dict) and "metrics" in data:
-        return [data]
-    return None
+        return [data], ""
+    return None, "$OUT is JSON in none of the accepted shapes"
 
 
 def run_test(
@@ -188,7 +196,7 @@ def run_test(
     readlog.write(artifact_dir, opened)
     stamp = write_stamp(artifact_dir, snapshot.stamp(opened)) if snapshot else ""
 
-    raw_trials = _parse_result(out_path)
+    raw_trials, result_problem = _parse_result(out_path)
     synthesized = raw_trials is None
     if synthesized:
         # No structured result: fall back to a single trial whose outcome is
@@ -200,10 +208,10 @@ def run_test(
             metrics["passed"] = exit_code == 0
         raw_trials = [{"metrics": metrics, "conditions": {}}]
 
-    artifact_uri = str(out_path.relative_to(root)) if out_path.exists() else str(
-        (artifact_dir / "stdout.txt").relative_to(root)
-    )
-    artifact_hash = _sha256(out_path if out_path.exists() else artifact_dir / "stdout.txt")
+    # a directory at $OUT is not an artifact the server can hash: stdout stands in, as for no file
+    artifact = out_path if out_path.is_file() else artifact_dir / "stdout.txt"
+    artifact_uri = str(artifact.relative_to(root))
+    artifact_hash = _sha256(artifact)
 
     base_repro = {
         "sw_revision": _git_revision(root),
@@ -283,5 +291,6 @@ def run_test(
         "artifact_hash": artifact_hash,
         "stamp": stamp,
         "synthesized_from_exit_code": synthesized,
+        "result_problem": result_problem,
         "stdout_tail": (stdout or "")[-800:],
     }

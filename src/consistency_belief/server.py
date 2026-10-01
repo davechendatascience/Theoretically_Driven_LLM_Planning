@@ -490,8 +490,11 @@ def audit_change(
 ) -> str:
     """Calculate the blast radius of modifying or invalidating an axiom or branch.
 
-    Reports all downstream lemmas, contracts, and components that will be marked STALE
-    and require re-verification if the change is executed.
+    A trial vouches for a node's statement and its premises (its fingerprint), so only a change to
+    either restates it: its own trials are set aside and every downstream node turns STALE until
+    re-verified. A change only to the derivation rule -- a CTR- citation, the argument's wording --
+    restates nothing. Pass the proposal to be told which; without one, the radius is what a
+    restatement would cost.
     """
     root = project_root()
     ctx = Context.build(root)
@@ -501,6 +504,8 @@ def audit_change(
 
     blast = ctx.dag.blast_radius(target_id)
     anc = sorted(ctx.dag.ancestors(target_id))
+    restates = _restates(node, proposed_statement, proposed_premises)
+    own = next((s for s in ctx.slices if s.target_id == target_id), None)
     # An impact analysis is the first step of a change; it is recorded so the chain from impact
     # to approval to re-verification is in the ledger, not in someone's memory.
     ctx.store.append_event("audit_change", {
@@ -509,6 +514,7 @@ def audit_change(
         "proposed_premises": list(proposed_premises or []),
         "reason": reason,
         "blast_radius": list(blast),
+        "restates": restates,
     }, actor=_actor())
 
     lines = [
@@ -521,13 +527,38 @@ def audit_change(
         lines.append(f"Reason: {reason}")
 
     lines.append(f"Upstream premises ({len(anc)}): {', '.join(anc) or '(none)'}")
-    lines.append(f"Downstream blast radius ({len(blast)} nodes will become STALE):")
-    if blast:
-        lines.append(bullet(blast))
+    if restates is False:
+        lines.append("Fingerprint unchanged: the proposal keeps its statement and premises, so "
+                     "nothing restates. Own trials: kept. No downstream node becomes STALE.")
+        lines.append(f"Downstream dependents ({len(blast)}), unaffected:")
     else:
-        lines.append("  (Zero downstream dependents)")
+        when = "will become STALE" if restates else "become STALE if its statement or premises change"
+        lines.append(f"Downstream blast radius ({len(blast)} nodes {when}):")
+    lines.append(bullet(blast) if blast else "  (Zero downstream dependents)")
+    if own is not None and restates is not False:
+        lines.append(f"Own trials: {own.n_trials} set aside -- they verified the current statement "
+                     "and premises" if restates else
+                     f"Own trials: {own.n_trials}, set aside only if the statement or premises change")
+    if restates is not True:
+        lines.append("A change only to the derivation rule -- a CTR- citation, the argument's "
+                     "wording -- restates nothing and sets no trial aside.")
 
     return envelope("\n".join(lines), basis_line(ctx.slices))
+
+
+def _restates(node: Any, statement: str, premises: list[str] | None) -> bool | None:
+    """Whether a proposal changes what the node's trials vouch for -- its statement or its
+    premises (ProofNode.fingerprint) -- or None when nothing was proposed. Whitespace is not a
+    change: a folded YAML scalar joins its lines with single spaces."""
+    if not statement and not premises:
+        return None
+    norm = " ".join
+    current = {norm(node.statement.split())}
+    if node.kind == "definition" and ": " in node.statement:
+        current.add(norm(node.statement.split(": ", 1)[1].split()))   # stated as "term: meaning"
+    same_statement = not statement or norm(statement.split()) in current
+    same_premises = not premises or sorted(set(premises)) == sorted(set(node.premises))
+    return not (same_statement and same_premises)
 
 
 @mcp.tool()

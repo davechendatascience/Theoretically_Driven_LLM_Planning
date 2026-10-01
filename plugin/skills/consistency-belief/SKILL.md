@@ -53,6 +53,11 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
 4. **Audit before you edit an axiom or lemma.** `audit_change(target_id, ...)` records the
    blast radius: every downstream node that becomes `STALE` and must be re-verified. Tell
    the user before the edit; never re-verify a stale branch by re-recording the old outcome.
+   A trial vouches for a node's statement and its premises, not its derivation rule.
+   Re-citing a `CTR-` or rewording the argument restates nothing and sets no trial aside.
+   Pass the proposal to `audit_change` and it says which kind of change it is. When you
+   wrap a folded YAML scalar, never break a line inside an id: the break folds into a
+   space, so `CTR-a-` on one line and `b` on the next reads as `CTR-a-`.
 
 5. **Declarations take effect when committed.** Axioms, definitions, lemmas, branches and
    policies live in `consistency.yaml`, read from git HEAD; `PENDING` in `status` means an
