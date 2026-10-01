@@ -196,6 +196,19 @@ axioms:
       measurement is proven of nothing, and one proven over no measurement is
       argued, not built.
 
+  - id: AXM-damage-blocks-while-it-counts
+    domain: integrity
+    goal: GOL-honest-evidence
+    statement: >-
+      A finding that a record's artifact or stamp can no longer be audited
+      blocks while any record resting on that artifact or stamp counts. Once
+      none does, the finding is still reported, with why those records were
+      set aside, and does not block. No such finding is dropped.
+    rationale: >-
+      An audit that blocks on evidence nothing counts any more asks for a
+      remedy that was already applied, and teaches a reader to stop reading it;
+      one that drops the finding hides what was set aside and why.
+
 definitions:
   - id: DEF-proof-obligation
     term: Proof Obligation
@@ -360,6 +373,14 @@ definitions:
       read from the exit code the server captured. A record is scored against
       its contract's rule from the metrics it carries alone: one that lacks a
       metric the rule reads is excluded, and no value is supplied for it.
+
+  - id: DEF-set-aside
+    term: Set-aside record
+    meaning: >-
+      A trial record is set aside exactly when its validity, after the
+      amendments appended to it, is anything other than valid -- quarantined,
+      invalid or superseded. A set-aside record moves no measured belief. A
+      record that is not set aside counts.
 
   - id: DEF-report
     term: Report
@@ -761,6 +782,28 @@ branches:
       CTR-design-gate-reads-evidence
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-audit-blocks-what-counts
+    subject: CMP-stamp-monitor
+    claim_type: contract
+    statement: >-
+      The audit reports every artifact that is missing or no longer matches
+      its recorded hash, and every stamp it cannot trust. Each such finding
+      blocks while a record resting on that artifact or stamp counts, and once
+      none does it is reported as information naming why those records were
+      set aside.
+    premises: [AXM-damage-blocks-while-it-counts, DEF-set-aside]
+    derivation_rule: >-
+      A missing artifact, an artifact that no longer matches its recorded hash
+      and a stamp that cannot be trusted are each an artifact or stamp that can
+      no longer be audited. By AXM-damage-blocks-while-it-counts the finding for
+      each blocks while any record resting on it counts, and once none does it
+      is still reported, with why those records were set aside, without
+      blocking, and it is never dropped. By DEF-set-aside a record counts
+      exactly when it is not set aside, which is read from its validity after
+      the amendments appended to it, so the audit judges a record by its
+      amendments and not by the record alone. evidence: CTR-monitor-read-only
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -775,3 +818,4 @@ policies:
       - {target: BRN-goal-guard, require: proven, evidence: supported}
       - {target: BRN-plugin-pinned, require: proven, evidence: supported}
       - {target: BRN-design-gate-reads-evidence, require: proven, evidence: supported}
+      - {target: BRN-audit-blocks-what-counts, require: proven, evidence: supported}
