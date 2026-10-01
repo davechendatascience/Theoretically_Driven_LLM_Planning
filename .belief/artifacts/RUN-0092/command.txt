@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0092/result.json -- tests/test_interfaces.py::TestProofDagToLedgerViews -q -p no:asyncio
+exit=0
+test=TST-ifc-proofdag-views@323af8ff
+at=2026-10-01T04:37:16+00:00

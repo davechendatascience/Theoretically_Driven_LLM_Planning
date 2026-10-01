@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0091/result.json -- tests/test_interfaces.py::TestModelToDiagnosis -q -p no:asyncio
+exit=0
+test=TST-ifc-model-diagnose@3e397753
+at=2026-10-01T04:37:15+00:00
