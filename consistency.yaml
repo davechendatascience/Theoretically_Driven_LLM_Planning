@@ -535,10 +535,10 @@ branches:
     subject: CMP-declarations
     claim_type: contract
     statement: >-
-      Only committed declarations reach the belief model; no evidence recorded
-      against a contract that no declared test can measure moves a measured
-      belief; and making an edit to a declaration file, and nothing else,
-      changes no verdict the servers report.
+      Only committed declarations reach the belief model; under the declarations
+      in effect, no evidence recorded against a contract that no declared test
+      can measure moves a measured belief; and making an edit to a declaration
+      file, and nothing else, changes no verdict the servers report.
     premises: [LMA-worktree-inert, AXM-no-belief-write-path, AXM-commit-is-approval, DEF-belief-eligible, DEF-evidence-record]
     derivation_rule: >-
       By AXM-commit-is-approval a declaration takes effect only from the
@@ -548,10 +548,11 @@ branches:
       belief-eligible only when that contract is one a declared test can
       measure, and by AXM-no-belief-write-path, under the declarations in
       effect, a measured belief -- the posterior over a contract slice -- moves
-      through nothing else. So a record against a contract no declared test can
-      measure moves no measured belief. By LMA-worktree-inert making an edit to
-      a declaration file, and nothing else, changes no verdict the servers
-      report. evidence: CTR-declarations-gate
+      through nothing else. So, under the declarations in effect, a record
+      against a contract no declared test can measure moves no measured belief.
+      By LMA-worktree-inert making an edit to a declaration file, and nothing
+      else, changes no verdict the servers report. evidence:
+      CTR-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-consistency-declarations-gate
