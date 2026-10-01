@@ -14,8 +14,9 @@ nothing claims, nothing has run, and no live evidence depends on is a candidate 
 is all it is, because these sources are not equally strong. Each stamp carries the source it came
 from so a reader can tell "RUN-0140 invoked it at 04:44" from "its mtime is three weeks old".
 
-Roots are declared, never guessed: code roots come from the components' `code:` entries, and
-generated roots from belief.yaml's optional top-level `artifacts:` list.
+A run line names its files the way staleness reads it -- every token against every tracked file,
+in any directory -- so the view never calls a file unneeded that the evidence is bound to. Generated
+roots are declared, never guessed: belief.yaml's optional top-level `artifacts:` list.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from typing import Any
 
 from . import readlog
 from .declarations import Declarations
+from .staleness import named_paths
 from .store import Store
 
 CODE_SUFFIXES = (".py", ".sh", ".js", ".ts", ".rb", ".go", ".rs")
@@ -88,20 +90,15 @@ def _iso(ts: float | str) -> str:
     return datetime.fromtimestamp(float(ts), timezone.utc).isoformat(timespec="seconds")
 
 
-def code_roots(decl: Declarations) -> tuple[str, ...]:
-    """The directories the declarations say code lives in, so paths are matched, not guessed."""
-    roots = {entry.split("/", 1)[0] for comp in decl.components.values() for entry in comp.code
-             if "/" in entry}
-    return tuple(sorted(roots)) or ("src", "tools", "tests")
-
-
 def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
     """Every file's stamps. `dangling_citations` reports names live evidence cites that
     no longer exist; it is attached to the module-level result for the view to print."""
-    pattern = re.compile(r"(?<![\w/.])((?:" + "|".join(map(re.escape, code_roots(decl)))
-                         + r")/[\w./-]+)")
     tracked = [f for f in _git(root, "ls-files").split("\n")
                if f and not f.startswith((".belief/", "third_party/"))]
+    # The extractor staleness binds evidence with. A narrower one here -- a regex over the
+    # directories some component's `code:` mentions -- missed `bash acceptance/x.sh` entirely,
+    # and the view offered to prune a script that live evidence was stale-bound to.
+    known = set(tracked)
 
     history: dict[str, dict] = {}
     commit = when = ""
@@ -120,7 +117,8 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
         text = command.read_text(errors="replace")
         at = re.search(r"^at=(\S+)", text, re.M)
         run_id = command.parent.name
-        for path in set(pattern.findall(text)):
+        line = text.split("\nexit=", 1)[0]          # the runner appends exit=, test=, at=
+        for path in named_paths(line, [], known):
             invoked.setdefault(path, []).append(
                 {"kind": "invoked", "source": "run-ledger", "run": run_id,
                  "at": at.group(1) if at else None})
@@ -138,7 +136,8 @@ def collect(root: Path, decl: Declarations, store: Store) -> list[FileStamps]:
 
     named: dict[str, set[str]] = {}
     for test in decl.tests.values():
-        for path in set(pattern.findall(test.run or "")) | set(test.reads):
+        # raw `reads:` too: an untracked artifact a test declares is matched by _artifact_record
+        for path in set(named_paths(test.run or "", test.reads, known)) | set(test.reads):
             named.setdefault(path, set()).add(test.id)
 
     out: list[FileStamps] = []

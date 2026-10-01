@@ -3,7 +3,7 @@
     "component-belief": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.0",
+        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.1",
         "component-belief-mcp"
       ],
       "env": {
@@ -15,7 +15,7 @@
     "consistency-belief": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.0",
+        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.1",
         "consistency-belief-mcp"
       ],
       "env": {
@@ -27,7 +27,7 @@
     "stamp-monitor": {
       "command": "uvx",
       "args": [
-        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.0",
+        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.1",
         "stamp-monitor-mcp"
       ],
       "env": {

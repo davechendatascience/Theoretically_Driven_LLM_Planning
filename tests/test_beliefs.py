@@ -245,6 +245,42 @@ def test_the_read_hook_records_what_a_run_opened(repo, monkeypatch):
     assert "reader.py" not in [p for p in stamps if stamps[p].prune_candidate()]
 
 
+def test_a_script_outside_every_claimed_directory_is_kept_by_the_evidence_it_produced(repo, monkeypatch):
+    """The view names a run line's files the way staleness does. It used to look only under the
+    directories some component's `code:` mentions, so `bash acceptance/replay.sh` -- run by bash,
+    never opened by the read hook -- read as a prune candidate while its evidence was bound to it."""
+    import json
+
+    from component_belief import server
+    from component_belief.declarations import load
+    from component_belief.stamps import collect
+    from component_belief.store import Store
+    from conftest import git
+
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "grasp.py").write_text("# claimed\n", encoding="utf-8")
+    (repo / "acceptance").mkdir()
+    (repo / "acceptance" / "replay.sh").write_text(
+        """printf '{"trials": [{"metrics": {"ik_success": true}}]}' > "$1"\n""", encoding="utf-8")
+    belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+        "    remediation: Retune approach sampling",
+        "    remediation: Retune approach sampling\n    code: [src/grasp.py]").replace(
+        '    run: "echo ok"', "    run: bash acceptance/replay.sh $OUT")
+    (repo / "belief.yaml").write_text(belief, encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a test run by a script no component claims")
+
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(repo))
+    server.run_test(test_id="TST-grasp-ik")
+    stamp = json.loads(next((repo / ".belief" / "artifacts").glob("*/stamp.json")).read_text(
+        encoding="utf-8"))
+    assert "acceptance/replay.sh" in stamp["named"], "staleness binds the evidence to it"
+
+    record = {s.path: s for s in collect(repo, load(repo), Store(repo))}["acceptance/replay.sh"]
+    assert {"named", "invoked", "supports"} <= record.kinds(), record.stamps
+    assert not record.prune_candidate()
+
+
 def test_the_hook_is_woven_into_a_command_that_sets_pythonpath():
     """A declared command of the form `env PYTHONPATH=... python ...` replaces the environment the
     runner prepared, so the hook's directory is put inside the command's own assignment."""

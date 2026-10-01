@@ -98,7 +98,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.5.1" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -549,6 +549,17 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.5.1 — 2026-10-01 · the artifacts view reads a run line the way staleness does
+
+- **`status(view="artifacts")`** looked for a run line's files only under the top-level
+  directories some component's `code:` mentions. Staleness matches every token against every
+  tracked file. So a script elsewhere, such as `bash acceptance/replay_labels.sh $OUT`, carried
+  live evidence while the view gave it no `named`, `invoked` or `supports` stamp. Bash runs it, so
+  the read hook never saw it opened either, and the view listed it as a prune candidate. Both now
+  use one extractor, `named_paths`, so they cannot disagree.
+- A run line that starts `cd dir && …` names everything under `dir`. Staleness always read it
+  that way; the view now keeps those files too.
 
 ### 0.5.0 — 2026-10-01 · setting up goals in any project that uses TDLP
 
