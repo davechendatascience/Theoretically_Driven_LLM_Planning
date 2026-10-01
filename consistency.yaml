@@ -149,12 +149,12 @@ axioms:
     domain: integrity
     goal: GOL-goals-stay-mine
     statement: >-
-      Only the human changes the goal set, and the human's commit of it approves
-      every policy it declares. An agent commit that would change the goal set
-      is refused; one that is made anyway is reported until the human next
-      commits the goal set, and while one is reported no adoption under a policy
-      goals.yaml declares stands as approved unless the human is named as its
-      approver.
+      The human's commit of the goal set approves it and every policy it
+      declares, and no other commit does. An agent commit that would change the
+      goal set is refused; one that is made anyway is reported until the human
+      next commits the goal set, and while one is reported no adoption under a
+      policy goals.yaml declares stands as approved unless the human is named as
+      its approver.
     rationale: >-
       GOL-goals-stay-mine in goals.yaml: my goals and how they are measured
       change only by my commit. The line is drawn against drift -- an agent
@@ -180,14 +180,16 @@ axioms:
     domain: verification
     goal: [GOL-sound-designs, GOL-honest-evidence]
     statement: >-
-      A design is adopted only while the measurement it cites agrees with it.
-      The measurement a design cites is each contract its derivation rule
-      names, each read on its own; it agrees with the design when every
-      one of them reads in the state the design's policy requires, and
-      contradicts it when one reads refuted where the policy requires another
-      state. A design whose cited measurement contradicts it is rejected, and
-      one whose cited measurement does not agree, is absent or cannot be read
-      is not adopted.
+      A design is a branch, and adopting it is a decision on that branch under a
+      policy criterion; the state that criterion requires of the branch's
+      evidence is the state the design's policy requires. A design is adopted
+      only while the measurement it cites agrees with it. The measurement a
+      design cites is each contract its derivation rule names, each read on its
+      own; it agrees with the design exactly when every one of them reads in the
+      required state, and contradicts it exactly when one reads refuted where
+      the required state is another. A design whose cited measurement
+      contradicts it is rejected, and one whose cited measurement does not
+      agree, is absent or cannot be read is not adopted.
     rationale: >-
       IFC-evidence__designs in goals.yaml: a design proven over a refuted
       measurement is proven of nothing, and one proven over no measurement is
@@ -329,8 +331,8 @@ definitions:
       The release a plugin's manifest names is the code at the git tag
       tdlp--v<version>, where <version> is the version that manifest names --
       the one its marketplace entry and the package name too. A project runs
-      that release as it was published when every server the plugin starts
-      installs from that tag.
+      that release as it was published exactly when every server the plugin
+      starts installs from that tag.
 
   - id: DEF-contract-state
     term: Contract state
@@ -338,6 +340,12 @@ definitions:
       The state a contract reads in, where a design cites it: the weakest state
       among its slices, refuted weakest, then stale, contested, insufficient and
       supported; and no evidence when it has no slice.
+
+  - id: DEF-evidence-record
+    term: Evidence record
+    meaning: >-
+      A trial record in the evidence ledger is recorded against exactly one
+      contract, and enters the slices of that contract and of no other.
 
   - id: DEF-report
     term: Report
@@ -422,20 +430,22 @@ lemmas:
 
   - id: LMA-worktree-inert
     statement: >-
-      Making an edit to a declaration file, without committing it, changes no
-      verdict and no proof state the servers report.
+      Making an edit to a declaration file, and nothing else -- no commit, and
+      no record appended to the ledger -- changes no verdict and no proof state
+      the servers report.
     premises: [AXM-commit-is-approval, DEF-ledger]
     derivation_rule: >-
       By AXM-commit-is-approval every verdict and every proof state the servers
       report is computed from committed content -- the declarations at the head
       revision, the commits that evidence names, and the declarations committed
       when a trial made before fingerprints was made -- and from the ledger, and
-      from no other file in the working tree. Making the edit adds no commit
-      and moves no revision, so it changes none of that committed content, and by DEF-ledger a declaration file is not part of the ledger,
-      so the edit adds no entry to it either. Every input of both is what it
-      was, so making the edit changes neither. What happens later -- a commit,
-      or evidence a run records while the edit is in the working tree -- this
-      lemma does not claim.
+      from no other file in the working tree. Making the edit adds no commit and
+      moves no revision, so it changes none of that committed content; it
+      appends no record, and by DEF-ledger a declaration file is not part of the
+      ledger, so the ledger is what it was. Every input of both is what it was,
+      so making the edit changes neither. A commit, or a record appended while
+      the edit is in the working tree, is a further change, which this lemma
+      does not cover.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 branches:
@@ -511,16 +521,19 @@ branches:
     statement: >-
       Only committed declarations reach the belief model; no evidence recorded
       against a contract that no declared test can measure moves a belief; and
-      making an uncommitted edit to a declaration file changes no verdict the
-      servers report.
-    premises: [LMA-worktree-inert, AXM-no-belief-write-path, AXM-commit-is-approval, DEF-belief-eligible]
+      making an edit to a declaration file, and nothing else, changes no verdict
+      the servers report.
+    premises: [LMA-worktree-inert, AXM-no-belief-write-path, AXM-commit-is-approval, DEF-belief-eligible, DEF-evidence-record]
     derivation_rule: >-
       By AXM-commit-is-approval a declaration takes effect only from the
-      committed revision, so only committed declarations reach the belief
-      model. By DEF-belief-eligible evidence is belief-eligible only when it is
-      recorded against a contract that a declared test can measure, and by
-      AXM-no-belief-write-path nothing else moves a measured belief. By
-      LMA-worktree-inert making an uncommitted edit to a declaration file
+      committed revision, so only committed declarations reach the belief model.
+      By DEF-evidence-record a record is recorded against exactly one contract
+      and enters that contract's slices alone; by DEF-belief-eligible it is
+      belief-eligible only when that contract is one a declared test can
+      measure, and by AXM-no-belief-write-path a measured belief -- the
+      posterior over a contract slice -- moves through nothing else. So a record
+      against a contract no declared test can measure moves no belief. By
+      LMA-worktree-inert making an edit to a declaration file, and nothing else,
       changes no verdict the servers report. evidence: CTR-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
@@ -681,21 +694,21 @@ branches:
     claim_type: contract
     statement: >-
       Every server the plugin starts installs from the tag of the version the
-      plugin's manifest names and is pointed at the project that enabled it,
-      and a declared test runs in that project's environment, not in the
-      harness's own.
+      plugin's manifest names and is pointed at the project that enabled it, and
+      a declared test any of them runs runs in that project's environment, not
+      in the harness's own.
     premises: [AXM-pinned-and-rooted, DEF-release]
     derivation_rule: >-
       By AXM-pinned-and-rooted a project that enables the plugin at a version
       runs the release that plugin's manifest names, as it was published; by
       DEF-release that release is the code at the tag of the version the
-      manifest names, and running it as published means every server the
-      plugin starts installs from that tag. By AXM-pinned-and-rooted every
-      server the plugin starts measures the project that enabled it, reading
-      that project's declarations and ledger, so each is pointed at that
-      project; and each runs that project's tests in that project's
-      environment, not in the harness's own, so a declared test runs there.
-      evidence: CTR-plugin-pinned-and-rooted
+      manifest names, and it runs as published exactly when every server the
+      plugin starts installs from that tag, so every one does. By
+      AXM-pinned-and-rooted every server the plugin starts measures the project
+      that enabled it, reading that project's declarations and ledger, so each
+      is pointed at that project; and each runs that project's tests in that
+      project's environment, not in the harness's own, so a declared test any of
+      them runs runs there. evidence: CTR-plugin-pinned-and-rooted
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-design-gate-reads-evidence
@@ -710,17 +723,19 @@ branches:
       leaves the decision short of adoption.
     premises: [AXM-design-rests-on-measurement, DEF-contract-state]
     derivation_rule: >-
-      A branch is a design, and by AXM-design-rests-on-measurement the
-      measurement it cites is each contract its derivation rule names, each
-      read on its own -- by DEF-contract-state, in the state of
-      its weakest slice, or as no evidence when it has none. That measurement
-      agrees with the design when every such contract reads in the state the
-      policy requires, so the branch is adopted only while each does. Where the
-      required state is not refuted, one reading refuted contradicts the design,
-      which AXM-design-rests-on-measurement rejects; one reading in another
-      state, with no evidence, or unreadable leaves the measurement not
-      agreeing, absent or unreadable, so the design is not adopted.
-      evidence: CTR-design-gate-reads-evidence
+      By AXM-design-rests-on-measurement a branch is a design, a decision on it
+      under a policy criterion is its adoption, and the state the criterion
+      requires is its policy's; the measurement it cites is each contract its
+      derivation rule names, each read on its own -- by DEF-contract-state, in
+      the state of its weakest slice, or as no evidence when it has none. That
+      measurement agrees with the design exactly when every such contract reads
+      in the required state, and the design is adopted only while it agrees, so
+      the branch is adopted only while each does. Where the required state is
+      not refuted, one reading refuted contradicts the design, which
+      AXM-design-rests-on-measurement rejects; one reading in another state,
+      with no evidence, or unreadable leaves the measurement not agreeing,
+      absent or unreadable, so the design is not adopted. evidence:
+      CTR-design-gate-reads-evidence
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
