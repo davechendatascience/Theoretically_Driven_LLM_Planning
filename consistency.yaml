@@ -29,6 +29,7 @@ components:
 axioms:
   - id: AXM-axiomatic-grounding
     domain: epistemic
+    goal: GOL-sound-designs
     statement: >-
       Every architectural claim, contract, and component must derive
       transitively from declared root axioms and definitions.
@@ -38,6 +39,7 @@ axioms:
 
   - id: AXM-falsifiable-measurement
     domain: verification
+    goal: GOL-sound-designs
     statement: >-
       Consistency cannot be self-asserted; it must be measured via
       adversarial falsification trials with captured prompts and counterexamples.
@@ -47,6 +49,7 @@ axioms:
 
   - id: AXM-acyclicity
     domain: logic
+    goal: GOL-sound-designs
     statement: >-
       Deductive reasoning graphs must be strictly directed and acyclic.
     rationale: >-
@@ -55,6 +58,7 @@ axioms:
 
   - id: AXM-blast-radius-invalidation
     domain: integrity
+    goal: GOL-sound-designs
     statement: >-
       Modifying an upstream premise or axiom invalidates all downstream
       derived conclusions until re-verified.
@@ -64,6 +68,7 @@ axioms:
 
   - id: AXM-no-belief-write-path
     domain: epistemic
+    goal: GOL-honest-evidence
     statement: >-
       A measured belief -- the posterior over a contract slice -- changes only
       through belief-eligible evidence, as DEF-belief-eligible defines it; a
@@ -76,6 +81,7 @@ axioms:
 
   - id: AXM-commit-is-approval
     domain: integrity
+    goal: [GOL-honest-evidence, GOL-sound-designs]
     statement: >-
       A declaration takes effect only from the committed revision. Every
       verdict and every proof state is computed from committed content -- the
@@ -93,6 +99,7 @@ axioms:
 
   - id: AXM-sparse-data-no-verdict
     domain: epistemic
+    goal: GOL-honest-evidence
     statement: >-
       Below the declared sufficiency for a claim no verdict is issued; an
       estimate may be shown, labelled as insufficient.
@@ -102,6 +109,7 @@ axioms:
 
   - id: AXM-observe-before-optimise
     domain: diagnosis
+    goal: GOL-honest-evidence
     statement: >-
       A recommendation to optimise a component requires an observation of that
       component against its own contract; an end-to-end outcome alone
@@ -112,6 +120,7 @@ axioms:
 
   - id: AXM-no-silent-failure
     domain: integrity
+    goal: GOL-sound-designs
     statement: >-
       A declared or staged node that cannot take its place in the premise
       graph, and a declared or staged branch whose subject belief.yaml no
@@ -123,6 +132,7 @@ axioms:
 
   - id: AXM-coverage-binds-first
     domain: diagnosis
+    goal: GOL-honest-evidence
     statement: >-
       While the component a diagnosis ranks first has no observation against
       its own contract, the diagnosis recommends no optimisation of any
@@ -135,10 +145,14 @@ axioms:
 
   - id: AXM-goal-set-is-human
     domain: integrity
+    goal: GOL-goals-stay-mine
     statement: >-
-      Only the human changes the goal set. An agent commit that would change it
-      is refused, and one that is made anyway does not stand as the human's
-      approval: it is reported until the human next commits the goal set.
+      Only the human changes the goal set, and the human's commit of it approves
+      every policy it declares. An agent commit that would change the goal set
+      is refused; one that is made anyway is reported until the human next
+      commits the goal set, and while one is reported no adoption under a policy
+      goals.yaml declares stands as approved unless the human is named as its
+      approver.
     rationale: >-
       GOL-goals-stay-mine in goals.yaml: my goals and how they are measured
       change only by my commit. The line is drawn against drift -- an agent
@@ -148,14 +162,29 @@ axioms:
 
   - id: AXM-pinned-and-rooted
     domain: integrity
+    goal: GOL-any-project
     statement: >-
-      A project runs the harness as one release published it, and the harness
-      measures that project: it reads that project's declarations and ledger,
-      and runs that project's tests in that project's environment.
+      A project that enables the harness runs it as one release published it,
+      and the harness measures that project: it reads that project's
+      declarations and ledger, and runs that project's tests in that project's
+      environment, not in the harness's own.
     rationale: >-
       GOL-any-project in goals.yaml. A server that drifted to unreleased code,
       read the repository it was installed from, or ran a test with its own
       interpreter would report on something other than the project asking.
+
+  - id: AXM-design-rests-on-measurement
+    domain: verification
+    goal: [GOL-sound-designs, GOL-honest-evidence]
+    statement: >-
+      A design is adopted only while the measurement it cites agrees with it. A
+      design whose cited measurement contradicts it is rejected, and one whose
+      cited measurement is absent, unreadable or in any state other than the
+      one its policy requires is not adopted.
+    rationale: >-
+      IFC-evidence__designs in goals.yaml: a design proven over a refuted
+      measurement is proven of nothing, and one proven over no measurement is
+      argued, not built.
 
 definitions:
   - id: DEF-proof-obligation
@@ -208,13 +237,14 @@ definitions:
     meaning: >-
       A trial is current exactly when three things hold: its validity, after any
       amendments appended to it, is valid; its target is in the premise graph;
-      and either it recorded no fingerprints, having been made before trials
-      carried them, or the fingerprints it recorded -- one for each node by its
-      id, its target and each node its target then depended on -- are exactly
-      those its target and the nodes it now depends on have now, id for id: the
-      same ids, and for each id the same fingerprint. A node's fingerprint is
-      determined by its statement and the premises it cites, and differs
-      whenever either differs. Only current trials are counted, toward
+      and the fingerprints it recorded -- one for each node by its id, its
+      target and each node its target then depended on -- are exactly those its
+      target and the nodes it now depends on have now, id for id: the same ids,
+      and for each id the same fingerprint. A trial made before trials carried
+      fingerprints counts as having recorded those its target and the nodes its
+      target depended on had in the build when it was made. A node's
+      fingerprint is determined by its statement and the premises it cites, and
+      differs whenever either differs. Only current trials are counted, toward
       sufficiency, consensus and refutation alike.
 
   - id: DEF-ledger
@@ -291,7 +321,15 @@ definitions:
     meaning: >-
       The code at the git tag tdlp--v<version>, where <version> is the one
       version that the plugin's manifest, its marketplace entry and the
-      package all name.
+      package all name. A project runs a release as it was published when every
+      server the plugin starts installs from that tag.
+
+  - id: DEF-contract-state
+    term: Contract state
+    meaning: >-
+      The state a contract reads in, where a design cites it: the weakest state
+      among its slices, refuted weakest, then stale, contested, insufficient and
+      supported; and no evidence when it has no slice.
 
   - id: DEF-report
     term: Report
@@ -355,11 +393,11 @@ lemmas:
       nodes a candidate with the same statement and cited premises, admits e
       with the same nodes behind it and the same fingerprints, and each of e's
       trials is current exactly as it was. If e is in neither build, none of its
-      trials is current in either. For trials that recorded fingerprints this is
-      the invalidation AXM-blast-radius-invalidation requires; a trial made
-      before trials carried fingerprints is not invalidated this way, and the
-      lemma claims nothing about it. It needs no traversal order and no acyclic
-      graph.
+      trials is current in either. By DEF-current-trial a trial made before
+      trials carried fingerprints counts as having recorded those its nodes had
+      when it was made, so all of this holds of it too; this is the invalidation
+      AXM-blast-radius-invalidation requires. It needs no traversal order and no
+      acyclic graph.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-asserted-is-inert
@@ -620,33 +658,57 @@ branches:
       names it; DEF-agent-commit says which commits are the agent's. By
       AXM-goal-set-is-human such a commit is refused, and one made anyway is
       reported until the human next commits the goal set. By
-      AXM-commit-is-approval a declaration takes effect from the committed
-      revision, so a policy declared in goals.yaml was approved by the human's
-      commit of it; by AXM-goal-set-is-human an agent commit made since does
-      not stand as that approval, so while one is reported, an adoption under
-      the policy rests on no approval of the human's and needs the human named
-      as its approver. evidence: CTR-goal-set-stays-human
+      AXM-commit-is-approval a policy declared in goals.yaml takes effect from
+      the committed revision, and by AXM-goal-set-is-human the human's commit of
+      the goal set approves it; while an agent commit to the goal set is
+      reported, AXM-goal-set-is-human lets no adoption under such a policy stand
+      as approved unless the human is named as its approver.
+      evidence: CTR-goal-set-stays-human
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-plugin-pinned
     subject: CMP-plugin
     claim_type: contract
     statement: >-
-      Every server the plugin starts installs from the release whose version
-      the plugin's manifest names and is pointed at the project that enabled
-      it, and a declared test runs with that project's environment ahead of
-      the harness's own.
+      Every server the plugin starts installs from the tag of the version the
+      plugin's manifest names and is pointed at the project that enabled it,
+      and a declared test runs in that project's environment, not in the
+      harness's own.
     premises: [AXM-pinned-and-rooted, DEF-release]
     derivation_rule: >-
-      By AXM-pinned-and-rooted a project runs the harness as one release
-      published it, and by DEF-release a release is the code at the tag of the
-      one version the plugin's manifest names, so every server the plugin
-      starts installs from that tag. By AXM-pinned-and-rooted the harness
-      reads the declarations and ledger of the project it measures, so each
-      server is pointed at the project that enabled it; and it runs that
-      project's tests in that project's environment, so a declared test runs
-      with that environment ahead of the harness's own.
+      By AXM-pinned-and-rooted a project that enables the harness runs it as one
+      release published it; by DEF-release that release is the code at the tag
+      of the one version the plugin's manifest names, and running it as it was
+      published means every server the plugin starts installs from that tag.
+      By AXM-pinned-and-rooted the harness measures the project that enabled
+      it, reading that project's declarations and ledger, so each server is
+      pointed at that project; and it runs that project's tests in that
+      project's environment, not in the harness's own, so a declared test runs
+      there.
       evidence: CTR-plugin-pinned-and-rooted
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-design-gate-reads-evidence
+    subject: IFC-evidence__designs
+    claim_type: contract
+    statement: >-
+      Under a policy criterion that requires a branch's evidence in a state, the
+      branch is adopted only while every contract its derivation rule cites
+      reads in that state. A cited contract that reads refuted rejects the
+      decision; one that reads in any other state, has no evidence, or cannot be
+      read leaves the decision short of adoption.
+    premises: [AXM-design-rests-on-measurement, DEF-contract-state]
+    derivation_rule: >-
+      A contract a branch's derivation rule cites is the measurement the design
+      cites, and by DEF-contract-state the state it reads in is that of its
+      weakest slice, or no evidence. By AXM-design-rests-on-measurement the
+      design is adopted only while that measurement agrees with it, which under
+      a criterion requiring a state means every cited contract reads in that
+      state; a cited contract that reads refuted contradicts the design, so the
+      decision is rejected; and one that reads in another state, has no slice,
+      or cannot be read is a measurement short of the required state, absent or
+      unreadable, so the decision is not adopted.
+      evidence: CTR-design-gate-reads-evidence
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
@@ -662,3 +724,4 @@ policies:
       - {target: BRN-monitor-moves-nothing, require: proven, evidence: supported}
       - {target: BRN-goal-guard, require: proven, evidence: supported}
       - {target: BRN-plugin-pinned, require: proven, evidence: supported}
+      - {target: BRN-design-gate-reads-evidence, require: proven, evidence: supported}

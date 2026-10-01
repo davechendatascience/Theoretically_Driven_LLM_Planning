@@ -23,9 +23,12 @@ components:
       Rejects unmeasurable contracts and non-node components, and refuses to
       let uncommitted edits take effect
     failure_modes:
-      - {id: FM-worktree-leak, observable: an uncommitted threshold change alters a verdict}
-      - {id: FM-accepts-unmeasurable, observable: a contract with no test accepts evidence}
-      - {id: FM-goal-measured-by-agent, observable: a goal whose measure or its test lives in belief.yaml loads with no issue}
+      - {id: FM-worktree-leak, observable: "an uncommitted threshold change alters a verdict",
+         observed_by: CTR-declarations-gate, case: "tests.test_declarations::test_working_tree_edits_do_not_take_effect"}
+      - {id: FM-accepts-unmeasurable, observable: "a contract with no test accepts evidence",
+         observed_by: CTR-declarations-gate, case: "tests.test_declarations::test_not_evaluable_contract_accepts_no_evidence"}
+      - {id: FM-goal-measured-by-agent, observable: "a goal whose measure or its test lives in belief.yaml loads with no issue",
+         observed_by: CTR-declarations-gate, case: "tests.test_declarations.TestGoals::test_a_goal_measured_by_what_the_agent_writes_is_reported"}
     remediation: Tighten validate() and _validate_goals(); the fatal-code set in Declarations.is_scorable
     goal: GOL-honest-evidence
     code:
@@ -39,9 +42,12 @@ components:
       Reports an unknown premise, a cycle among declarations and a subject this
       file no longer declares, and refuses to let uncommitted edits take effect
     failure_modes:
-      - {id: FM-cycle-admitted, observable: two declarations citing each other load with no CIRCULAR_DEPENDENCY issue}
-      - {id: FM-removed-subject-silent, observable: a branch whose component left belief.yaml reads as governing it}
-      - {id: FM-worktree-leak, observable: an uncommitted axiom edit alters a proof state}
+      - {id: FM-cycle-admitted, observable: "two declarations citing each other load with no CIRCULAR_DEPENDENCY issue",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations::test_validation_detects_circular_declarations"}
+      - {id: FM-removed-subject-silent, observable: "a branch whose component left belief.yaml reads as governing it",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_coverage::test_a_removed_component_leaves_its_design_broken"}
+      - {id: FM-worktree-leak, observable: "an uncommitted axiom edit alters a proof state",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations::test_git_head_loading_and_pending_drift"}
     remediation: validate() and validate_links() in the consistency declarations loader
     goal: GOL-sound-designs
     code:
@@ -56,10 +62,14 @@ components:
       dependency order rather than file order, moves a node to REFUTED only on a
       falsified probe, and counts independent trials by strategy and actor
     failure_modes:
-      - {id: FM-file-order, observable: a branch declared above its premise is dropped from the graph}
-      - {id: FM-gap-refutes, observable: an entailment gap is reported as a counterexample}
-      - {id: FM-stale-carried, observable: a trial keeps counting after its target or a premise is restated}
-      - {id: FM-repeat-counts, observable: three probes of one strategy by one actor close an obligation}
+      - {id: FM-file-order, observable: "a branch declared above its premise is dropped from the graph",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_graph::test_declarations_join_in_dependency_order_not_file_order"}
+      - {id: FM-gap-refutes, observable: "an entailment gap is reported as a counterexample",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_gap_doubts_and_never_refutes"}
+      - {id: FM-stale-carried, observable: "a trial keeps counting after its target or a premise is restated",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_trial_recorded_against_another_statement_is_not_carried"}
+      - {id: FM-repeat-counts, observable: "three probes of one strategy by one actor close an obligation",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_model_state_transitions"}
     remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints and independence count
     goal: GOL-sound-designs
     code:
@@ -75,10 +85,14 @@ components:
       and its trials on record, refusing a falsification argued from the source,
       and naming the revision every decision was taken at
     failure_modes:
-      - {id: FM-mutating-history, observable: an amendment edits the record it corrects}
-      - {id: FM-withdrawn-erased, observable: a withdrawn proposal leaves no trace}
-      - {id: FM-declared-masked, observable: a stale staged copy stands in for a declaration}
-      - {id: FM-source-falsification, observable: a counterexample naming a source file is recorded as a refutation}
+      - {id: FM-mutating-history, observable: "an amendment edits the record it corrects",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_amend_reclassifies_without_editing"}
+      - {id: FM-withdrawn-erased, observable: "a withdrawn proposal leaves no trace",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_withdrawn_proposal_and_its_trials_stay_on_record"}
+      - {id: FM-declared-masked, observable: "a stale staged copy stands in for a declaration",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_trials_carry_over_when_the_same_statement_is_declared"}
+      - {id: FM-source-falsification, observable: "a counterexample naming a source file is recorded as a refutation",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_verify_step_refuses_a_falsification_argued_from_source"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -99,11 +113,16 @@ components:
       that no asserted evidence can influence, reads a gate contract from its
       latest run, and sets evidence aside once the code it measured has changed
     failure_modes:
-      - {id: FM-pollution, observable: an annotation changes a posterior}
-      - {id: FM-silent-pooling, observable: incompatible trials land in one slice}
-      - {id: FM-premature-verdict, observable: a verdict is issued below n_min}
-      - {id: FM-stale-counted, observable: a trial measured before a claimed file changed still counts as current}
-      - {id: FM-blind-outside-git, observable: a trial resting on a declared input git ignores stays current after that file changes, or is never current}
+      - {id: FM-pollution, observable: "an annotation changes a posterior",
+         observed_by: CTR-model-honest, case: "tests.test_beliefs::test_asserted_evidence_can_never_move_a_posterior"}
+      - {id: FM-silent-pooling, observable: "incompatible trials land in one slice",
+         observed_by: CTR-model-honest, case: "tests.test_beliefs::test_incompatible_evidence_is_never_pooled"}
+      - {id: FM-premature-verdict, observable: "a verdict is issued below n_min",
+         observed_by: CTR-model-honest, case: "tests.test_beliefs::test_insufficient_evidence_is_a_state_not_a_low_number"}
+      - {id: FM-stale-counted, observable: "a trial measured before a claimed file changed still counts as current",
+         observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestStaleness::test_evidence_measured_before_a_claimed_file_changed_is_stale"}
+      - {id: FM-blind-outside-git, observable: "a trial resting on a declared input git ignores stays current after that file changes, or is never current",
+         observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestInputsOutsideGit::test_the_same_bytes_again_are_current"}
     remediation: model.eligible() and the slice key in compute_slices(); staleness.CodeStaleness
     goal: GOL-honest-evidence
     code:
@@ -119,9 +138,12 @@ components:
       no test targets the leading candidate, and refuses to adopt on an
       insufficient or stale slice
     failure_modes:
-      - {id: FM-optimise-the-unseen, observable: an optimisation is recommended for an uninstrumented component}
-      - {id: FM-e2e-attribution, observable: a component is blamed with no local observation}
-      - {id: FM-adopt-on-stale, observable: a policy adopts on a slice whose evidence predates a code change}
+      - {id: FM-optimise-the-unseen, observable: "an optimisation is recommended for an uninstrumented component",
+         observed_by: CTR-diagnosis-refuses-blind-optimisation, case: "tests.test_diagnose_decide::test_unobserved_component_with_no_test_limits_coverage"}
+      - {id: FM-e2e-attribution, observable: "a component is blamed with no local observation",
+         observed_by: CTR-diagnosis-refuses-blind-optimisation, case: "tests.test_diagnose_decide::test_upstream_of_a_failure_is_suspected_not_ignored"}
+      - {id: FM-adopt-on-stale, observable: "a policy adopts on a slice whose evidence predates a code change",
+         observed_by: CTR-diagnosis-refuses-blind-optimisation, case: "tests.test_diagnose_decide::test_a_stale_slice_cannot_satisfy_an_adopt_criterion"}
     remediation: diagnose() status assignment and the coverage_limited branch; decide.evaluate_policy
     goal: GOL-honest-evidence
     code:
@@ -135,9 +157,12 @@ components:
       Records measured evidence with an artifact, its hash and the revision it
       ran at, never transcribed; and no tool on the surface writes a belief
     failure_modes:
-      - {id: FM-fabricated-metric, observable: a declared metric is synthesised from an exit code}
-      - {id: FM-unversioned-run, observable: a measured record carries no sw_revision}
-      - {id: FM-unbacked-import, observable: an imported record is recorded without an artifact the server copied and hashed, or against a test its contract does not list}
+      - {id: FM-fabricated-metric, observable: "a declared metric is synthesised from an exit code",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestRunner::test_exit_code_fallback_does_not_fabricate_a_declared_metric"}
+      - {id: FM-unversioned-run, observable: "a measured record carries no sw_revision",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestRunner::test_every_measured_record_names_the_revision_it_ran_at"}
+      - {id: FM-unbacked-import, observable: "an imported record is recorded without an artifact the server copied and hashed, or against a test its contract does not list",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestToolSurface::test_ingest_accepts_a_complete_record"}
     remediation: runner.run_test() synthesis branch; the tool list in server.py; the checks in server.ingest()
     goal: GOL-honest-evidence
     code:
@@ -159,9 +184,12 @@ components:
       touches; reports a damaged ledger line, a changed artifact or stamp, and an
       agent approving its own adoption; and writes nothing while doing so
     failure_modes:
-      - {id: FM-monitor-writes, observable: a monitor tool changes a ledger file}
-      - {id: FM-missed-impact, observable: a changed claimed path is not traced to its contract}
-      - {id: FM-silent-tamper, observable: an edited artifact or stamp audits clean}
+      - {id: FM-monitor-writes, observable: "a monitor tool changes a ledger file",
+         observed_by: CTR-monitor-read-only, case: "tests.test_stamp_monitor::test_the_tools_read_and_never_write"}
+      - {id: FM-missed-impact, observable: "a changed claimed path is not traced to its contract",
+         observed_by: CTR-monitor-read-only, case: "tests.test_stamp_monitor.TestImpact::test_a_claimed_change_is_traced_through_both_ledgers"}
+      - {id: FM-silent-tamper, observable: "an edited artifact or stamp audits clean",
+         observed_by: CTR-monitor-read-only, case: "tests.test_stamp_monitor.TestAudit::test_an_edited_artifact_is_caught"}
     remediation: stamp_monitor.impact / audit / workflow; the tool list in stamp_monitor/server.py
     goal: GOL-honest-evidence
     code:
@@ -174,10 +202,14 @@ components:
       passes the human's; records any agent commit to the goal set since the human's last; and
       withdraws the goals policy's standing approval while one exists
     failure_modes:
-      - {id: FM-goal-set-leak, observable: an agent commit changing a goal's test file is let through the guard}
-      - {id: FM-freed-by-removal, observable: removing a test from goals.yaml frees its file in the same commit}
-      - {id: FM-stale-ratification, observable: an adoption under the goals policy records without an approver after the agent changed the goal set}
-      - {id: FM-human-blocked, observable: a commit the human types is refused}
+      - {id: FM-goal-set-leak, observable: "an agent commit changing a goal's test file is let through the guard",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_an_agent_commit_to_the_goal_set_is_refused"}
+      - {id: FM-freed-by-removal, observable: "removing a test from goals.yaml frees its file in the same commit",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_dropping_a_test_from_goals_yaml_does_not_free_its_file"}
+      - {id: FM-stale-ratification, observable: "an adoption under the goals policy records without an approver after the agent changed the goal set",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestRatification::test_an_agent_change_to_the_goal_set_withdraws_that"}
+      - {id: FM-human-blocked, observable: "a commit the human types is refused",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_the_same_commit_by_the_human_passes"}
     remediation: goals.goal_set, check_commit, goal_history and ratification_gap
     goal: GOL-goals-stay-mine
     code:
@@ -190,9 +222,12 @@ components:
       project Claude Code reports; the verifier holds only consistency-belief tools its server
       registers; all three servers resolve the same project root
     failure_modes:
-      - {id: FM-wrong-root, observable: a server enabled in one project reads another project's ledger, or an empty one}
-      - {id: FM-version-drift, observable: the plugin, the marketplace entry, the package and the pinned tag name different versions}
-      - {id: FM-toolless-verifier, observable: the verifier names a tool its server does not register}
+      - {id: FM-wrong-root, observable: "a server enabled in one project reads another project's ledger, or an empty one",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_all_three_servers_resolve_the_same_project"}
+      - {id: FM-version-drift, observable: "the plugin, the marketplace entry, the package and the pinned tag name different versions",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_every_server_installs_from_this_versions_tag"}
+      - {id: FM-toolless-verifier, observable: "the verifier names a tool its server does not register",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_the_verifier_holds_only_tools_its_server_registers"}
     remediation: component_belief.project.project_root; plugin/.mcp.json; plugin/agents/consistency-verifier.md
     goal: GOL-any-project
     code:
@@ -328,6 +363,39 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-plugin]
 
+  # Integration: each interface's producer output run through its consumer, both sides at once.
+  - id: CTR-ifc-declarations-model
+    subject: IFC-declarations__model
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-ifc-declarations-model]
+
+  - id: CTR-ifc-model-diagnose
+    subject: IFC-model__diagnose
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-ifc-model-diagnose]
+
+  - id: CTR-ifc-cdeclarations-proofdag
+    subject: IFC-cdeclarations__proofdag
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-ifc-cdeclarations-proofdag]
+
+  - id: CTR-ifc-proofdag-views
+    subject: IFC-proofdag__views
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-ifc-proofdag-views]
+
 tests:
   - id: TST-declarations
     layer: component
@@ -411,6 +479,38 @@ tests:
     capture: [case]
     reads: [tests/conftest.py, pyproject.toml]
 
+  - id: TST-ifc-declarations-model
+    layer: interface
+    targets: [IFC-declarations__model]
+    run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestDeclarationsToModel -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
+  - id: TST-ifc-model-diagnose
+    layer: interface
+    targets: [IFC-model__diagnose]
+    run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestModelToDiagnosis -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
+  - id: TST-ifc-cdeclarations-proofdag
+    layer: interface
+    targets: [IFC-cdeclarations__proofdag]
+    run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestConsistencyDeclarationsToProofDag -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
+  - id: TST-ifc-proofdag-views
+    layer: interface
+    targets: [IFC-proofdag__views]
+    run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestProofDagToLedgerViews -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
 priors: []
 
 policies:
@@ -426,5 +526,9 @@ policies:
       - {slice: CTR-surface-intact, require: supported}
       - {slice: CTR-plugin-pinned-and-rooted, require: supported}
       - {slice: CTR-goal-set-stays-human, require: supported}
+      - {slice: CTR-ifc-declarations-model, require: supported}
+      - {slice: CTR-ifc-model-diagnose, require: supported}
+      - {slice: CTR-ifc-cdeclarations-proofdag, require: supported}
+      - {slice: CTR-ifc-proofdag-views, require: supported}
       - {safety_gates: all_passed}
     weights: null
