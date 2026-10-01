@@ -70,9 +70,10 @@ axioms:
     domain: epistemic
     goal: GOL-honest-evidence
     statement: >-
-      A measured belief -- the posterior over a contract slice -- changes only
-      through belief-eligible evidence, as DEF-belief-eligible defines it; a
-      statement by an agent or a human carries zero weight in it.
+      Under the declarations in effect, a measured belief -- the posterior over
+      a contract slice -- changes only through belief-eligible evidence, as
+      DEF-belief-eligible defines it; a statement by an agent or a human carries
+      zero weight in it.
     rationale: >-
       An LLM agent is a fluent producer of plausible numbers; a belief it can
       write is a belief that measures nothing. A proof state is not a measured
@@ -168,9 +169,9 @@ axioms:
     statement: >-
       A project that enables the plugin at a version runs the release that
       plugin's manifest names, as it was published. Every server the plugin
-      starts measures that project: it reads that project's declarations and
-      ledger, and runs that project's tests in that project's environment, not
-      in the harness's own.
+      starts measures that project and no other: the only declarations and
+      ledger it reads are that project's, and the only tests it runs are that
+      project's, in that project's environment, not in the harness's own.
     rationale: >-
       GOL-any-project in goals.yaml. A server that drifted to unreleased code,
       read the repository it was installed from, or ran a test with its own
@@ -180,16 +181,16 @@ axioms:
     domain: verification
     goal: [GOL-sound-designs, GOL-honest-evidence]
     statement: >-
-      A design is a branch, and adopting it is a decision on that branch under a
-      policy criterion; the state that criterion requires of the branch's
-      evidence is the state the design's policy requires. A design is adopted
-      only while the measurement it cites agrees with it. The measurement a
-      design cites is each contract its derivation rule names, each read on its
-      own; it agrees with the design exactly when every one of them reads in the
-      required state, and contradicts it exactly when one reads refuted where
-      the required state is another. A design whose cited measurement
-      contradicts it is rejected, and one whose cited measurement does not
-      agree, is absent or cannot be read is not adopted.
+      Every branch is a design and every design a branch, and adopting one is a
+      decision on that branch under a policy criterion; the state that criterion
+      requires of the branch's evidence is the state the design's policy
+      requires. A design is adopted only while the measurement it cites agrees
+      with it. The measurement a design cites is each contract its derivation
+      rule names, each read on its own; it agrees with the design exactly when
+      every one of them reads in the required state, and contradicts it exactly
+      when one reads refuted where the required state is another. A design whose
+      cited measurement contradicts it is rejected, and one whose cited
+      measurement does not agree, is absent or cannot be read is not adopted.
     rationale: >-
       IFC-evidence__designs in goals.yaml: a design proven over a refuted
       measurement is proven of nothing, and one proven over no measurement is
@@ -418,14 +419,16 @@ lemmas:
 
   - id: LMA-asserted-is-inert
     statement: >-
-      A record with provenance asserted cannot change any measured belief.
+      Under the declarations in effect, a record with provenance asserted cannot
+      change any measured belief.
     premises: [AXM-no-belief-write-path, DEF-belief-eligible]
     derivation_rule: >-
       By DEF-belief-eligible every record carries exactly one provenance, and a
       record whose provenance is asserted is neither measured nor imported, so
-      it is not belief-eligible evidence. By AXM-no-belief-write-path a
-      measured belief changes only through belief-eligible evidence. So no
-      measured belief changes through a record whose provenance is asserted.
+      it is not belief-eligible evidence. By AXM-no-belief-write-path, under the
+      declarations in effect, a measured belief changes only through
+      belief-eligible evidence. So under those declarations no measured belief
+      changes through a record whose provenance is asserted.
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: LMA-worktree-inert
@@ -520,9 +523,9 @@ branches:
     claim_type: contract
     statement: >-
       Only committed declarations reach the belief model; no evidence recorded
-      against a contract that no declared test can measure moves a belief; and
-      making an edit to a declaration file, and nothing else, changes no verdict
-      the servers report.
+      against a contract that no declared test can measure moves a measured
+      belief; and making an edit to a declaration file, and nothing else,
+      changes no verdict the servers report.
     premises: [LMA-worktree-inert, AXM-no-belief-write-path, AXM-commit-is-approval, DEF-belief-eligible, DEF-evidence-record]
     derivation_rule: >-
       By AXM-commit-is-approval a declaration takes effect only from the
@@ -530,11 +533,12 @@ branches:
       By DEF-evidence-record a record is recorded against exactly one contract
       and enters that contract's slices alone; by DEF-belief-eligible it is
       belief-eligible only when that contract is one a declared test can
-      measure, and by AXM-no-belief-write-path a measured belief -- the
-      posterior over a contract slice -- moves through nothing else. So a record
-      against a contract no declared test can measure moves no belief. By
-      LMA-worktree-inert making an edit to a declaration file, and nothing else,
-      changes no verdict the servers report. evidence: CTR-declarations-gate
+      measure, and by AXM-no-belief-write-path, under the declarations in
+      effect, a measured belief -- the posterior over a contract slice -- moves
+      through nothing else. So a record against a contract no declared test can
+      measure moves no measured belief. By LMA-worktree-inert making an edit to
+      a declaration file, and nothing else, changes no verdict the servers
+      report. evidence: CTR-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-consistency-declarations-gate
@@ -571,26 +575,25 @@ branches:
     subject: CMP-belief-model
     claim_type: contract
     statement: >-
-      A slice's posterior changes only through belief-eligible evidence, and
-      never through a record whose provenance is asserted; below its declared
-      sufficiency a slice issues no verdict; and trials that differ on their
-      contract's declared compatibility key are never pooled into one measured
-      belief.
+      Under the declarations in effect, a slice's posterior changes only through
+      belief-eligible evidence, and never through a record whose provenance is
+      asserted; below its declared sufficiency a slice issues no verdict; and
+      trials that differ on their contract's declared compatibility key are
+      never pooled into one measured belief.
     premises: [AXM-no-belief-write-path, LMA-asserted-is-inert, AXM-sparse-data-no-verdict, DEF-contract-slice]
     derivation_rule: >-
-      By AXM-no-belief-write-path a measured belief -- the posterior over a
-      contract slice -- changes only through belief-eligible evidence, and by
-      LMA-asserted-is-inert never through an asserted record. By
-      DEF-contract-slice a slice is a claim of its own, its verdict is on that
-      slice, and its sufficiency is counted over its own trials, so by
-      AXM-sparse-data-no-verdict a slice below its declared sufficiency issues
-      no verdict. By DEF-contract-slice trials that differ on a key of the
-      contract's declared compatibility key belong to different slices; by
-      AXM-no-belief-write-path a measured belief is the posterior over one
-      slice, and by DEF-contract-slice that posterior is computed from its own
-      slice's trials and the contract's declared prior alone, so they are never
-      pooled into one measured belief.
-      evidence: CTR-model-honest
+      By AXM-no-belief-write-path, under the declarations in effect, a measured
+      belief -- the posterior over a contract slice -- changes only through
+      belief-eligible evidence, and by LMA-asserted-is-inert never through an
+      asserted record. By DEF-contract-slice a slice is a claim of its own, its
+      verdict is on that slice, and its sufficiency is counted over its own
+      trials, so by AXM-sparse-data-no-verdict a slice below its declared
+      sufficiency issues no verdict. By DEF-contract-slice trials that differ on
+      a key of the contract's declared compatibility key belong to different
+      slices; by AXM-no-belief-write-path a measured belief is the posterior
+      over one slice, and by DEF-contract-slice that posterior is computed from
+      its own slice's trials and the contract's declared prior alone, so they
+      are never pooled into one measured belief. evidence: CTR-model-honest
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-diagnosis-coverage-first
@@ -705,10 +708,11 @@ branches:
       manifest names, and it runs as published exactly when every server the
       plugin starts installs from that tag, so every one does. By
       AXM-pinned-and-rooted every server the plugin starts measures the project
-      that enabled it, reading that project's declarations and ledger, so each
-      is pointed at that project; and each runs that project's tests in that
-      project's environment, not in the harness's own, so a declared test any of
-      them runs runs there. evidence: CTR-plugin-pinned-and-rooted
+      that enabled it and no other: the only declarations and ledger it reads
+      are that project's, so each is pointed at that project, and the only tests
+      it runs are that project's, in that project's environment and not the
+      harness's own, so a declared test any of them runs runs there. evidence:
+      CTR-plugin-pinned-and-rooted
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-design-gate-reads-evidence
