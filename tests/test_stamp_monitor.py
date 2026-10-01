@@ -189,6 +189,45 @@ class TestAudit:
     def test_a_run_records_its_artifact_path_the_same_on_every_platform(self, project):
         assert "\\" not in run(project)["artifact_uri"]
 
+    def test_a_missing_artifact_whose_records_are_all_set_aside_informs(self, project, monkeypatch):
+        """The remedy for an artifact nobody can audit is to set its records aside with amend.
+        The audit read raw trials and went on blocking after every record was quarantined;
+        it now says what was done and stops blocking -- but only once nothing counts on it."""
+        from component_belief import server
+        from component_belief.store import Store
+
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(project))
+        result = run(project)
+        (Store(project).artifacts_dir / result["run_id"] / "result.json").unlink()
+        assert codes(audit(project))["ARTIFACT_MISSING"] == BLOCK
+
+        ids = result["evidence_ids"]
+        server.amend(evidence_ids=ids[:-1], validity="quarantined", reason="artifact lost")
+        assert codes(audit(project))["ARTIFACT_MISSING"] == BLOCK, "one record still counts"
+
+        server.amend(evidence_id=ids[-1], validity="quarantined", reason="artifact lost")
+        [finding] = [f for f in audit(project) if f.code == "ARTIFACT_MISSING"]
+        assert finding.severity == INFO
+        assert f"all {len(ids)} of its records are set aside (quarantined: artifact lost)" in finding.message
+
+    def test_an_unhashed_import_set_aside_is_no_longer_a_warning(self, project, monkeypatch):
+        import json
+
+        from component_belief import server
+
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(project))
+        run(project)
+        ledger = project / ".belief" / "evidence.jsonl"
+        records = [json.loads(line) for line in ledger.read_text(encoding="utf-8").splitlines()]
+        old = {**records[0], "id": "EV-9000", "run_id": "RUN-0900", "provenance": "imported",
+               "artifact_hash": ""}
+        ledger.write_text("".join(json.dumps(r) + "\n" for r in records + [old]), encoding="utf-8")
+        assert codes(audit(project))["IMPORT_UNHASHED"] == WARN
+
+        server.amend(evidence_id="EV-9000", validity="quarantined", reason="predates hashing")
+        unhashed = [f for f in audit(project) if f.code == "IMPORT_UNHASHED"]
+        assert [f.severity for f in unhashed] == [INFO] and "RUN-0900" in unhashed[0].message
+
     def test_an_edited_stamp_and_a_damaged_ledger_line_are_caught(self, project):
         from component_belief.store import Store
 

@@ -98,7 +98,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.1" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -550,6 +550,19 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.6.1 — 2026-10-01 · the audit sees what was set aside
+
+- **An audit finding on evidence nothing counts any more stops blocking.** The remedy for an
+  artifact that cannot be audited is to set its records aside with `amend`. The audit read raw
+  trials and never folded amendments, so it went on blocking after every record was quarantined.
+  A missing or mismatched artifact, or an untrusted stamp, now blocks while any record resting on
+  it still counts. Once none does, it is reported as information naming the amendment's reason;
+  it is never dropped. An unhashed import whose records are all set aside moves from a warning to
+  one information line. In embodied_ai: four blocks became information, and 157 warnings became
+  112 plus one line for 45 runs set aside.
+- The design came first: `AXM-damage-blocks-while-it-counts`, `DEF-set-aside` (which states what
+  the model already did -- a set-aside record moves no belief) and `BRN-audit-blocks-what-counts`.
 
 ### 0.6.0 — 2026-10-01 · every stage of the V has a home
 

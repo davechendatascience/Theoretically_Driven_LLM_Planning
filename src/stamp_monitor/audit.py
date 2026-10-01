@@ -12,7 +12,10 @@ stops existing. This re-checks, mechanically, what the ledgers assume:
   - the declarations in effect are the committed ones
 
 It never repairs anything. A finding names what is wrong and where; what to do about it -- amend,
-re-run, restore from git -- is a decision for someone accountable for it.
+re-run, restore from git -- is a decision for someone accountable for it. Once that decision is
+made and every record resting on a damaged artifact or stamp has been set aside by an amendment,
+nothing counts on it any more: the finding stays, as information naming the amendment, and stops
+blocking.
 """
 
 from __future__ import annotations
@@ -84,8 +87,9 @@ def audit(root: Path) -> list[Finding]:
             findings.append(Finding("AMENDMENT_TARGET_UNKNOWN", WARN, str(record.get("target")),
                                     "an amendment reclassifies a trial that is not in the ledger"))
 
-    _stamps(root, store, trials, findings)
-    _artifacts(root, trials, findings)
+    set_aside = _set_aside(trials, ledgers["evidence"])
+    _stamps(root, store, trials, findings, set_aside)
+    _artifacts(root, trials, findings, set_aside)
 
     for decision in ledgers["decisions"]:
         missing = sorted(set(decision.get("evidence_ids") or []) - ids)
@@ -110,9 +114,36 @@ def audit(root: Path) -> list[Finding]:
     return findings
 
 
-def _stamps(root: Path, store: Store, trials: list[dict], findings: list[Finding]) -> None:
+def _set_aside(trials: list[dict], records: list[dict]) -> dict[str, str]:
+    """Each trial no longer counted as evidence, by id, with why: its validity after the
+    amendments appended to it (folded as the store folds them) is not valid."""
+    validity = {str(t.get("id")): (str(t.get("validity") or "valid"), "") for t in trials}
+    for record in records:
+        target = str(record.get("target") or "")
+        if record.get("kind") != "amendment" or target not in validity:
+            continue
+        if record.get("validity"):
+            validity[target] = (str(record["validity"]), str(record.get("reason") or ""))
+        if record.get("supersede_with"):
+            validity[target] = ("superseded", str(record.get("reason") or ""))
+    return {tid: (f"{state}: {reason}" if reason else state)
+            for tid, (state, reason) in validity.items() if state != "valid"}
+
+
+def _settled(records: list[dict], set_aside: dict[str, str]) -> str | None:
+    """Why nothing counts on these records any more, or None while one of them still does."""
+    if not records or any(str(r.get("id")) not in set_aside for r in records):
+        return None
+    reasons = sorted({set_aside[str(r.get("id"))] for r in records})
+    return (f"all {len(records)} of its records are set aside ({reasons[0]}"
+            + (f", and {len(reasons) - 1} other reason(s)" if len(reasons) > 1 else "") + ")")
+
+
+def _stamps(root: Path, store: Store, trials: list[dict], findings: list[Finding],
+            set_aside: dict[str, str]) -> None:
     staleness = CodeStaleness(root)
     bad: dict[str, str] = {}
+    by_run: dict[str, list[dict]] = {}
     unstamped = 0
     for t in trials:
         if t.get("provenance") != "measured":
@@ -122,8 +153,11 @@ def _stamps(root: Path, store: Store, trials: list[dict], findings: list[Finding
             unstamped += 1
         elif isinstance(stamp, str):
             bad.setdefault(str(t.get("run_id")), stamp)
+            by_run.setdefault(str(t.get("run_id")), []).append(t)
     for run_id, reason in sorted(bad.items()):
-        findings.append(Finding("STAMP_UNTRUSTED", BLOCK, run_id, reason))
+        settled = _settled(by_run[run_id], set_aside)
+        findings.append(Finding("STAMP_UNTRUSTED", INFO if settled else BLOCK, run_id,
+                                f"{reason}; {settled}" if settled else reason))
     if unstamped:
         findings.append(Finding(
             "UNSTAMPED_EVIDENCE", INFO, f"{unstamped} trial(s)",
@@ -131,39 +165,51 @@ def _stamps(root: Path, store: Store, trials: list[dict], findings: list[Finding
             "see discarded uncommitted edits or tell a rewritten history from changed code"))
 
 
-def _artifacts(root: Path, trials: list[dict], findings: list[Finding]) -> None:
+def _artifacts(root: Path, trials: list[dict], findings: list[Finding],
+               set_aside: dict[str, str] | None = None) -> None:
     """One finding per artifact, not per trial: a run's trials share one file.
 
     Imported trials are held to the same check. Since `ingest` copies and hashes the artifact
     itself, an import is as auditable as a run; one recorded before that, with no hash, rests on
     whatever the caller said the file was, and is reported as such."""
-    checked: dict[tuple[str, str], str] = {}
-    unhashed: set[str] = set()
+    set_aside = set_aside or {}
+    by_key: dict[tuple[str, str], list[dict]] = {}
+    unhashed: dict[str, list[dict]] = {}
     for t in trials:
         if t.get("provenance") not in ("measured", "imported") or not t.get("artifact_uri"):
             continue
         key = (str(t["artifact_uri"]), str(t.get("artifact_hash") or ""))
+        by_key.setdefault(key, []).append(t)
         if t.get("provenance") == "imported" and not key[1]:
-            unhashed.add(str(t.get("run_id")))
-        if key in checked:
-            continue
+            unhashed.setdefault(str(t.get("run_id")), []).append(t)
+    for key, records in by_key.items():
+        first = records[0]
         # a run recorded on Windows wrote its path with backslashes, which name no file elsewhere:
         # 43 present artifacts in this repository read as gone on Linux until the separator was read
         path = root / key[0].replace("\\", "/")
         if not path.exists():
-            checked[key] = "missing"
-            findings.append(Finding("ARTIFACT_MISSING", BLOCK, str(t.get("run_id")),
-                                    f"{key[0]} is gone; its trials can no longer be audited"
-                                    if t.get("provenance") == "measured" else
-                                    f"{key[0]} is not a file here; this import cannot be audited"))
+            code, message = "ARTIFACT_MISSING", (
+                f"{key[0]} is gone; its trials can no longer be audited"
+                if first.get("provenance") == "measured" else
+                f"{key[0]} is not a file here; this import cannot be audited")
         elif key[1] and not _artifact_matches(path, key[1]):
-            checked[key] = "mismatch"
-            findings.append(Finding("ARTIFACT_HASH_MISMATCH", BLOCK, str(t.get("run_id")),
-                                    f"{key[0]} no longer hashes to {key[1]}, the value recorded "
-                                    "when the run wrote it"))
+            code, message = "ARTIFACT_HASH_MISMATCH", (
+                f"{key[0]} no longer hashes to {key[1]}, the value recorded when the run wrote it")
         else:
-            checked[key] = "ok"
-    for run_id in sorted(unhashed):
+            continue
+        settled = _settled(records, set_aside)
+        findings.append(Finding(code, INFO if settled else BLOCK, str(first.get("run_id")),
+                                f"{message}; {settled}" if settled else message))
+    settled_runs = []
+    for run_id, records in sorted(unhashed.items()):
+        if _settled(records, set_aside):
+            settled_runs.append(run_id)
+            continue
         findings.append(Finding("IMPORT_UNHASHED", WARN, run_id,
                                 "imported with no artifact hash, before ingest hashed what it "
                                 "imports; nothing shows the file is the one the records came from"))
+    if settled_runs:
+        findings.append(Finding("IMPORT_UNHASHED", INFO, f"{len(settled_runs)} run(s)",
+                                "imported with no artifact hash, and every record of each is set "
+                                f"aside: {', '.join(settled_runs[:6])}"
+                                + (" ..." if len(settled_runs) > 6 else "")))
