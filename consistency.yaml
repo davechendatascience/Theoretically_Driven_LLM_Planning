@@ -340,13 +340,25 @@ definitions:
     meaning: >-
       The state a contract reads in, where a design cites it: the weakest state
       among its slices, refuted weakest, then stale, contested, insufficient and
-      supported; and no evidence when it has no slice.
+      supported; and no evidence when it has no slice. A policy criterion
+      requires one of the five slice states, never no evidence.
 
   - id: DEF-evidence-record
     term: Evidence record
     meaning: >-
       A trial record in the evidence ledger is recorded against exactly one
       contract, and enters the slices of that contract and of no other.
+
+  - id: DEF-measured-record
+    term: Measured record
+    meaning: >-
+      A trial record with provenance measured carries a reference to the
+      artifact the server captured from the run and that artifact's hash. Its
+      metrics are those the run wrote into that artifact; when the run wrote
+      none and its test declares the metric passed, its only metric is passed,
+      read from the exit code the server captured. A record is scored against
+      its contract's rule from the metrics it carries alone: one that lacks a
+      metric the rule reads is excluded, and no value is supplied for it.
 
   - id: DEF-report
     term: Report
@@ -618,19 +630,24 @@ branches:
     subject: CMP-runner
     claim_type: contract
     statement: >-
-      Every measured record carries the artifact the server captured and its
-      hash, and a metric the artifact does not contain is excluded rather than
-      synthesised.
-    premises: [AXM-no-belief-write-path, DEF-belief-eligible]
+      Every measured record carries a reference to the artifact the server
+      captured and that artifact's hash. Its metrics come from that artifact --
+      or, for a test that declares the metric passed and whose run wrote none,
+      from the exit code the server captured -- and a record that lacks a metric
+      its contract's rule reads is excluded, never given a value.
+    premises: [AXM-no-belief-write-path, DEF-belief-eligible, DEF-measured-record]
     derivation_rule: >-
-      By DEF-belief-eligible a measured record is one the server produced by
-      running a declared test and capturing its artifact with the artifact's
-      hash, its metrics taken from that artifact; so every measured record
-      carries both, and a metric the artifact does not contain is not among a
-      measured record's metrics. Scoring it anyway would move a measured belief
-      through something that is not belief-eligible evidence, which
-      AXM-no-belief-write-path forbids, so it is excluded.
-      evidence: CTR-surface-intact
+      By DEF-measured-record a measured record carries a reference to the
+      artifact the server captured and its hash, and its metrics are those the
+      run wrote into that artifact, or, when it wrote none and its test declares
+      passed, passed alone from the exit code the server captured; and a record
+      is scored from the metrics it carries alone, so one lacking a metric its
+      contract's rule reads is excluded and given no value. By
+      DEF-belief-eligible such a record is belief-eligible, and by
+      AXM-no-belief-write-path, under the declarations in effect, a measured
+      belief moves only through such evidence, so a value supplied for a missing
+      metric would move a belief through something no record carries. evidence:
+      CTR-surface-intact
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-monitor-moves-nothing
