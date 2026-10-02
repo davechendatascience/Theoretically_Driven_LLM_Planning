@@ -1,5 +1,5 @@
 {
-  "name": "tdlp",
+  "name": "davechendatascience-marketplace",
   "owner": {"name": "David Chen"},
   "description": "The Theoretically Driven LLM Planning harness, as one Claude Code plugin.",
   "plugins": [

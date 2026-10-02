@@ -42,7 +42,7 @@ machine, then enable the plugin in each project that uses it:
 ```bash
 claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning
 cd /path/to/your/project
-claude plugin install tdlp@tdlp --scope project   # writes .claude/settings.json -- commit it
+claude plugin install tdlp@davechendatascience-marketplace --scope project   # writes .claude/settings.json -- commit it
 ```
 
 Enabling it per project keeps the tools out of every other project's context. On another machine,
@@ -53,7 +53,7 @@ does not fetch it on its own.
   so all three describe the same repository.
 * **Which version.** The servers install with `uvx` from the tag `tdlp--v<version>`, so edits here
   reach a project only when a release is tagged and the plugin updated
-  (`claude plugin update tdlp@tdlp`).
+  (`claude plugin update tdlp@davechendatascience-marketplace`).
 * **Which Python a test gets.** A declared test's `run:` line runs in the project's environment:
   its `.venv` if it has one, else the PATH Claude Code inherited, never the plugin's own
   interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
@@ -133,7 +133,7 @@ measured by the acceptance suite in `acceptance/`.
 ### Moving a project that registered the servers by hand
 
 1. Once per machine: `claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning`.
-2. In the project: `claude plugin install tdlp@tdlp --scope project`, and commit `.claude/settings.json`.
+2. In the project: `claude plugin install tdlp@davechendatascience-marketplace --scope project`, and commit `.claude/settings.json`.
 3. Remove the hand registrations, **every scope at once**: the three entries in the project's
    `.mcp.json`, and on each machine `claude mcp remove <name> -s local` for `component-belief`,
    `consistency-belief` and `stamp-monitor`. Removing one scope and not the other leaves the other
