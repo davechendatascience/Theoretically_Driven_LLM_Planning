@@ -98,7 +98,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.1" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.2" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -559,6 +559,15 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.6.2 — 2026-10-03 · the marketplace has its own name
+
+- **The marketplace is `davechendatascience-marketplace`** (`956a80e`). It was named `tdlp`, the
+  same as the plugin, so the install read `tdlp@tdlp`. It now reads
+  `tdlp@davechendatascience-marketplace`. To move a project that installed `tdlp@tdlp`, follow
+  [Moving a project that installed `tdlp@tdlp`](#moving-a-project-that-installed-tdlptdlp)
+  (`037ebe9`). The servers, skills and verifier have not changed since 0.6.1.
+- `uv.lock` now records the package's version. It read 0.1.0 through 0.6.1.
 
 ### 0.6.1 — 2026-10-01 · the audit sees what was set aside
 
