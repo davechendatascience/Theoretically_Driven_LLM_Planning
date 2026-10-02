@@ -130,6 +130,15 @@ step 4 waits on you:
 This repository's own goals went through it (`680e5da`): four goals and one interface, each
 measured by the acceptance suite in `acceptance/`.
 
+### Moving a project that installed `tdlp@tdlp`
+
+The marketplace was named `tdlp` until `956a80e`; it is now `davechendatascience-marketplace`.
+
+1. Once per machine: `claude plugin marketplace remove tdlp`, then
+   `claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning`.
+2. In the project: `claude plugin install tdlp@davechendatascience-marketplace --scope project`,
+   remove `tdlp@tdlp` from `enabledPlugins` in `.claude/settings.json`, and commit it.
+
 ### Moving a project that registered the servers by hand
 
 1. Once per machine: `claude plugin marketplace add davechendatascience/Theoretically_Driven_LLM_Planning`.
@@ -501,7 +510,7 @@ src/
     server.py / cli.py               MCP server; the same reports from a shell
 tools/pytest_trials.py               pytest → trials adapter
 tests/                               the suites belief.yaml declares as tests
-.claude-plugin/marketplace.json      this repository as a plugin marketplace, listing `tdlp`
+.claude-plugin/marketplace.json      this repository as the `davechendatascience-marketplace`, listing `tdlp`
 plugin/                              the `tdlp` Claude Code plugin
   .claude-plugin/plugin.json         name and version (one version: plugin, marketplace, package, tag)
   .mcp.json                          the three servers, installed with uvx from tag tdlp--v<version>
