@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.5" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.6" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -318,7 +318,8 @@ declarations in [`consistency.yaml`](consistency.yaml).
   - Restating the branch, or a premise upstream, leaves the citation unreviewed until it is
     re-read and re-pinned. The contract alone would go on reading supported for a claim it never
     measured.
-  - A contract no branch cites is listed as measured, cited by no design.
+  - A contract no branch cites is listed by what it measures: a component's, an interface's or a
+    goal's.
 * **The verifier reasons from declarations alone.** A trial establishes entailment from axioms, definitions, premises and claims — never from the source. A clause that cannot be judged without opening the code *is* the finding: the claim leans on a fact it does not cite. Implementation fidelity lands in component-belief, cited by contract id.
 
 ### The loop
@@ -670,6 +671,36 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.6 — 2026-10-07 · status views in seconds, and the cited-measurement report sorted
+
+Reported from embodied_ai on 0.7.5.
+
+- **`status(view="coverage")` and `status(view="goals")` took over 120 seconds there.** Profiling
+  disproved the report's guesses: the DAG rebuild, claim pins and the 3,617-slice contract were all
+  cheap. The cost was staleness.
+  - **Every trial was judged on its own.** Each one matched every claimed `code:` entry against
+    every tracked file, about 25 million `fnmatch` calls on this repository. On Windows each of
+    those also paid `normcase` twice.
+  - **The fixes.** A run's trials share a stamp, so a run is now judged once. The files a set of
+    entries claims at HEAD are matched once. `normcase` is remembered, so a glob reads exactly as
+    `fnmatch` reads it.
+  - **The revision fallback** for trials from before stamps diffed the ledger directories with
+    rename detection on. It no longer does.
+  - **The result here:** coverage went from 42.5 s to 3.8 s, goals to 3.1 s. Every slice's state,
+    count and stale reason is identical: 21 slices, 3,196 stale trials and 154 reasons compared
+    before and after.
+- **Contracts no branch cites are sorted by what they measure:** a component's first, then an
+  interface's, then a goal's measure, which the goal's outcome already explains. One with no
+  evidence is marked `(no evidence yet)` rather than listed as measured. There, 27 had sat in one
+  list, goal measures and unmeasured contracts among them.
+- **graph-snapshot shows the cited measurements.**
+  - Each branch's "Cites the measures" gives each contract's review state.
+  - The Issues tab lists unreviewed cited measurements in their own group, and every contract no
+    design cites, marked by what it measures.
+  - The review state is judged from the declarations at the snapshot's commit, so the snapshot
+    still reads no evidence. `DEF-snapshot` was restated to say so (`355b0ee`), and
+    `BRN-snapshot-shows-one-revision` was re-proven against it.
 
 ### 0.7.5 — 2026-10-06 · a cited measurement is reviewed only while its claim stands
 

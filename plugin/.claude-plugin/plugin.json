@@ -1,6 +1,6 @@
 {
   "name": "tdlp",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "description": "Evidence-grounded engineering for an LLM agent: consistency-belief (does the design follow?), component-belief (does the built thing work?), stamp-monitor (is the evidence still current?), graph-snapshot (what does the whole design look like?), their two workflow skills, and the file-blind consistency verifier.",
   "author": {"name": "David Chen"},
   "repository": "https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning"

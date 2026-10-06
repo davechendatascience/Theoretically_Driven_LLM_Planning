@@ -87,8 +87,10 @@ acceptance rule and tests against the claim, pin the citation: `evidence: CTR-x@
   lists them before you restate.
 - **A pin lives in the derivation rule, which no fingerprint covers,** so writing one restates
   nothing and sets no trial aside.
-- **`measured, cited by no design`** in the coverage view lists contracts no branch cites. Declare
-  the design they measure, or leave them as plain regression measures, knowingly.
+- **`contracts no branch cites`** in the coverage view lists them by what they measure.
+  On a component: declare the design it measures, or keep it as a plain regression
+  measure, knowingly. A goal's measure is explained by the goal's outcome. `(no evidence
+  yet)` marks one nothing has measured.
 
 ## Linking code to claims
 

@@ -80,7 +80,9 @@ may carry a pin, `CTR-x@<claim digest>`, written when the contract's acceptance 
 read against the claim (`DEF-cited-measurement`). Restating the branch, or any node it depends on,
 moves its claim digest away from the pin, and the cited measurement reads unreviewed until it is
 read again and re-pinned. The derivation rule is outside every fingerprint, so a pin restates
-nothing. A contract no branch cites is listed as measured, cited by no design.
+nothing. A contract no branch cites is listed by what it measures -- a component's first, then
+an interface's, then a goal's, whose outcome already says why it matters -- and marked when
+nothing has measured it yet.
 
 `status(view="coverage")` reads both files and sorts every component into **governed** (code and a
 declared branch), **undeclared design** (code nobody justified — prune it or declare the design),
