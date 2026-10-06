@@ -216,14 +216,14 @@ components:
       - src/component_belief/goals.py
 
   - id: CMP-plugin
-    purpose: Ship the three servers, the two workflow skills and the verifier as one Claude Code plugin any project can enable, at a pinned version
+    purpose: Ship the four servers, the two workflow skills and the verifier as one Claude Code plugin any project can enable, at a pinned version
     testable_capability: >-
       Every server installs from the release tag of the plugin's own version and reads the
       project Claude Code reports; the verifier holds only consistency-belief tools its server
-      registers; all three servers resolve the same project root
+      registers; every server resolves the same project root
     failure_modes:
       - {id: FM-wrong-root, observable: "a server enabled in one project reads another project's ledger, or an empty one",
-         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_all_three_servers_resolve_the_same_project"}
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_every_server_resolves_the_same_project"}
       - {id: FM-version-drift, observable: "the plugin, the marketplace entry, the package and the pinned tag name different versions",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_every_server_installs_from_this_versions_tag"}
       - {id: FM-toolless-verifier, observable: "the verifier names a tool its server does not register",
@@ -234,6 +234,35 @@ components:
       - plugin/
       - .claude-plugin/marketplace.json
       - src/component_belief/project.py
+
+  - id: CMP-graph-snapshot
+    purpose: Draw the design graph at one revision -- each component, the theory it rests on, every claim's proof tree and the gaps between them -- as one page a person can read
+    testable_capability: >-
+      Shows the declarations committed at the one revision it names, the proof state the
+      consistency server computes for each lemma and branch, the issues the loaders report and
+      the gaps in the joined graph; reads no evidence record; and writes nothing but its own page,
+      which git does not see and no declaration names
+    failure_modes:
+      - {id: FM-state-invented, observable: "a lemma or branch shows a proof state the consistency server does not compute for it",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_every_proof_state_is_the_one_the_server_computes"}
+      - {id: FM-revisions-mixed, observable: "a snapshot names one revision and shows a declaration committed at another",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_commit_during_a_snapshot_does_not_mix_revisions"}
+      - {id: FM-worktree-shown, observable: "an uncommitted declaration edit appears in a snapshot, or goes unmentioned",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_uncommitted_edits_are_named_and_not_shown"}
+      - {id: FM-gap-missed, observable: "an axiom naming no goal, or a component with code and no design, is not listed as a gap",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_joined_graph_lists_its_gaps"}
+      - {id: FM-snapshot-writes, observable: "taking a snapshot changes a ledger file or a declaration file",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_snapshot_writes_only_its_page"}
+      - {id: FM-reads-evidence, observable: "taking a snapshot reads the component ledger's evidence",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_snapshot_reads_no_evidence"}
+      - {id: FM-page-tracked, observable: "git status lists the page a snapshot wrote",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_git_does_not_see_the_page"}
+      - {id: FM-page-is-evidence, observable: "a snapshot rewrites a page that a declared test or component names",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_page_a_declaration_names_is_not_written"}
+      - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
+    remediation: graph_snapshot.snapshot (the join, the revision it pins and the gaps); graph_snapshot.page; the one tool in graph_snapshot/server.py
+    goal: GOL-sound-designs
 
 interfaces:
   - id: IFC-declarations__model
@@ -363,6 +392,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-plugin]
 
+  - id: CTR-snapshot-shows-one-revision
+    subject: CMP-graph-snapshot
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-graph-snapshot]
+
   # Integration: each interface's producer output run through its consumer, both sides at once.
   - id: CTR-ifc-declarations-model
     subject: IFC-declarations__model
@@ -479,6 +516,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py, pyproject.toml]
 
+  - id: TST-graph-snapshot
+    layer: component
+    targets: [CMP-graph-snapshot]
+    run: python tools/pytest_trials.py $OUT -- tests/test_graph_snapshot.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py, pyproject.toml]
+
   - id: TST-ifc-declarations-model
     layer: interface
     targets: [IFC-declarations__model]
@@ -526,6 +571,7 @@ policies:
       - {slice: CTR-surface-intact, require: supported}
       - {slice: CTR-plugin-pinned-and-rooted, require: supported}
       - {slice: CTR-goal-set-stays-human, require: supported}
+      - {slice: CTR-snapshot-shows-one-revision, require: supported}
       - {slice: CTR-ifc-declarations-model, require: supported}
       - {slice: CTR-ifc-model-diagnose, require: supported}
       - {slice: CTR-ifc-cdeclarations-proofdag, require: supported}
