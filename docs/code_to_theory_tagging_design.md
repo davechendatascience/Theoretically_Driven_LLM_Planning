@@ -137,6 +137,8 @@ Every report states the revision, how many Python files were scanned, and what w
 | graph-snapshot | Each claim, axiom and definition node lists its regions (id, relation, location, link state), computed at the snapshot's own commit. Link errors and reviews appear in the Issues tab under `code links`. No region is a node or an edge, and no source text is copied. | the snapshot page |
 | component-belief | Not yet: blocks shown beside contracts. | none |
 
+`links(subject)` narrows every section to a region id, a claim or a path, including the uncommitted section. A region that exists only in the working tree is found that way, with its pins. The full report puts the uncommitted section first. Past 40 lines, the rest of a severity are counted per file, so it fits in one tool response on a large project.
+
 A link never blocks in `audit`, because it is not evidence. `stamp-monitor links --strict` exits 1 on any error or review. It is how a CI job or a pre-push hook makes "every tagged region was reviewed against its claim as both stand now" a condition of landing.
 
 `impact` reports a region **beside** the chain, never on it. A changed region asks for a review of that link. It adds no reason to the design branch it implements, and the branch is still reached only through its component.

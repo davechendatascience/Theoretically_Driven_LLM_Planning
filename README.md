@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.2" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.3" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -663,6 +663,30 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.3 — 2026-10-06 · code links, verified and usable at scale
+
+- **`links(subject=...)` works on the cases an adopting agent hit.** These were reported from
+  embodied_ai on 0.7.2 (`dccf26c`).
+  - **A scanned file with no region** read as "not a scanned path". It now prints `0 region(s)`
+    and its diagnostics.
+  - **A region only in the working tree** could not be found by its id. A subject (region id,
+    claim, or path) now narrows the uncommitted section too, and that section prints the pins to
+    write.
+  - **The full report outgrew one tool response** on a large project: 121 KB of 353 untracked
+    mentions and 143 unlinked branches, with the pins printed last. The uncommitted section now
+    comes first. Past 40 lines, the rest of a severity are counted per file instead of listed.
+- **An unpinned `motivated-by` reads `explanatory`, never `aligned`** (`91946d5`). It asserts no
+  correspondence, so it is not a code link.
+- **The code-links theory was verified.** The verifier refuted the first wording of
+  `BRN-links-stale-when-either-side-moves` (TRL-0307..0309). Its claim-pin clause named an event
+  where it should have compared states, and it had four entailment gaps. The branch, its axiom
+  and its two definitions were restated (`70f9497`) and proven (TRL-0310..0312).
+- **`DEF-snapshot` says what a snapshot shows of code links** (`455a196`): each node's regions
+  with their link state, and the scan's broken tags and unaligned links.
+  `BRN-snapshot-shows-one-revision` was re-verified against it.
+- `code_links`' own docstrings named example ids that resolve to nothing, and its own scan
+  reported them. They are placeholders now (`da35623`).
 
 ### 0.7.2 — 2026-10-06 · code linked to the claims it realizes
 
