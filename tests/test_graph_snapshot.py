@@ -338,3 +338,17 @@ def test_tagged_code_is_listed_on_its_claim_and_is_never_an_edge(project):
     issues = {(i["code"], i["source"]) for i in snap["issues"]}
     assert ("UNPINNED", "code links") in issues and ("MALFORMED_MARKER", "code links") in issues
     assert "do not copy me" not in json.dumps(snap)
+
+
+def test_cited_measurements_and_uncited_contracts_are_shown(project):
+    """Reported from embodied_ai on 0.7.5: the snapshot showed neither, while coverage and audit did.
+    Judged from the declarations at the snapshot's commit; no evidence is read."""
+    from graph_snapshot.snapshot import take
+
+    snap = take(project)
+    assert snap["nodes"]["BRN-motion-gate"]["measured"] == [{"contract": "CTR-motion-clear", "state": "unpinned"}]
+    issues = {(i["code"], i["subject"], i["source"]) for i in snap["issues"]}
+    assert ("MEASUREMENT_UNPINNED", "BRN-motion-gate", "cited measurements") in issues
+    uncited = {i["subject"]: i["message"] for i in snap["issues"] if i["code"] == "UNCITED_CONTRACT"}
+    assert set(uncited) == {"CTR-reaches", "CTR-holds"}
+    assert all("a goal's measure" in m for m in uncited.values())

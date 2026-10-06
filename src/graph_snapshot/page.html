@@ -336,9 +336,10 @@ button { font: inherit; color: inherit; }
     const count = (k) => Object.values(N).filter((n) => n.kind === k).length;
     box.append(el("div", { class: "sum-counts" }, `${count("axiom")} axioms · ${count("definition")} definitions · ${count("goal")} goals`));
     const links = S.issues.filter((i) => i.source === "code links").length;
-    const gaps = S.issues.filter((i) => i.source === "joined graph").length, loaders = S.issues.length - gaps - links;
+    const measures = S.issues.filter((i) => i.source === "cited measurements").length;
+    const gaps = S.issues.filter((i) => i.source === "joined graph").length, loaders = S.issues.length - gaps - links - measures;
     if (S.issues.length) box.append(el("button", { class: "sum-issues", onclick: () => { tab = "issues"; filter = null; renderIndex(); } },
-      el("b", { text: `Issues ${S.issues.length}` }), el("span", { text: `${loaders} from the loaders · ${gaps} gaps in the joined graph` + (links ? ` · ${links} code links` : "") })));
+      el("b", { text: `Issues ${S.issues.length}` }), el("span", { text: `${loaders} from the loaders · ${gaps} gaps in the joined graph` + (links ? ` · ${links} code links` : "") + (measures ? ` · ${measures} cited measurements not reviewed` : "") })));
   }
 
   // ---------- index ----------
@@ -400,7 +401,8 @@ button { font: inherit; color: inherit; }
       }
       for (const [source, title] of [["consistency.yaml", "Reported by the consistency loader"], ["belief.yaml", "Reported by the component loader"],
                                      ["premise graph", "Reported by the premise-graph build"], ["joined graph", "Gaps in the joined graph"],
-                                     ["code links", "Tagged code regions that are broken or need review"]]) {
+                                     ["code links", "Tagged code regions that are broken or need review"],
+                                     ["cited measurements", "Cited measurements not reviewed against their claims"]]) {
         addGroup(title, shown.filter((i) => i.source === source), issueRow);
       }
       if (!S.issues.length && !open.length) list.append(el("div", { class: "empty", text: "No issues at this revision." }));
@@ -675,7 +677,9 @@ button { font: inherit; color: inherit; }
       if (n.rule) parts.push(section("Derivation", prose(n.rule, true)));
       const users = inc[n.id].filter((i) => isClaim(N[i]));
       if (users.length) parts.push(section("Cited by", refs(users.sort())));
-      if (n.cites && n.cites.length) parts.push(section("Cites the measures", plainIds(n.cites)));
+      if (n.measured && n.measured.length) parts.push(section("Cites the measures", el("ul", { class: "code-list" },
+        n.measured.map((m) => el("li", { text: `${m.contract} · ${m.state}` })))));
+      else if (n.cites && n.cites.length) parts.push(section("Cites the measures", plainIds(n.cites)));
       if (n.gated_by) parts.push(section("Release gate", plainIds(n.gated_by)));
       if (regionsSection(n)) parts.push(regionsSection(n));
     } else if (isSubject(n)) {

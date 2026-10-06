@@ -779,7 +779,9 @@ class TestCitedMeasurements:
         assert self.only(measured).state == UNPINNED
         out = status(view="coverage")
         assert "CTR-grasp-reachable [" in out and "(unpinned)" in out
-        assert "measured, cited by no design (1): CTR-grasp-fast" in out
+        assert "contracts no branch cites (1):" in out
+        assert "on components -- measured, and no design says why it matters" in out
+        assert "(1): CTR-grasp-fast (no evidence yet)" in out
         assert "cited measurements to re-read" not in out, "unpinned is listed only once a project pins"
 
     def test_a_pin_reads_reviewed_and_restates_nothing(self, measured):
@@ -844,3 +846,19 @@ class TestCitedMeasurements:
         [m] = [m for m in cited_measurements(load(measured)) if m.branch == "BRN-orphan"]
         assert m.state == NOT_REVIEWED and m.expected is None
         assert "not in the declared graph" in status(view="coverage")
+
+
+def test_goal_and_interface_measures_are_listed_apart_from_a_components(goals_repo, monkeypatch):
+    """A goal's measure is explained by the goal's outcome; a component's contract no design cites
+    is the one to act on -- reported from embodied_ai, where 27 sat in one list."""
+    (goals_repo / "consistency.yaml").write_text(
+        "axioms:\n  - {id: AXM-a, domain: x, statement: s, rationale: r}\n", encoding="utf-8")
+    git(goals_repo, "add", "-A")
+    git(goals_repo, "commit", "-q", "-m", "a design ledger with no branch")
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(goals_repo))
+    out = status(view="coverage")
+    assert "on components -- measured, and no design says why it matters" in out
+    assert "(1): CTR-grasp-reachable (no evidence yet)" in out
+    assert "on interfaces" in out and "CTR-cloud-fits-grasp" in out
+    assert "goal measures -- the goal's outcome says why they matter" in out
+    assert "(2): CTR-pick-success (no evidence yet), CTR-see-e2e (no evidence yet)" in out

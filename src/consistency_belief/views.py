@@ -14,7 +14,7 @@ from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarat
                            load as load_declarations)
 from .graph import ProofDAG, ProofNode
 from .ids import content_hash
-from .measurements import NOT_REVIEWED, UNPINNED, CitedMeasurement, cited_measurements, uncited_contracts
+from .measurements import NOT_REVIEWED, UNPINNED, CitedMeasurement, cited_measurements, uncited_by_kind
 from .measurements import adopted as adopted_pins
 from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
@@ -431,7 +431,7 @@ def view_coverage(ctx: Context) -> str:
                             "UNKNOWN_DEFINITION", "THRESHOLD_DRIFT")]
     if issues:
         lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
-    lines += _measurement_lines(measured, uncited_contracts(decl))
+    lines += _measurement_lines(measured, uncited_by_kind(decl), beliefs)
 
     nxt = ("repoint or prune the designs whose component is gone" if removed else
            "declare or prune the undeclared designs" if undeclared else
@@ -441,7 +441,8 @@ def view_coverage(ctx: Context) -> str:
                     f"basis: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source} · next: {nxt}")
 
 
-def _measurement_lines(measured: list[CitedMeasurement], uncited: list[str]) -> list[str]:
+def _measurement_lines(measured: list[CitedMeasurement], uncited: dict[str, list[str]],
+                       beliefs: dict[str, str]) -> list[str]:
     """Cited measurements to re-read, and contracts no design cites (DEF-cited-measurement).
 
     A pinned one whose branch was restated since is always listed; an unpinned one only once the
@@ -458,8 +459,22 @@ def _measurement_lines(measured: list[CitedMeasurement], uncited: list[str]) -> 
         for m in unpinned:
             out.append(f"  {m.branch} cites {m.contract}, never pinned -- {m.fix}")
         out.append("")
-    if uncited:
-        out += [f"measured, cited by no design ({len(uncited)}): " + ", ".join(uncited), ""]
+    total = sum(len(v) for v in uncited.values())
+    if total:
+        def named(ids: list[str]) -> str:
+            return ", ".join(cid + (" (no evidence yet)" if beliefs.get(cid, "no evidence") == "no evidence"
+                                    else "") for cid in ids)
+        heads = {"component": "on components -- measured, and no design says why it matters: declare "
+                              "the design, or keep it as a plain regression measure, knowingly",
+                 "interface": "on interfaces -- a design claim over the interface would say why the "
+                              "hand-over suffices",
+                 "goal": "goal measures -- the goal's outcome says why they matter; a design claim on "
+                         "the goal would say how it is met"}
+        out.append(f"contracts no branch cites ({total}):")
+        for kind, ids in uncited.items():
+            if ids:
+                out.append(f"  {heads.get(kind, kind)} ({len(ids)}): {named(ids)}")
+        out.append("")
     return out
 
 

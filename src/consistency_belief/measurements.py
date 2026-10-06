@@ -91,6 +91,24 @@ def uncited_contracts(decl: Declarations) -> list[str]:
     return sorted(declared - cited)
 
 
+#: What an uncited contract measures, in the order a reader acts on them: a component's contract
+#: no design cites is the one to look at; a goal's measure is explained by the goal's outcome.
+KINDS = ("component", "interface", "goal")
+
+
+def uncited_by_kind(decl: Declarations) -> dict[str, list[str]]:
+    """uncited_contracts, grouped by the subject each contract measures."""
+    kind: dict[str, str] = {}
+    for ref in decl.components.values():
+        kind.update(dict.fromkeys(ref.contracts, "component"))
+    for ref in decl.boundaries.values():
+        kind.update(dict.fromkeys(ref.contracts, ref.kind))
+    groups: dict[str, list[str]] = {k: [] for k in KINDS}
+    for cid in uncited_contracts(decl):
+        groups.setdefault(kind.get(cid, "component"), []).append(cid)
+    return groups
+
+
 def adopted(found: list[CitedMeasurement]) -> bool:
     """A project that pins one cited measurement has opted in, and its unpinned ones are worth
     listing; one that pins none still hears of every pin gone stale -- of which it has none."""

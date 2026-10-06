@@ -110,7 +110,7 @@ def _cited_measurements(root: Path) -> list[Finding]:
     try:
         from consistency_belief.declarations import load as load_design
         from consistency_belief.measurements import (NOT_REVIEWED, UNPINNED, adopted,
-                                                     cited_measurements, uncited_contracts)
+                                                     cited_measurements, uncited_by_kind)
     except ImportError:
         return []
     decl = load_design(root)
@@ -125,11 +125,15 @@ def _cited_measurements(root: Path) -> list[Finding]:
                            "never read against their claims and pinned: "
                            + ", ".join(f"{m.branch} -> {m.contract}" for m in unpinned[:4])
                            + (" ..." if len(unpinned) > 4 else "")))
-    uncited = uncited_contracts(decl)
-    if uncited:
-        out.append(Finding("UNCITED_CONTRACT", INFO, f"{len(uncited)} contract(s)",
-                           "measured, and cited by no branch's derivation rule: "
-                           + ", ".join(uncited[:6]) + (" ..." if len(uncited) > 6 else "")))
+    groups = uncited_by_kind(decl)
+    total = sum(len(v) for v in groups.values())
+    if total:
+        parts = [f"{len(ids)} on {kind}s ({', '.join(ids[:4])}{' ...' if len(ids) > 4 else ''})"
+                 for kind, ids in groups.items() if ids and kind != "goal"]
+        if groups.get("goal"):
+            parts.append(f"{len(groups['goal'])} goal measure(s), which their goals explain")
+        out.append(Finding("UNCITED_CONTRACT", INFO, f"{total} contract(s)",
+                           "cited by no declared branch's derivation rule: " + "; ".join(parts)))
     return out
 
 
