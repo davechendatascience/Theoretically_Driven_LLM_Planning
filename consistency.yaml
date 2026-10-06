@@ -456,8 +456,13 @@ definitions:
       Beside them it lists the issues the declaration loaders and the build
       report, and the gaps the joined graph shows: an axiom naming no goal, a
       goal no axiom names, a component with code that no declared branch
-      governs, an interface or goal no branch governs, and an axiom or
-      definition nothing rests on. Beside each axiom, definition, lemma and
+      governs, an interface or goal no branch governs, an axiom or definition
+      nothing rests on, a cited measurement that is not reviewed at that commit
+      as DEF-cited-measurement defines it, and a contract declared at that
+      commit that no branch declared there names in its derivation rule,
+      marked as a goal's, an interface's or a component's. Beside each branch
+      it shows whether each of its cited measurements is reviewed at that
+      commit. Beside each axiom, definition, lemma and
       branch it shows the code regions linked to that node in the scanned files
       of that commit, each with its link's state as DEF-aligned-link gives it at
       that commit, and it lists the tags and mentions the code-link scan of that
