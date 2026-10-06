@@ -101,7 +101,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.2" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.0" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -617,6 +617,42 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.0 — 2026-10-06 · the whole design, drawn at one revision
+
+- **graph-snapshot, a fourth server** (`5878314`), with one tool, `snapshot(focus)`. It joins
+  `consistency.yaml`, `belief.yaml` and `goals.yaml` at one commit, with the proof state
+  consistency-belief computes for each lemma and branch, and writes one self-contained page
+  (`.graph-snapshot/snapshot.html`). The page has:
+  - an index of components, claims worst first, foundations and issues;
+  - the selected node's lineage, drawn left to right as "rests on";
+  - an inspector with the full claim, why it is in its state, and its proof tree down to axioms
+    and definitions.
+
+  The same file opens in a browser or publishes as an Artifact. Design:
+  [`docs/graph_snapshot_mcp_design.md`](docs/graph_snapshot_mcp_design.md).
+- **It reads no evidence, so it is fast.** It takes 1.2 s on embodied_ai's 310-node graph.
+  Contracts appear by name only. A first prototype that also read contract states took 12½ minutes
+  there; see [Measured cost](docs/graph_snapshot_mcp_design.md#measured-cost) for the
+  component-belief cost behind that.
+- **One revision.** Both declaration loaders and `Context.build` take a `revision`, `HEAD` by
+  default, so the servers are unchanged. A snapshot resolves HEAD once and reads every file at
+  that sha. During the prototype's slow run, embodied_ai's HEAD moved mid-read, which is what
+  showed this was needed.
+- **Issues and gaps.** The page lists the issues both loaders and the premise-graph build already
+  report, under their own codes. It also lists the gaps only the join shows: an axiom naming no
+  goal, a goal no axiom names, code with no declared design, an interface or goal no branch
+  governs, and an axiom or definition nothing rests on. In embodied_ai none of the 82 axioms names
+  a goal.
+- **The theory came first.** `DEF-snapshot` and `BRN-snapshot-shows-one-revision` were committed
+  (`321906d`) before the code, as a new definition rather than a widened `DEF-report`, so nothing
+  already proven went stale. The first verifier pass refuted the branch: the definition limited
+  which declarations a snapshot shows but not which proposals. Both were restated (`745b545`)
+  before the code was committed, and a second pass proved the branch with no gaps (17 of 17
+  claims proven). That proof rests on one actor's judgement, so treat it as provisional.
+- **Your goal set.** `acceptance/test_any_project.py` expects three servers, so
+  `CTR-runs-in-any-project` reads refuted until you decide whether a fourth belongs there. The
+  agent proposed the one-line change in a note on `GOL-any-project` and did not make it.
 
 ### 0.6.2 — 2026-10-03 · the marketplace has its own name
 

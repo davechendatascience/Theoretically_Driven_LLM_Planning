@@ -5,5 +5,5 @@ there is no write path from an agent to a belief. Beliefs are a pure function
 of (belief-eligible evidence, declared priors, model version).
 """
 
-__version__ = "0.6.2"
+__version__ = "0.7.0"
 MODEL_VERSION = "bb-2"   # bb-2: gate contracts read from their latest run; evidence goes stale with its code
