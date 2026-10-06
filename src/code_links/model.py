@@ -8,8 +8,8 @@ of the correspondence vouches for.
 
 Two pins carry that review into the source itself, in the `ID@pin` form Axiom.ref already uses:
 
-    # tdlp:begin CODE-runner-exit-code-fallback@3f9a1c2e     the body the reviewer read
-    # tdlp:implements BRN-runner-captures@7c41d0e2           the claim as it stood then
+    # tdlp:begin CODE-<name>@<8 hex>     the body the reviewer read
+    # tdlp:implements BRN-<id>@<8 hex>   the claim as it stood then
 
 A pin is an assertion, committed with the code it describes: whoever writes it says "I read this
 body against this claim". The scan never writes one. It compares each pin with what is there now

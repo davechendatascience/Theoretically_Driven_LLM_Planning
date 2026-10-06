@@ -44,7 +44,7 @@ _END = re.compile(BLOCK_ID)
 _RELATION = re.compile(rf"({NODE_ID})(?:@({PIN}))?")
 _LEADING_BLOCK = re.compile(rf"^({BLOCK_ID})")
 #: An id a reader would take for a reference, in prose. It ends on a letter or digit, so a line
-#: wrapped after a hyphen does not produce `BRN-x-`.
+#: wrapped after a hyphen does not produce a stray trailing hyphen.
 MENTION = re.compile(r"(?<![A-Za-z0-9_-])((?:AXM|DEF|LMA|BRN|CODE)-[A-Za-z0-9](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)")
 
 #: Tokens that are not code: they never enter a body digest, and none ends a header.
