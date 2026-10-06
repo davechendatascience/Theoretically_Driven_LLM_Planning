@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0162\result.json -- tests/test_consistency_server.py -q -p no:asyncio
+exit=0
+test=TST-consistency-server@b952d308
+at=2026-10-06T16:19:18+00:00
