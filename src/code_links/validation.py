@@ -8,6 +8,8 @@ Every link ends in exactly one state, and every state but `aligned` is a diagnos
   claim restated  the claim, or a node it depends on, was restated since its pin
   unknown claim   the target is not in the premise graph at this revision
   invalid block   the region is malformed, nested, empty or shares its id
+  explanatory     a motivated-by relation with no pin: no correspondence asserted, so not a
+                  code link at all, and never counted as aligned
 
 A mention is either tracked -- inside a block whose relations cover it, the claim itself or a
 node the claim depends on -- or reported: as dangling when it names nothing, which is the stale
@@ -26,6 +28,9 @@ BODY_CHANGED = "body changed"
 CLAIM_RESTATED = "claim restated"
 UNKNOWN_CLAIM = "unknown claim"
 INVALID_BLOCK = "invalid block"
+#: A motivated-by relation with no pin of its own: it asserts no correspondence, so it is not a
+#: code link (DEF-code-link) and is neither aligned nor out of date -- only explanatory.
+EXPLANATORY = "explanatory"
 
 
 def link_state(block: Block, relation: Relation, claims: Mapping[str, ClaimRef] | None) -> str:
@@ -33,6 +38,8 @@ def link_state(block: Block, relation: Relation, claims: Mapping[str, ClaimRef] 
         return INVALID_BLOCK
     if claims is None or relation.target not in claims:
         return UNKNOWN_CLAIM
+    if not relation.needs_pin and relation.pin is None:
+        return EXPLANATORY
     if relation.needs_pin and (relation.pin is None or block.pin is None):
         return UNPINNED
     if block.pin is not None and block.pin != block.body_pin:

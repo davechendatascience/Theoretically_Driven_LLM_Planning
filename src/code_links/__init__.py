@@ -19,11 +19,11 @@ from .index import build_index, resolve_revision, scan_worktree
 from .model import (CONFORMANCE_KINDS, ERROR, GRAMMAR_VERSION, OBSERVATION, RELATION_KINDS, REVIEW,
                     Block, ClaimRef, CodeIndex, Diagnostic, Mention, Relation, Scope, display)
 from .parser import parse_python
-from .validation import (ALIGNED, BODY_CHANGED, CLAIM_RESTATED, INVALID_BLOCK, UNKNOWN_CLAIM,
-                         UNPINNED, header_lines, link_state)
+from .validation import (ALIGNED, BODY_CHANGED, CLAIM_RESTATED, EXPLANATORY, INVALID_BLOCK,
+                         UNKNOWN_CLAIM, UNPINNED, header_lines, link_state)
 
 __all__ = [
-    "ALIGNED", "BODY_CHANGED", "CLAIM_RESTATED", "CONFORMANCE_KINDS", "ERROR", "GRAMMAR_VERSION",
+    "ALIGNED", "BODY_CHANGED", "CLAIM_RESTATED", "CONFORMANCE_KINDS", "ERROR", "EXPLANATORY", "GRAMMAR_VERSION",
     "INVALID_BLOCK", "OBSERVATION", "RELATION_KINDS", "REVIEW", "UNKNOWN_CLAIM", "UNPINNED",
     "Block", "BlockChange", "Changes", "ClaimRef", "CodeIndex", "Diagnostic", "Mention",
     "Relation", "Scope", "build_index", "compare_indexes", "display", "header_lines",

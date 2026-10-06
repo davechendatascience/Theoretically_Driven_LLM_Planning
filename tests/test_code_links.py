@@ -479,3 +479,17 @@ class TestBoundaries:
         text = (roots / "servo.py").read_text(encoding="utf-8")
         commit(roots, {"servo.py": text.replace("cap * dt", "cap")}, "edit without review")
         assert cli() == 1
+
+
+def test_an_unpinned_motivated_by_is_explanatory_never_aligned(project):
+    """motivated-by asserts no correspondence, so it is not a code link (DEF-code-link): without a
+    pin of its own it is reported as explanatory, and never counted as aligned."""
+    from code_links import EXPLANATORY
+    from stamp_monitor.links import report
+
+    commit(project, {"why.py": "# tdlp:begin CODE-why\n# tdlp:motivated-by AXM-bound\nx = 1\n# tdlp:end CODE-why\n"})
+    index = scan(project)
+    block = index.get_block("CODE-why")
+    assert link_state(block, block.relations[0], index.claims) == EXPLANATORY
+    assert "UNPINNED" not in {d.code for d in index.diagnostics if d.subject == "CODE-why"}
+    assert "1 motivated-by, explanatory only" in report(project)

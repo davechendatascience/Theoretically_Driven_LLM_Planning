@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from code_links import (ALIGNED, ERROR, OBSERVATION, REVIEW, CodeIndex, build_index,
+from code_links import (ALIGNED, ERROR, EXPLANATORY, OBSERVATION, REVIEW, CodeIndex, build_index,
                         compare_indexes, display, header_lines, link_state, resolve_revision,
                         scan_worktree)
 from code_links.impact import BODY, RELATIONS
@@ -70,9 +70,11 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
     claims = index.claims
     rev = index.revision[:7]
     states = [(b, r, link_state(b, r, claims)) for b in index.blocks for r in b.relations]
-    n_review = sum(1 for _, _, s in states if s != ALIGNED)
-    lines = [f"code links at {rev}: {len(index.blocks)} region(s), {len(states)} link(s), "
-             f"{len(states) - n_review} aligned, {n_review} not",
+    n_explain = sum(1 for _, _, s in states if s == EXPLANATORY)
+    n_review = sum(1 for _, _, s in states if s not in (ALIGNED, EXPLANATORY))
+    lines = [f"code links at {rev}: {len(index.blocks)} region(s), {len(states) - n_explain} link(s), "
+             f"{len(states) - n_explain - n_review} aligned, {n_review} not"
+             + (f"; {n_explain} motivated-by, explanatory only" if n_explain else ""),
              f"scope: {index.scope.describe()}"]
     if not index.validated:
         lines.append("no consistency.yaml at this revision: references and pins are unchecked")
