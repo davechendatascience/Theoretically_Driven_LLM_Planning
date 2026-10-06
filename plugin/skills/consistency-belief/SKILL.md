@@ -92,6 +92,29 @@ acceptance rule and tests against the claim, pin the citation: `evidence: CTR-x@
   measure, knowingly. A goal's measure is explained by the goal's outcome. `(no evidence
   yet)` marks one nothing has measured.
 
+## Referencing sources
+
+A declaration may name the works it came from, as a paper cites its references. It is optional,
+and most useful on an axiom taken from a paper, a book or a standard.
+
+```yaml
+sources:
+  - {id: SRC-siciliano2009-robotics, title: "Robotics: Modelling, Planning and Control",
+     authors: [Siciliano, Sciavicco, Villani, Oriolo], year: 2009}
+axioms:
+  - id: AXM-pseudo-inverse-projects-onto-null-space
+    references: [{source: SRC-siciliano2009-robotics, at: "sec. 3.5.1"}]
+```
+
+- **A reference weighs nothing.** It is not a premise, not part of a fingerprint and never in a
+  probe, so adding one restates nothing, and citing a famous result makes no claim count. If a
+  lemma rests on a paper's result, declare that result as an axiom and reference the paper from it.
+- **Write only what you have seen.** A doi, arXiv id, ISBN, url or `at:` you are not sure of is
+  left out, not guessed: nothing checks that a source says what the node states, so a made-up one
+  reads exactly like a real one. Quote an `at:` that holds a comma.
+- `status(view="sources")` is the reference list. `DANGLING_REFERENCE` and `UNREFERENCED_SOURCE`
+  are advisory; fix them like a broken link.
+
 ## Linking code to claims
 
 When you write the code that realizes a branch, lemma or definition, tag the region. A tag is

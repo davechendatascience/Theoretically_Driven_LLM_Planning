@@ -222,7 +222,7 @@ Then declare your system in two committed files and work the loops:
 
 | File | Declares | Loop |
 |---|---|---|
-| `consistency.yaml` | axioms, definitions, lemmas, branches, policies | `status(view="probe")` → `verify_step(...)` → `status(view="tree")` |
+| `consistency.yaml` | axioms, definitions, lemmas, branches, policies, and the sources they reference | `status(view="probe")` → `verify_step(...)` → `status(view="tree")` |
 | `belief.yaml` | components, interfaces, contracts, tests, priors, policies | `status(view="diagnose")` → `run_test(...)` → `status(view="belief")` |
 
 This repository declares itself in both files, so every example below is its own output.
@@ -325,6 +325,27 @@ declarations in [`consistency.yaml`](consistency.yaml).
     measured.
   - A contract no branch cites is listed by what it measures: a component's, an interface's or a
     goal's.
+* **Sources are referenced, never relied on.**
+  - Any declaration may name the works it came from, the way a paper cites its references:
+    list each under `sources:` and name it in the node's `references:`.
+
+    ```yaml
+    sources:
+      - id: SRC-lipman2023-flow-matching
+        title: Flow Matching for Generative Modeling
+        authors: [Lipman, Chen, Ben-Hamu, Nickel, Le]
+        year: 2023
+        arxiv: "2210.02747"            # or doi, isbn, url
+    axioms:
+      - id: AXM-flow-matching-recovers-the-conditional-law
+        references: [{source: SRC-lipman2023-flow-matching, at: "<theorem, section or page>"}]
+    ```
+  - Referencing is optional. A reference is for the reader: it is not a premise, not part of a
+    fingerprint, and never in a probe, so citing a famous result makes no claim count and adding
+    one restates nothing.
+  - Nothing checks that a source says what the node states.
+  - `status(view="sources")` is the reference list. A reference naming no declared source, and a
+    source nothing references, are reported.
 * **The verifier reasons from declarations alone.** A trial establishes entailment from axioms, definitions, premises and claims — never from the source. A clause that cannot be judged without opening the code *is* the finding: the claim leans on a fact it does not cite. Implementation fidelity lands in component-belief, cited by contract id.
 
 ### The loop
@@ -345,7 +366,7 @@ hand it work.
 
 | Tool | Does |
 |---|---|
-| `status` | 9 views: `tree`, `branches`, `axioms`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the pin to write, and lists the contracts no branch cites by what they measure |
+| `status` | 10 views: `tree`, `branches`, `axioms`, `sources`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the pin to write, and lists the contracts no branch cites by what they measure; `sources` is the reference list, each source with the nodes that reference it |
 | `propose_branch` | stages a branch or lemma; checks acyclicity and premises; warns when a claim names a file, class or call instead of what must hold of any implementation |
 | `verify_step` | records one pass of falsification trials, each bound to the statement it verified |
 | `amend` | reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending; the original and the reason stay |

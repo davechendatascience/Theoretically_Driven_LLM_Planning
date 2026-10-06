@@ -27,6 +27,9 @@ COMPONENT_ID = re.compile(r"CMP-[A-Za-z0-9][A-Za-z0-9-]*")
 BOUNDARY_ID = re.compile(r"(?:IFC|GOL)-[A-Za-z0-9][A-Za-z0-9_-]*")
 _NUMBER = re.compile(r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?")
 
+#: The identifiers a source may carry, and the address each resolves at; a url is its own address.
+SOURCE_IDENTIFIERS = {"doi": "https://doi.org/{}", "arxiv": "https://arxiv.org/abs/{}", "isbn": "", "url": "{}"}
+
 #: The states a policy criterion may require of a cited contract (`evidence:`), as
 #: component-belief reports them.
 EVIDENCE_STATES = ("supported", "contested", "refuted", "insufficient_evidence", "stale")
@@ -49,6 +52,7 @@ class Axiom:
     domain: str = "general"
     rationale: str = ""
     goal: Any = None               # the goal(s) in goals.yaml whose requirement this states
+    references: Any = None         # the sources it came from; read into Reference by _parse
 
     @property
     def ref(self) -> str:
@@ -68,6 +72,7 @@ class Definition:
     id: str
     term: str = ""
     meaning: str = ""
+    references: Any = None
 
 
 @dataclass
@@ -77,6 +82,7 @@ class Lemma:
     premises: list[str] = field(default_factory=list)
     derivation_rule: str = ""
     sufficiency: dict[str, Any] = field(default_factory=dict)
+    references: Any = None
 
     @property
     def n_min(self) -> int:
@@ -96,6 +102,7 @@ class Branch:
     premises: list[str] = field(default_factory=list)
     derivation_rule: str = ""
     sufficiency: dict[str, Any] = field(default_factory=dict)
+    references: Any = None
 
     @property
     def n_min(self) -> int:
@@ -104,6 +111,63 @@ class Branch:
     @property
     def min_consensus(self) -> float:
         return float(self.sufficiency.get("min_consensus", 0.8))
+
+
+@dataclass(frozen=True)
+class Reference:
+    """A node's reference to a source, with the place in it (a theorem, a section, a page)."""
+
+    source: str
+    at: str = ""
+
+    def render(self) -> str:
+        return f"{self.source} ({self.at})" if self.at else self.source
+
+
+@dataclass
+class Source:
+    """A work a declaration came from -- a paper, a book, a standard -- declared under `sources:`.
+
+    For the reader, like a paper's reference list: a source is not a node, a reference to one is
+    not a premise, and neither is part of any fingerprint or of what a verifier is served
+    (DEF-source-reference). Nothing here checks that a source says what a node referencing it
+    states; a reference records where a claim came from, never that it holds.
+    """
+
+    id: str
+    title: str = ""
+    authors: Any = None            # a string, or a list of names
+    year: Any = None
+    doi: str = ""
+    arxiv: str = ""
+    isbn: str = ""
+    url: str = ""
+    note: str = ""
+
+    @property
+    def author_list(self) -> list[str]:
+        if not self.authors:
+            return []
+        return [str(a) for a in self.authors] if isinstance(self.authors, list) else [str(self.authors)]
+
+    def identifiers(self) -> list[tuple[str, str, str]]:
+        """(kind, value, address) for each identifier it carries; an ISBN has no address."""
+        out = []
+        for kind, address in SOURCE_IDENTIFIERS.items():
+            value = str(getattr(self, kind) or "").strip()
+            if value:
+                link = address.format(value) if address else ""
+                # Only a web address is a link: a url: carrying another scheme is shown, never followed.
+                out.append((kind, value, link if link.startswith(("https://", "http://")) else ""))
+        return out
+
+    def entry(self) -> str:
+        """One line, as a reference list prints it: authors (year). Title. identifiers."""
+        head = ", ".join(self.author_list)
+        if self.year:
+            head = f"{head} ({self.year})" if head else f"({self.year})"
+        ids = " ".join(f"{kind}:{value}" for kind, value, _ in self.identifiers())
+        return ". ".join(part for part in (head, self.title or "(untitled)", ids) if part)
 
 
 @dataclass
@@ -177,6 +241,7 @@ class Declarations:
     components_source: str = "none"  # git-HEAD | none | unavailable
     governs: dict[str, ComponentImport] = field(default_factory=dict)
     boundaries: dict[str, BoundaryRef] = field(default_factory=dict)
+    sources: dict[str, Source] = field(default_factory=dict)
 
     @property
     def goal_ids(self) -> set[str]:
@@ -205,6 +270,18 @@ class Declarations:
 
     def branches_for_subject(self, component_id: str) -> list[str]:
         return sorted(bid for bid, b in self.branches.items() if b.subject == component_id)
+
+    def references_of(self, node_id: str) -> list[Reference]:
+        node = self.node(node_id)
+        return list(node.references or []) if node is not None else []
+
+    def referenced_by(self) -> dict[str, list[tuple[str, Reference]]]:
+        """Each source id any declaration names -- declared or not -- with the nodes naming it."""
+        out: dict[str, list[tuple[str, Reference]]] = {}
+        for nid in sorted(self.all_node_ids()):
+            for ref in self.references_of(nid):
+                out.setdefault(ref.source, []).append((nid, ref))
+        return out
 
 
 def _git_show(root: Path, ref: str) -> str | None:
@@ -508,9 +585,60 @@ def _parse(text: str) -> Declarations:
                                      "in a flow mapping cut the note short; quote it"))
     for p in _entries(data, "policies", Policy, decl.issues):
         decl.policies[p.id] = p
+    for src in _entries(data, "sources", Source, decl.issues):
+        decl.sources[src.id] = src
+    for section in (decl.axioms, decl.definitions, decl.lemmas, decl.branches):
+        for node in section.values():
+            node.references = _references(node.id, node.references, decl.issues)
 
     decl.issues.extend(validate(decl))
+    decl.issues.extend(validate_references(decl))
     return decl
+
+
+def _references(node_id: str, raw: Any, issues: list[Issue]) -> list[Reference]:
+    """A node's `references:` as Reference values. An entry is a source id, or a mapping with
+    `source:` and, optionally, `at:`; one that is neither is reported and left out."""
+    if raw is None:
+        return []
+    out: list[Reference] = []
+    for entry in raw if isinstance(raw, list) else [raw]:
+        if isinstance(entry, str) and entry.strip():
+            out.append(Reference(entry.strip()))
+            continue
+        if isinstance(entry, dict) and isinstance(entry.get("source"), str) and entry["source"].strip():
+            stray = sorted(str(k) for k in entry if k not in ("source", "at"))
+            if stray:
+                issues.append(Issue("MALFORMED_REFERENCE", node_id, f"a reference to {entry['source']!r} "
+                                    f"carries stray key(s) {stray}: an unquoted comma in a flow mapping "
+                                    "cuts `at:` short; quote it"))
+            out.append(Reference(entry["source"].strip(), str(entry.get("at") or "").strip()))
+            continue
+        issues.append(Issue("MALFORMED_REFERENCE", node_id, "a reference is a source id or a mapping "
+                            f"with source: (and optionally at:), not {str(entry)[:80]!r}; left out"))
+    return out
+
+
+def validate_references(decl: Declarations) -> list[Issue]:
+    """Every reference names a declared source, and every declared source is referenced
+    (AXM-references-carry-no-weight). Advisory, never fatal: a reference weighs nothing in a
+    proof, so a broken one is a broken record for the reader, not a broken claim."""
+    issues: list[Issue] = []
+    named = decl.referenced_by()
+    for sid, src in sorted(decl.sources.items()):
+        if not str(src.title or "").strip():
+            issues.append(Issue("UNTITLED_SOURCE", sid, "declared under sources: with no title; a "
+                                "reader cannot tell what it is"))
+        if sid not in named:
+            issues.append(Issue("UNREFERENCED_SOURCE", sid, "declared under sources: and referenced by "
+                                "no declaration; reference it, or remove it"))
+    for sid, by in sorted(named.items()):
+        if sid in decl.sources:
+            continue
+        for nid, _ref in by:
+            issues.append(Issue("DANGLING_REFERENCE", nid, f"references {sid!r}, which sources: does not "
+                                "declare; declare it, or correct the id"))
+    return issues
 
 
 def _entries(data: dict[str, Any], section: str, cls: type, issues: list[Issue]) -> list[Any]:

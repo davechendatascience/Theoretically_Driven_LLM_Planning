@@ -5,7 +5,10 @@ from __future__ import annotations
 from pathlib import Path
 import pytest
 
-from consistency_belief.declarations import Declarations, _parse, load
+from consistency_belief.declarations import Declarations, Reference, _parse, load
+from consistency_belief.graph import ProofDAG
+from consistency_belief.model import PROVEN, compute_consistency
+from consistency_belief.probes import PROBE_STRATEGIES, probe_text
 from conftest import git
 
 VALID_CONSISTENCY_YAML = """
@@ -131,3 +134,76 @@ def test_a_malformed_entry_is_reported_and_left_out_of_the_graph():
     assert set(decl.axioms) == {"AXM-a"} and set(decl.governs) == {"CMP-x"}
     assert [i.code for i in decl.issues].count("MALFORMED") == 3
     assert decl.policies["POL-a"].criteria == []
+
+
+# The same declarations, citing a source from the axiom and the lemma.
+REFERENCED_YAML = VALID_CONSISTENCY_YAML.replace(
+    "    rationale: Core physical safety invariant.\n",
+    "    rationale: Core physical safety invariant.\n"
+    "    references: [{source: SRC-robot-safety, at: \"sec. 5.10\"}]\n",
+).replace(
+    "    derivation_rule: Margin calculation\n",
+    "    derivation_rule: Margin calculation\n    references: [SRC-robot-safety]\n",
+) + """
+sources:
+  - id: SRC-robot-safety
+    title: Safety requirements for industrial robots
+    authors: [A. Author, B. Author]
+    year: 2011
+    url: https://example.org/robot-safety
+"""
+
+
+class TestSourceReferences:
+    def test_references_change_no_graph_fingerprint_proof_state_or_probe(self):
+        plain, cited = _parse(VALID_CONSISTENCY_YAML), _parse(REFERENCED_YAML)
+        assert cited.issues == []
+        assert cited.axioms["AXM-safety"].references == [Reference("SRC-robot-safety", "sec. 5.10")]
+        assert cited.lemmas["LMA-clearance"].references == [Reference("SRC-robot-safety")]
+
+        a, b = ProofDAG.from_declarations(plain), ProofDAG.from_declarations(cited)
+        assert set(a.nodes) == set(b.nodes) and a.parents == b.parents
+        assert {n: x.fingerprint() for n, x in a.nodes.items()} == {n: x.fingerprint() for n, x in b.nodes.items()}
+
+        # Trials recorded against the uncited graph count, unchanged, against the cited one.
+        trials = [{"id": f"TRL-{target}-{strategy}", "target_id": target, "validity": "valid", "passed": True,
+                   "outcome": "sound", "strategy": strategy, "actor": "agent",
+                   "statement_sha": a.nodes[target].fingerprint(), "basis": a.basis_fingerprints(target)}
+                  for target in ("LMA-clearance", "BRN-motion-gate") for strategy in PROBE_STRATEGIES]
+        def states(dag: ProofDAG) -> list[tuple]:
+            return [(s.target_id, s.state, s.n_independent, s.trial_ids) for s in compute_consistency(dag, trials)]
+
+        assert states(a) == states(b) and {s[1] for s in states(b)} == {PROVEN}
+
+        for nid in ("LMA-clearance", "BRN-motion-gate"):
+            assert probe_text(a, nid) == probe_text(b, nid)
+            assert "SRC-" not in probe_text(b, nid) and "industrial robots" not in probe_text(b, nid)
+
+    def test_a_dangling_reference_and_an_unreferenced_source_are_reported(self):
+        decl = _parse(REFERENCED_YAML.replace("references: [SRC-robot-safety]", "references: [SRC-missing]")
+                      + "  - {id: SRC-unused, title: A work nothing references}\n")
+        found = {(i.code, i.subject) for i in decl.issues}
+        assert found == {("DANGLING_REFERENCE", "LMA-clearance"), ("UNREFERENCED_SOURCE", "SRC-unused")}
+        assert "SRC-missing" in next(i.message for i in decl.issues if i.code == "DANGLING_REFERENCE")
+        # A broken reference is a broken record for the reader, never a broken claim.
+        assert decl.is_valid_node("LMA-clearance")
+
+    def test_a_malformed_source_or_reference_is_reported(self):
+        decl = _parse(REFERENCED_YAML.replace(
+            "references: [SRC-robot-safety]",
+            "references: [{source: SRC-robot-safety, at: Thm 2, p. 3}, 3]",
+        ) + "  - {id: SRC-untitled, url: \"javascript:alert(1)\"}\n"
+            "definitions_note: ignored\n")
+        codes = sorted(i.code for i in decl.issues)
+        assert codes == ["MALFORMED_REFERENCE", "MALFORMED_REFERENCE", "UNREFERENCED_SOURCE", "UNTITLED_SOURCE"]
+        assert decl.lemmas["LMA-clearance"].references == [Reference("SRC-robot-safety", "Thm 2")]
+        assert decl.sources["SRC-untitled"].identifiers() == [("url", "javascript:alert(1)", "")]
+
+    def test_a_source_reads_as_a_reference_list_entry(self):
+        src = _parse(REFERENCED_YAML).sources["SRC-robot-safety"]
+        assert src.entry() == ("A. Author, B. Author (2011). Safety requirements for industrial robots. "
+                               "url:https://example.org/robot-safety")
+        assert src.identifiers() == [("url", "https://example.org/robot-safety", "https://example.org/robot-safety")]
+        arxiv = _parse("sources:\n  - {id: SRC-a, title: T, arxiv: \"2210.02747\"}\n").sources["SRC-a"]
+        assert arxiv.identifiers() == [("arxiv", "2210.02747", "https://arxiv.org/abs/2210.02747")]
+

@@ -163,6 +163,7 @@ button { font: inherit; color: inherit; }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .code-list { margin: 0; padding: 0; list-style: none; font: 12px/1.6 var(--font-id); color: var(--ink-2); }
 .code-list li { overflow-wrap: anywhere; }
+.code-list a { color: var(--accent); }
 .reach { display: grid; gap: 8px; }
 .reach-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; font-size: 13px; }
 .reach-row > span:first-child { color: var(--ink-3); }
@@ -662,6 +663,12 @@ button { font: inherit; color: inherit; }
     ? section(`Code regions · ${n.regions.length}`, el("ul", { class: "code-list" },
         n.regions.map((r) => el("li", { text: `${r.id} · ${r.relation} · ${r.at} · ${r.state}` }))))
     : null;
+  // References to the works a node came from: a list, never an edge -- a reference is not a premise.
+  const referencesSection = (n) => n.references && n.references.length
+    ? section(`References · ${n.references.length}`, el("ul", { class: "code-list" },
+        n.references.map((r) => el("li", {}, r.link ? el("a", { href: r.link, target: "_blank", rel: "noopener", text: r.source }) : el("span", { text: r.source }),
+          el("span", { text: (r.at ? ` · ${r.at}` : "") + (r.entry ? ` · ${r.entry}` : " · no such source is declared") })))))
+    : null;
   function renderInspector() {
     const n = N[current], box = document.getElementById("inspector");
     const kids = [el("div", { class: "eyebrow", text: `${KIND[n.kind].word} · ${KIND[n.kind].file}` }), el("div", { class: "insp-id", text: n.id }), stateLine(n)];
@@ -681,6 +688,7 @@ button { font: inherit; color: inherit; }
         n.measured.map((m) => el("li", { text: `${m.contract} · ${m.state}` })))));
       else if (n.cites && n.cites.length) parts.push(section("Cites the measures", plainIds(n.cites)));
       if (n.gated_by) parts.push(section("Release gate", plainIds(n.gated_by)));
+      if (referencesSection(n)) parts.push(referencesSection(n));
       if (regionsSection(n)) parts.push(regionsSection(n));
     } else if (isSubject(n)) {
       parts.push(section(n.kind === "component" ? "Purpose" : "Hands over", prose(n.text)));
@@ -697,12 +705,14 @@ button { font: inherit; color: inherit; }
     } else if (n.kind === "axiom") {
       parts.push(section("Statement", prose(n.text)));
       if (n.rationale) parts.push(section("Rationale", prose(n.rationale, true)));
+      if (referencesSection(n)) parts.push(referencesSection(n));
       parts.push(el("dl", { class: "kv" }, el("dt", { text: "Domain" }), el("dd", { text: n.domain || "—" })));
       if (n.goals && n.goals.length) parts.push(section("States a requirement of", refs(n.goals)));
       parts.push(section("What rests on it", groupedReach(down(n.id))));
       if (regionsSection(n)) parts.push(regionsSection(n));
     } else if (n.kind === "definition") {
       parts.push(section(n.term || "Meaning", prose(n.text)));
+      if (referencesSection(n)) parts.push(referencesSection(n));
       parts.push(section("What rests on it", groupedReach(down(n.id))));
       if (regionsSection(n)) parts.push(regionsSection(n));
     } else if (n.kind === "goal") {

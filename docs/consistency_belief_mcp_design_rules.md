@@ -89,3 +89,21 @@ declared branch), **undeclared design** (code nobody justified — prune it or d
 **planned** (a design declared before anything is built, which is allowed) and **broken**. The list
 is optional: a project without one is still checked branch by branch, and a project with no
 `belief.yaml` at all keeps working with subjects unchecked.
+
+## 10. Reference Sources Without Leaning on Them
+
+1. Any declaration may reference the works it came from: an entry under `sources:` (an id, a
+   title, and optionally authors, a year, a doi, arXiv id, ISBN, url and a note), named in the
+   node's `references:` with an optional place in it (`at:`). Referencing is optional.
+2. A reference is for the reader (`DEF-source-reference`). It is not a node, a premise or an edge;
+   it is no part of a statement, a derivation rule, cited premises or sufficiency; and it is not a
+   trial. So two revisions that differ only in sources and references build the same graph, give
+   every node the same fingerprint and proof state, and serve the same probe
+   (`BRN-references-carry-no-weight`). A verifier never sees a reference, so a famous name cannot
+   stand in for a step.
+3. A reference naming no declared source is `DANGLING_REFERENCE`, and a source nothing references
+   is `UNREFERENCED_SOURCE`. Both are advisory, like the subject checks: a broken reference is a
+   broken record for the reader, never a broken claim.
+4. Nothing checks that a source says what a node referencing it states. A reference records where
+   a claim came from, never that it holds.
+

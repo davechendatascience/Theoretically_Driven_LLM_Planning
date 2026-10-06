@@ -32,6 +32,7 @@ from .views import (
     view_no_declarations,
     view_obligations,
     view_probe,
+    view_sources,
     view_tree,
 )
 
@@ -93,6 +94,14 @@ planned (a design declared before anything is built, which is allowed) and broke
 a component that belief.yaml no longer declares, so the design governs nothing). Design may precede
 implementation; what may not happen silently is a design left behind by a component that was
 removed or renamed.
+
+A declaration may reference the sources it came from, as a paper cites its references: list each
+under `sources:` (id, title, authors, year, and a doi, arxiv, isbn or url where it has one) and
+name it in the node's `references:` -- `[{source: SRC-x, at: "Thm 2"}]`. Referencing is optional.
+A reference is for the reader and weighs nothing in a proof: it is no premise, no part of a
+fingerprint, and never in a probe, so citing a famous result makes no claim count. Nothing checks
+that a source says what the node states. status(view="sources") lists them; a reference naming no
+declared source, and a source nothing references, are reported.
 """
 
 mcp = FastMCP("consistency-belief", instructions=INSTRUCTIONS)
@@ -150,7 +159,10 @@ def status(
     view:
       tree           - ASCII proof DAG showing Axioms -> Lemmas -> Branches with proof badges
       branches       - detailed status per branch: claim, premises, axiomatic roots, trial counts
-      axioms         - root axioms, domains, and lists of all downstream dependents
+      axioms         - root axioms, domains, the sources each references, and lists of all
+                       downstream dependents
+      sources        - the reference list: each source declared under sources:, with the nodes
+                       that reference it, and every reference naming no declared source
       obligations    - open proof obligations (Lean-style `sorry`s) needing verification
       probe          - what a verifier reads: each open obligation (or subject=<node id>, or a
                        CMP- id for its branches) with its premises' statements, the claim, the
@@ -178,6 +190,8 @@ def status(
         return view_branches(ctx, subject)
     if view == "axioms":
         return view_axioms(ctx)
+    if view == "sources":
+        return view_sources(ctx)
     if view == "obligations":
         return view_obligations(ctx)
     if view == "probe":

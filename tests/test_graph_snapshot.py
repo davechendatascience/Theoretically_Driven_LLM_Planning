@@ -355,3 +355,30 @@ def test_cited_measurements_and_uncited_contracts_are_shown(project):
     uncited = {i["subject"]: i["message"] for i in snap["issues"] if i["code"] == "UNCITED_CONTRACT"}
     assert set(uncited) == {"CTR-reaches", "CTR-holds"}
     assert all("a goal's measure" in m for m in uncited.values())
+
+
+def test_source_references_are_shown_beside_their_nodes(project):
+    """A reference is a list on its node, never an edge: it is not a premise (DEF-source-reference)."""
+    from graph_snapshot.snapshot import take
+
+    cited = CONSISTENCY.replace(
+        "    rationale: Core physical safety invariant.\n",
+        "    rationale: Core physical safety invariant.\n"
+        "    references: [{source: SRC-iso, at: \"sec. 5\"}]\n",
+    ).replace(
+        "    premises: [LMA-clear-means-safe, DEF-clearance]\n",
+        "    premises: [LMA-clear-means-safe, DEF-clearance]\n    references: [SRC-gone]\n",
+    ) + "\nsources:\n  - {id: SRC-iso, title: Robot safety, year: 2011, doi: 10.1000/iso}\n"
+    before = take(project)
+    commit(project, {"consistency.yaml": cited}, "reference a source")
+    snap = take(project)
+
+    assert snap["nodes"]["AXM-safety"]["references"] == [
+        {"source": "SRC-iso", "at": "sec. 5", "entry": "(2011). Robot safety. doi:10.1000/iso",
+         "link": "https://doi.org/10.1000/iso"}]
+    assert snap["nodes"]["BRN-motion-gate"]["references"] == [
+        {"source": "SRC-gone", "at": "", "entry": "", "link": ""}]
+    assert snap["edges"] == before["edges"] and "SRC-iso" not in snap["nodes"]
+    assert {n: v.get("state") for n, v in snap["nodes"].items()} == {n: v.get("state") for n, v in before["nodes"].items()}
+    issues = {(i["code"], i["subject"], i["source"]) for i in snap["issues"]}
+    assert ("DANGLING_REFERENCE", "BRN-motion-gate", "consistency.yaml") in issues

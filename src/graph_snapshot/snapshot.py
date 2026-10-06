@@ -14,6 +14,9 @@ Tagged code regions (code_links) are drawn on the node they relate to, as a list
 edge. A region that implements a branch is not a premise of it, and the graph is premise edges.
 Each region carries its link state as code_links computes it at the same commit; no source text
 is copied onto the page, only ids, paths and lines.
+
+A node's references to the works it came from (consistency.yaml's `sources:`) are drawn the same
+way, as a list on the node: a reference is not a premise, so it is never an edge.
 """
 
 from __future__ import annotations
@@ -91,10 +94,11 @@ def take(root: Path) -> dict[str, Any]:
         add(gid, "goal", text=goal.outcome, measure=goal.measure)
     for aid, axiom in ctx.decl.axioms.items():
         add(aid, "axiom", text=axiom.statement, rationale=axiom.rationale, domain=axiom.domain,
-            goals=axiom.goals)
+            goals=axiom.goals, references=references(ctx.decl, aid))
         edges.update(dict.fromkeys((aid, g) for g in axiom.goals))
     for did, definition in ctx.decl.definitions.items():
-        add(did, "definition", term=definition.term, text=definition.meaning)
+        add(did, "definition", term=definition.term, text=definition.meaning,
+            references=references(ctx.decl, did))
 
     governs: dict[str, list[str]] = {}            # subject -> branches in the graph, staged or not
     for nid, node in ctx.dag.nodes.items():
@@ -106,7 +110,8 @@ def take(root: Path) -> dict[str, Any]:
             state=s.state if s else None,
             count=f"{s.n_independent}/{s.n_min}" if s else "",
             why=s.issues[0] if s and s.issues else "",
-            cites=sorted(set(_CONTRACT.findall(node.derivation_rule or ""))))
+            cites=sorted(set(_CONTRACT.findall(node.derivation_rule or ""))),
+            references=[] if node.staged else references(ctx.decl, nid))
         edges.update(dict.fromkeys((nid, p) for p in node.premises))
         if node.kind == "branch" and node.subject:
             governs.setdefault(node.subject, []).append(nid)
@@ -171,6 +176,18 @@ def take(root: Path) -> dict[str, Any]:
         "issues": issues,
         "page_named_by": naming_the_page(components),
     }
+
+
+def references(decl: Any, node_id: str) -> list[dict[str, str]]:
+    """A declared node's references, each with its source's entry as committed; a reference naming
+    no declared source keeps its id and has no entry (the loader reports it)."""
+    out = []
+    for ref in decl.references_of(node_id):
+        src = decl.sources.get(ref.source)
+        links = [address for _kind, _value, address in src.identifiers() if address] if src else []
+        out.append({"source": ref.source, "at": ref.at, "entry": src.entry() if src else "",
+                    "link": links[0] if links else ""})
+    return out
 
 
 def _loader_issues(ctx: Context, components: Any) -> list[dict[str, str]]:

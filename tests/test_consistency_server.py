@@ -862,3 +862,34 @@ def test_goal_and_interface_measures_are_listed_apart_from_a_components(goals_re
     assert "on interfaces" in out and "CTR-cloud-fits-grasp" in out
     assert "goal measures -- the goal's outcome says why they matter" in out
     assert "(2): CTR-pick-success (no evidence yet), CTR-see-e2e (no evidence yet)" in out
+
+
+def test_sources_are_listed_with_the_nodes_that_reference_them(empty_repo: Path, monkeypatch):
+    cited = SAMPLE_CONSISTENCY_YAML.replace(
+        "    rationale: Battery physical discharge constraint.\n",
+        "    rationale: Battery physical discharge constraint.\n"
+        "    references: [{source: SRC-cell-datasheet, at: \"table 3\"}, SRC-gone]\n",
+    ) + """
+sources:
+  - id: SRC-cell-datasheet
+    title: Cell datasheet
+    year: 2024
+    doi: 10.1000/example
+  - {id: SRC-unused, title: Nothing references this}
+"""
+    (empty_repo / "consistency.yaml").write_text(cited, encoding="utf-8")
+    git(empty_repo, "add", "consistency.yaml")
+    git(empty_repo, "commit", "-q", "-m", "declarations with sources")
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(empty_repo))
+
+    out = status(view="sources")
+    assert "(2024). Cell datasheet. doi:10.1000/example" in out
+    assert "at: https://doi.org/10.1000/example" in out
+    assert "referenced by: AXM-energy-budget (table 3)" in out
+    assert "referenced by: (nothing -- reported)" in out
+    assert "AXM-energy-budget -> SRC-gone" in out
+    assert "references: SRC-cell-datasheet (table 3); SRC-gone" in status(view="axioms")
+    # The verifier is served none of it.
+    probe = status(view="probe")
+    assert "LMA-compute-cap" in probe and "SRC-" not in probe and "datasheet" not in probe
+

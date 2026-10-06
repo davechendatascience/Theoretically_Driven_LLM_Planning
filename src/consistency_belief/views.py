@@ -22,7 +22,8 @@ from .probes import probe_text
 from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
 from .store import Store
 
-VIEWS = ("tree", "branches", "axioms", "obligations", "probe", "contradictions", "coverage", "audit", "cycle")
+VIEWS = ("tree", "branches", "axioms", "sources", "obligations", "probe", "contradictions", "coverage", "audit",
+         "cycle")
 
 #: States a verifier can still act on: the probe view serves these.
 OPEN_STATES = (OBLIGATION, STALE, DOUBTED)
@@ -209,8 +210,42 @@ def view_axioms(ctx: Context) -> str:
         lines.append(f"{aid} [{axm.domain}]")
         lines.append(f"  statement: {axm.statement}")
         lines.append(f"  rationale: {axm.rationale}")
+        if axm.references:
+            lines.append(f"  references: {'; '.join(r.render() for r in axm.references)}")
         lines.append(f"  downstream dependents ({len(downstream)}): {', '.join(downstream) or '(none)'}")
         lines.append("")
+    return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
+def view_sources(ctx: Context) -> str:
+    """The reference list: each declared source, its entry and the nodes that reference it, then
+    the references naming no declared source. A reference is for the reader; it weighs nothing in
+    a proof and no probe carries it (DEF-source-reference)."""
+    decl = ctx.decl
+    named = decl.referenced_by()
+    dangling = sorted(sid for sid in named if sid not in decl.sources)
+    if not decl.sources and not dangling:
+        return envelope("No sources declared. A declaration may reference one: list it under sources: in "
+                        "consistency.yaml and name it in the declaration's references: -- "
+                        "{source: SRC-x, at: \"Thm 2\"}.", basis_line(ctx.slices))
+    lines = [(f"Sources ({len(decl.sources)}) -- for the reader: a reference is no premise, no part of a "
+              "fingerprint and never in a probe, and nothing here checks that a source says what a node "
+              "referencing it states."), ""]
+    for sid, src in sorted(decl.sources.items()):
+        lines.append(sid)
+        lines.append(f"  {src.entry()}")
+        links = [address for _kind, _value, address in src.identifiers() if address]
+        if links:
+            lines.append(f"  at: {' '.join(links)}")
+        if src.note:
+            lines.append(f"  note: {src.note}")
+        by = named.get(sid, [])
+        lines.append("  referenced by: " + ("; ".join(f"{nid}" + (f" ({ref.at})" if ref.at else "")
+                                                       for nid, ref in by) or "(nothing -- reported)"))
+        lines.append("")
+    if dangling:
+        lines.append(f"Dangling references ({sum(len(named[s]) for s in dangling)}): no source with the id is declared")
+        lines += [f"  {nid} -> {sid}" for sid in dangling for nid, _ref in named[sid]]
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
 
 
