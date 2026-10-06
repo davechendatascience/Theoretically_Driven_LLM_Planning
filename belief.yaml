@@ -53,6 +53,8 @@ components:
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_references_change_no_graph_fingerprint_proof_state_or_probe"}
       - {id: FM-dangling-reference-silent, observable: "a reference to an undeclared source, or a source nothing references, loads with no issue",
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_a_dangling_reference_and_an_unreferenced_source_are_reported"}
+      - {id: FM-source-displaces-proposal, observable: "a staged proposal whose id only a source also bears is left out of the premise graph",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_a_source_sharing_a_staged_proposals_id_leaves_it_admitted"}
     remediation: validate() and validate_links() in the consistency declarations loader
     goal: GOL-sound-designs
     code:

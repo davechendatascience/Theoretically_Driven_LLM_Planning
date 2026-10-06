@@ -186,6 +186,25 @@ class TestSourceReferences:
         assert {n: x.fingerprint() for n, x in c.nodes.items()} == {n: x.fingerprint() for n, x in a.nodes.items()}
         assert states(c) == states(a) and probe_text(c, "BRN-motion-gate") == probe_text(a, "BRN-motion-gate")
 
+    def test_a_source_sharing_a_staged_proposals_id_leaves_it_admitted(self, empty_repo):
+        """An id only a source bears is not declared for admission: its staged proposal stays its
+        candidate (DEF-source-reference)."""
+        from consistency_belief.views import Context, staged_node
+
+        proposal = staged_node({"id": "BRN-staged", "claim": "Staged claim holds.", "premises": ["AXM-safety"],
+                                "subject": "CMP-motion", "rationale": "By AXM-safety."})
+        builds = []
+        for text in (REFERENCED_YAML, REFERENCED_YAML + "  - {id: BRN-staged, title: A source sharing the proposal's id}\n"):
+            (empty_repo / "consistency.yaml").write_text(text, encoding="utf-8")
+            git(empty_repo, "add", "consistency.yaml")
+            git(empty_repo, "commit", "-q", "-m", "declare")
+            builds.append(Context.build(empty_repo, staged_nodes=[proposal]))
+        without, with_source = builds
+        assert with_source.dag.get("BRN-staged") is not None and with_source.dag.get("BRN-staged").staged
+        assert with_source.dag.parents == without.dag.parents
+        assert ([(s.target_id, s.state) for s in with_source.slices]
+                == [(s.target_id, s.state) for s in without.slices])
+
     def test_a_dangling_reference_and_an_unreferenced_source_are_reported(self):
         decl = _parse(REFERENCED_YAML.replace("references: [SRC-robot-safety]", "references: [SRC-missing]")
                       + "  - {id: SRC-unused, title: A work nothing references}\n")

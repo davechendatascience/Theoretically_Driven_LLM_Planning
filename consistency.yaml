@@ -564,7 +564,11 @@ definitions:
       revision, naming a source by its id and optionally a place in it.
       Whatever its id, a source is not an axiom, definition, lemma, branch or
       staged proposal: it is no candidate for admission to the premise graph,
-      and never the declaration an id's candidacy is taken from. Neither a
+      and never the declaration an id's candidacy is taken from. For admission
+      and for the version a proof state is computed from, an id is declared at
+      the head revision exactly when an axiom, definition, lemma or branch with
+      that id is declared there; an id that only a source bears keeps its
+      staged proposal, if it has one, as its only candidate. Neither a
       source nor a source reference is a node, a premise or an edge of the
       premise graph; neither is part of any node's statement, derivation rule,
       cited premises or declared sufficiency; neither is a trial or a record in
@@ -1150,7 +1154,10 @@ branches:
       or declared sufficiency, nor a trial or a ledger record. So the two
       revisions declare the same axioms, definitions, lemmas and branches, each
       with the same statement, derivation rule, cited premises and
-      sufficiency, over the same ledger, and every id has the same candidate.
+      sufficiency, over the same ledger. An id is declared, for admission,
+      exactly when one of those bears it, so the same ids are declared in
+      both; and an id only a source bears keeps its staged proposal, so every
+      id has the same candidate, staged or declared.
       By DEF-premise-graph a build's candidates, which of them it admits and
       the edges it adds are determined by those ids, statements and cited
       premises and by the staged proposals, so both builds are the same
