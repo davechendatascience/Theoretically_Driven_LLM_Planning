@@ -1,0 +1,30 @@
+....F.........                                                           [100%]
+================================== FAILURES ===================================
+____________________ test_the_joined_graph_lists_its_gaps _____________________
+
+project = WindowsPath('C:/Users/ychen/AppData/Local/Temp/pytest-of-ychen/pytest-396/test_the_joined_graph_lists_it0')
+
+    def test_the_joined_graph_lists_its_gaps(project):
+        from graph_snapshot.snapshot import take
+    
+        found = {(i["code"], i["subject"]) for i in take(project)["issues"] if i["source"] == "joined graph"}
+>       assert found == {
+            ("AXIOM_WITHOUT_GOAL", "AXM-unused"),
+            ("GOAL_WITHOUT_AXIOM", "GOL-hold"),
+            ("UNDECLARED_DESIGN", "CMP-gripper"),
+            ("NO_DESIGN_CLAIM", "GOL-move"),
+            ("NO_DESIGN_CLAIM", "GOL-hold"),
+            ("UNUSED_GROUND", "AXM-unused"),
+            ("UNUSED_GROUND", "DEF-spare"),
+        }
+E       AssertionError: assert {('AXIOM_WITH...eaches'), ...} == {('AXIOM_WITH...unused'), ...}
+E         
+E         Extra items in the left set:
+E         ('UNCITED_CONTRACT', 'CTR-holds')
+E         ('UNCITED_CONTRACT', 'CTR-reaches')
+E         Use -v to get more diff
+
+tests\test_graph_snapshot.py:229: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_graph_snapshot.py::test_the_joined_graph_lists_its_gaps - A...
+1 failed, 13 passed in 157.70s (0:02:37)
