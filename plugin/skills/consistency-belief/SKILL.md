@@ -75,6 +75,21 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
    component-belief -- a design proven over a refuted measurement is proven of nothing.
    `note()` is inert (zero proof weight) and cannot close an obligation.
 
+## Pinning what a branch cites
+
+A branch's `evidence: CTR-x` says which contract measures it. When you have read that contract's
+acceptance rule and tests against the claim, pin the citation: `evidence: CTR-x@<8 hex>`.
+`status(view="coverage")` prints the pin to write.
+
+- **Restating the branch, or a premise upstream, leaves its cited measurements unreviewed.** The
+  contract may still read supported, but it measured the old claim. Re-read it against the new
+  claim; strengthen the test if the claim now says more; then write the new pin. `audit_change`
+  lists them before you restate.
+- **A pin lives in the derivation rule, which no fingerprint covers,** so writing one restates
+  nothing and sets no trial aside.
+- **`measured, cited by no design`** in the coverage view lists contracts no branch cites. Declare
+  the design they measure, or leave them as plain regression measures, knowingly.
+
 ## Linking code to claims
 
 When you write the code that realizes a branch, lemma or definition, tag the region. A tag is

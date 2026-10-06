@@ -75,6 +75,13 @@ anyone built it, so a node keeps its place in the proof DAG either way. They exi
 opposite failure is silent — a design left behind by a component that was deleted reads exactly
 like a design that is still true.
 
+A branch's derivation rule cites the contract that measures it (`evidence: CTR-x`), and a citation
+may carry a pin, `CTR-x@<claim digest>`, written when the contract's acceptance rule and tests were
+read against the claim (`DEF-cited-measurement`). Restating the branch, or any node it depends on,
+moves its claim digest away from the pin, and the cited measurement reads unreviewed until it is
+read again and re-pinned. The derivation rule is outside every fingerprint, so a pin restates
+nothing. A contract no branch cites is listed as measured, cited by no design.
+
 `status(view="coverage")` reads both files and sorts every component into **governed** (code and a
 declared branch), **undeclared design** (code nobody justified — prune it or declare the design),
 **planned** (a design declared before anything is built, which is allowed) and **broken**. The list

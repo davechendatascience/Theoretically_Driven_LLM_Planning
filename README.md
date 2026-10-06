@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.4" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.5" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -312,6 +312,13 @@ declarations in [`consistency.yaml`](consistency.yaml).
 * **Only a counterexample refutes.** A probe with outcome `falsified` makes a node `REFUTED`. A `gap` — a missing premise, an unproven step — leaves it unproven, counts against consensus (so the node reads `DOUBTED` once it has enough trials), and is listed under *Entailment Gaps* in `status(view="contradictions")`.
 * **Blast radius.** Restating an upstream axiom or lemma marks every dependent `STALE` until re-verified. A revised claim keeps its id rather than needing a new one to escape old verdicts.
 * **Staged proposals.** `propose_branch` stages a branch that persists, can be verified, and can be cited at once; it shows as `· STAGED`. It supports `decide()` only once declared at HEAD, and trials recorded while staged carry over if the declared statement is the same.
+* **Cited measurements are pinned.**
+  - A branch's citation can carry a pin: `evidence: CTR-x@<pin>`, the claim's digest when the
+    contract's rule and tests were read against it.
+  - Restating the branch, or a premise upstream, leaves the citation unreviewed until it is
+    re-read and re-pinned. The contract alone would go on reading supported for a claim it never
+    measured.
+  - A contract no branch cites is listed as measured, cited by no design.
 * **The verifier reasons from declarations alone.** A trial establishes entailment from axioms, definitions, premises and claims — never from the source. A clause that cannot be judged without opening the code *is* the finding: the claim leans on a fact it does not cite. Implementation fidelity lands in component-belief, cited by contract id.
 
 ### The loop
@@ -663,6 +670,30 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.5 — 2026-10-06 · a cited measurement is reviewed only while its claim stands
+
+- **A citation can carry a pin.** A branch cites the contract that measures it, and nothing held
+  the two together. A branch restated to claim more kept citing the contract that measured the old
+  claim. That contract read supported, so once the branch was re-proven the release gate passed,
+  and no one was asked whether the contract still measured the claim.
+  - **The pin.** Write `evidence: CTR-x@<pin>`, where the pin is the branch's claim digest (the
+    one a code link's claim pin records) at the moment the contract's rule and tests were read
+    against the claim.
+  - **What breaks it.** Restating the branch, or anything it rests on, leaves the citation
+    unreviewed. The coverage view prints the pin to write, `audit_change` lists the citations a
+    restatement will leave unreviewed, and `stamp-monitor audit` warns `MEASUREMENT_NOT_REVIEWED`.
+  - **What it costs.** A pin lives in the derivation rule, so writing one restates nothing and
+    sets no trial aside.
+  - It is reported, not gated: `decide` is unchanged.
+- **A contract no branch cites is listed** as "measured, cited by no design" in the coverage view,
+  and as `UNCITED_CONTRACT` in `audit`. Here that is the four interface contracts and the four
+  goal measures, the same subjects the snapshot lists with no design claim.
+- Design first: `AXM-cited-measurements-reviewed`, `DEF-cited-measurement` and
+  `BRN-cited-measurements-reviewed-while-the-claim-stands` (`87a7e8a`). "Cited measurement", not
+  "citation", because `DEF-premise-graph` already calls a premise a citation.
+- Two suggestions from an agent adopting the harness, taken together. They are the two
+  directions of one join.
 
 ### 0.7.4 — 2026-10-06 · tests in parallel, and "aligned" never read as "works"
 
