@@ -1,0 +1,18 @@
+.F.                                                                      [100%]
+=================================== FAILURES ===================================
+___________ test_the_plugin_installs_the_release_of_its_own_version ____________
+
+    def test_the_plugin_installs_the_release_of_its_own_version():
+        version = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
+        servers = json.loads((PLUGIN / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
+>       assert set(servers) == {"component-belief", "consistency-belief", "stamp-monitor"}
+E       AssertionError: assert {'component-b...tamp-monitor'} == {'component-b...tamp-monitor'}
+E         
+E         Extra items in the left set:
+E         'graph-snapshot'
+E         Use -v to get more diff
+
+acceptance/test_any_project.py:31: AssertionError
+=========================== short test summary info ============================
+FAILED acceptance/test_any_project.py::test_the_plugin_installs_the_release_of_its_own_version
+1 failed, 2 passed in 0.26s

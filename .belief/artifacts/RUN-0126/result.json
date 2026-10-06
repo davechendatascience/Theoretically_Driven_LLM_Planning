@@ -1,0 +1,31 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_any_project::test_all_three_servers_read_the_project_claude_code_reports"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": false
+      },
+      "conditions": {
+        "case": "acceptance.test_any_project::test_the_plugin_installs_the_release_of_its_own_version"
+      },
+      "outcome": "fail"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_any_project::test_as_a_plugin_a_project_test_runs_with_the_projects_python"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

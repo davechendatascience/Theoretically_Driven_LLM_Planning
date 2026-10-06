@@ -119,3 +119,9 @@
 {"actor": "agent", "payload": {"subject": "GOL-any-project"}, "session": "", "timestamp": "2026-10-06T07:33:24+00:00", "tool": "note"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 12, "run_id": "RUN-0119", "synthesized": false, "test": "TST-graph-snapshot@80ec604b"}, "session": "", "timestamp": "2026-10-06T07:34:20+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 5, "run_id": "RUN-0120", "synthesized": false, "test": "TST-acceptance-designs@980b08cb"}, "session": "", "timestamp": "2026-10-06T07:34:21+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 12, "run_id": "RUN-0121", "synthesized": false, "test": "TST-graph-snapshot@80ec604b"}, "session": "", "timestamp": "2026-10-06T07:35:37+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 10, "run_id": "RUN-0122", "synthesized": false, "test": "TST-plugin@0a049939"}, "session": "", "timestamp": "2026-10-06T07:35:37+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 56, "run_id": "RUN-0123", "synthesized": false, "test": "TST-server@c38f683a"}, "session": "", "timestamp": "2026-10-06T07:35:46+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 6, "run_id": "RUN-0124", "synthesized": false, "test": "TST-acceptance-evidence@16f4d204"}, "session": "", "timestamp": "2026-10-06T07:35:50+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 3, "run_id": "RUN-0125", "synthesized": false, "test": "TST-acceptance-design-gate@a25a0aaf"}, "session": "", "timestamp": "2026-10-06T07:35:52+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 1, "n_records": 3, "run_id": "RUN-0126", "synthesized": false, "test": "TST-acceptance-any-project@d80f9ae1"}, "session": "", "timestamp": "2026-10-06T07:35:53+00:00", "tool": "run_test"}
