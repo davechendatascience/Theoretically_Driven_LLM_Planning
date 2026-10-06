@@ -93,6 +93,12 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_trials_carry_over_when_the_same_statement_is_declared"}
       - {id: FM-source-falsification, observable: "a counterexample naming a source file is recorded as a refutation",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_verify_step_refuses_a_falsification_argued_from_source"}
+      - {id: FM-restated-claim-keeps-measurement, observable: "a branch restated, or one whose premise was, reads its cited contract as reviewed",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_restating_the_claim_or_a_premise_leaves_it_unreviewed_until_read_again"}
+      - {id: FM-pin-restates, observable: "writing a pin on a cited measurement sets a trial aside",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_a_pin_reads_reviewed_and_restates_nothing"}
+      - {id: FM-uncited-contract-silent, observable: "a contract no branch cites goes unreported",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_an_unpinned_measurement_and_an_uncited_contract_are_shown"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -103,6 +109,7 @@ components:
       - src/consistency_belief/render.py
       - src/consistency_belief/ids.py
       - src/consistency_belief/__init__.py
+      - src/consistency_belief/measurements.py
 
   - id: CMP-belief-model
     purpose: Compute belief slices from evidence, priors, and declarations
