@@ -303,7 +303,7 @@ def ingest(
 
     required = ("contract_id", "test_id", "outcome")
     accepted, rejected = [], []
-    run_id, _reserved = ctx.store.reserve_run_id()
+    run_id, reserved = ctx.store.reserve_run_id()
 
     for index, record in enumerate(records):
         problems = [f"missing {f}" for f in required if not record.get(f)]
@@ -341,6 +341,8 @@ def ingest(
             "validity": "valid",
         })
 
+    if not accepted:
+        reserved.rmdir()    # nothing rests on it: the id is given back and no directory is left
     if accepted:
         # Copied only once something will rest on it, so a rejected import leaves no directory.
         copy = ctx.store.artifact_dir(run_id) / original.name
