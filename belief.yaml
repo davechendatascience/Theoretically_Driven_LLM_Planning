@@ -268,6 +268,31 @@ components:
     code:
       - src/graph_snapshot/
 
+  - id: CMP-code-links
+    purpose: Read tagged code regions at one revision and say whether each link still matches its code and its claim
+    testable_capability: >-
+      Reads markers from real comments only, at one resolved revision; reports every link whose
+      body or claim pin no longer matches, at every revision until it is re-pinned, and every id
+      named in a comment or docstring that resolves to nothing; and moves no proof state
+    failure_modes:
+      - {id: FM-unreviewed-edit-forgotten, observable: "a tagged body edited without re-pinning reads aligned a commit later",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_code_edit_stays_reported_at_every_later_commit_until_repinned"}
+      - {id: FM-upstream-restatement-missed, observable: "a premise restated upstream of a linked claim leaves its pins aligned",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_restating_a_premise_upstream_stales_every_link_resting_on_it"}
+      - {id: FM-dangling-mention-silent, observable: "a comment naming a removed claim produces no finding",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_removed_claim_leaves_its_tag_and_its_mentions_dangling"}
+      - {id: FM-formatting-churn, observable: "a formatter run or a comment edit stales a body pin",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_formatter_run_or_a_comment_edit_keeps_the_pin"}
+      - {id: FM-code-in-probe, observable: "the probe a verifier reads names a region or a source path",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestBoundaries::test_the_probe_carries_no_code"}
+      - {id: FM-worktree-indexed, observable: "an uncommitted edit changes what the committed index reports",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestRevisions::test_working_tree_edits_are_reported_and_never_indexed"}
+    remediation: code_links.parser's body digest; code_links.validation; consistency_belief.links.claim_pin
+    goal: GOL-sound-designs
+    code:
+      - src/code_links/
+      - src/consistency_belief/links.py
+
 interfaces:
   - id: IFC-declarations__model
     producer: CMP-declarations
@@ -404,6 +429,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-graph-snapshot]
 
+  - id: CTR-code-links-aligned
+    subject: CMP-code-links
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-code-links]
+
   # Integration: each interface's producer output run through its consumer, both sides at once.
   - id: CTR-ifc-declarations-model
     subject: IFC-declarations__model
@@ -528,6 +561,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py, pyproject.toml]
 
+  - id: TST-code-links
+    layer: component
+    targets: [CMP-code-links]
+    run: python tools/pytest_trials.py $OUT -- tests/test_code_links.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py]
+
   - id: TST-ifc-declarations-model
     layer: interface
     targets: [IFC-declarations__model]
@@ -575,6 +616,7 @@ policies:
       - {slice: CTR-surface-intact, require: supported}
       - {slice: CTR-plugin-pinned-and-rooted, require: supported}
       - {slice: CTR-goal-set-stays-human, require: supported}
+      - {slice: CTR-code-links-aligned, require: supported}
       - {slice: CTR-snapshot-shows-one-revision, require: supported}
       - {slice: CTR-ifc-declarations-model, require: supported}
       - {slice: CTR-ifc-model-diagnose, require: supported}

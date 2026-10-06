@@ -25,6 +25,7 @@ components:
   - {id: CMP-stamp-monitor, note: "the read-only monitor over both ledgers"}
   - {id: CMP-goals, note: "the guard and the record that keep the goal set the human's"}
   - {id: CMP-plugin, note: "the one plugin any project enables, pinned to a release"}
+  - {id: CMP-code-links, note: "tagged code regions, pinned to the code and the claims they realize"}
   - {id: CMP-graph-snapshot, note: "the design graph at one revision, drawn as one page"}
 
 axioms:
@@ -209,6 +210,22 @@ axioms:
       An audit that blocks on evidence nothing counts any more asks for a
       remedy that was already applied, and teaches a reader to stop reading it;
       one that drops the finding hides what was set aside and why.
+
+  - id: AXM-links-never-silent
+    domain: integrity
+    goal: GOL-sound-designs
+    statement: >-
+      At every revision, every code link in a scanned file is reported as
+      aligned or as not aligned, with why, and every mention, in a comment or
+      docstring of a scanned file, of an id that names no node in the premise
+      graph and no code region is reported. Producing these reports changes no
+      proof state and no measured belief.
+    rationale: >-
+      Code that realizes a claim changes constantly, and so do the claims. A
+      link left behind by either reads exactly like one that still holds, and a
+      comment naming a renamed claim reads like a citation. A report made only
+      in the commit that broke a link is gone a commit later; one made at every
+      revision is not.
 
 definitions:
   - id: DEF-proof-obligation
@@ -430,6 +447,29 @@ definitions:
       ledger, and where a component's code claims either file, or a declared
       test names either on its run line or among what it reads, the snapshot
       writes nothing.
+
+  - id: DEF-code-link
+    term: Code link
+    meaning: >-
+      A relation, declared in comments of a file git tracks at a revision, from
+      a delimited region of that file to a node, carrying two pins: a body pin
+      on the region and a claim pin on the relation. A region's body digest is
+      determined by its code with comments and layout set aside, and differs
+      whenever that code differs. A node's claim digest at a revision is
+      determined by the fingerprints, as DEF-current-trial uses them, of the
+      node and of every node it depends on in the premise graph at that
+      revision, and differs whenever any of those differs or the set of nodes
+      it depends on differs. A code link is a declared relationship: it is not a
+      trial and not a record in the ledger.
+
+  - id: DEF-aligned-link
+    term: Aligned link
+    meaning: >-
+      A code link is aligned at a revision exactly when its region is well
+      formed and its id is carried by no other region there, its node is in the
+      premise graph at that revision, its body pin equals the region's body
+      digest at that revision, and its claim pin equals the node's claim digest
+      at that revision.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -896,6 +936,41 @@ branches:
       evidence: CTR-snapshot-shows-one-revision
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-links-stale-when-either-side-moves
+    subject: CMP-code-links
+    claim_type: contract
+    statement: >-
+      A code link reads aligned exactly at the revisions at which it is
+      aligned. A link stops reading aligned at the first revision at which its
+      region's code, comments and layout aside, differs from the code its body
+      pin was taken from, or at which its node, or any node its node depends
+      on, has been restated or removed since its claim pin was taken; at that
+      revision and every later one at which it is not aligned, it is reported
+      with why. A mention of an id that names no node in the premise graph and
+      no code region is reported. None of these reports changes a proof state.
+    premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-current-trial, DEF-restatement, DEF-report, DEF-proof-state]
+    derivation_rule: >-
+      By AXM-links-never-silent every link is reported at every revision as
+      aligned or as not aligned with why, so it reads aligned exactly where it
+      is aligned. By DEF-aligned-link it is aligned only while its body pin
+      equals the region's body digest and its claim pin equals the node's claim
+      digest. By DEF-code-link the body digest differs whenever the region's
+      code, comments and layout aside, differs, so a body pin taken from other
+      code no longer equals it; and the claim digest differs whenever the
+      fingerprint of the node or of a node it depends on differs, or the set of
+      those nodes does. By DEF-current-trial a fingerprint differs whenever the
+      statement or the cited premises differ, which DEF-restatement calls
+      restating; a removed node is in no premise graph, and by DEF-aligned-link
+      a link to a node outside it is not aligned. So either change makes the
+      link not aligned, and AXM-links-never-silent reports it, with why, at
+      that revision and at every later one at which it is still not aligned.
+      The mention clause is AXM-links-never-silent's. By DEF-report producing a
+      report appends no record and changes no declaration, and by DEF-code-link
+      a link is neither a trial nor a ledger record; by DEF-proof-state a proof
+      state is computed from the premise graph and the trials recorded on it
+      alone, so no proof state changes. evidence: CTR-code-links-aligned
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -911,4 +986,5 @@ policies:
       - {target: BRN-plugin-pinned, require: proven, evidence: supported}
       - {target: BRN-design-gate-reads-evidence, require: proven, evidence: supported}
       - {target: BRN-audit-blocks-what-counts, require: proven, evidence: supported}
+      - {target: BRN-links-stale-when-either-side-moves, require: proven, evidence: supported}
       - {target: BRN-snapshot-shows-one-revision, require: proven, evidence: supported}
