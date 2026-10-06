@@ -407,25 +407,29 @@ definitions:
     meaning: >-
       What taking a snapshot of a project returns and writes. Taking one
       resolves the project's head revision to one commit before it reads any
-      declaration, takes every declaration it shows from that commit and from
-      no other version of it, and names that commit; a declaration file whose
-      working copy differs from that commit it names as carrying uncommitted
-      edits, which it does not show. It builds the premise graph as
-      DEF-premise-graph defines it, from that commit's declarations and the
-      proposals staged in the ledger as the snapshot read it, and for each
-      lemma and branch in that graph it shows the proof state DEF-proof-state
-      gives that node in that build, and no other. Beside them it lists the
-      issues the declaration loaders report for that commit, and the gaps the
-      joined graph shows: an axiom naming no goal, a goal no axiom names, a
-      component with code that no declared branch governs, an interface or
-      goal no branch governs, and an axiom or definition nothing rests on. It
-      shows no state for a contract and reads no evidence record. Taking a
-      snapshot appends no record to the ledger -- no trial, amendment, note,
-      event or decision, of any provenance -- and changes no declaration.
-      Besides the report it returns, it writes one page, inside a directory of
-      the working tree that holds no declaration file and no part of the
-      ledger and that no declaration names; where a declaration names that
-      directory or anything in it, it writes nothing.
+      declaration, names that commit and no other revision, and takes every
+      declaration it shows from that commit and from no other version of it; a
+      declaration file whose working copy differs from that commit it names as
+      carrying uncommitted edits, which it does not show. It builds the premise
+      graph as DEF-premise-graph defines it, from that commit's declarations
+      and the proposals staged in the ledger as the snapshot read it, and every
+      proposal it shows is the one staged for that id in the ledger as the
+      snapshot read it. For each lemma and branch in that build it shows the
+      proof state DEF-proof-state gives that node in that build, and no other.
+      Beside them it lists the issues the declaration loaders and the build
+      report, and the gaps the joined graph shows: an axiom naming no goal, a
+      goal no axiom names, a component with code that no declared branch
+      governs, an interface or goal no branch governs, and an axiom or
+      definition nothing rests on. It shows no state for a contract and reads
+      no evidence record. Taking a snapshot appends no record to the ledger --
+      no trial, amendment, note, event or decision, of any provenance --
+      changes no declaration, makes no commit and does not move the head
+      revision. Besides the report it returns, it writes two files and nothing
+      else: its page, and a file that keeps git from tracking the directory
+      both are in. That directory holds no declaration file and no part of the
+      ledger, and where a component's code claims either file, or a declared
+      test names either on its run line or among what it reads, the snapshot
+      writes nothing.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -847,43 +851,48 @@ branches:
     claim_type: contract
     statement: >-
       Every declaration a snapshot shows is as committed at the one revision
-      it names, every proposal it shows is one staged in the ledger as the
-      snapshot read it, and the proof state it shows for each lemma and branch
-      is the one that node has in the premise graph built from them. Taking a
-      snapshot changes no measured belief and no proof state.
+      it names, and every proposal it shows is the one staged for its id in
+      the ledger as the snapshot read it. For each lemma and branch in the
+      premise graph built from that revision's declarations and the proposals
+      staged in the ledger as the snapshot read it, the proof state it shows
+      is the one that node has in that build. Taking a snapshot changes no
+      measured belief and no proof state.
     premises: [AXM-no-belief-write-path, AXM-commit-is-approval, DEF-snapshot, DEF-belief-eligible, DEF-proof-state, DEF-premise-graph, DEF-current-trial, DEF-ledger]
     derivation_rule: >-
       What it shows: by DEF-snapshot, taking a snapshot resolves the head
-      revision to one commit before it reads any declaration, takes every
-      declaration it shows from that commit and from no other version of it,
-      and names that commit. It builds the premise graph as DEF-premise-graph
-      defines it from that commit's declarations and the proposals staged in
-      the ledger as it read it, and shows for each lemma and branch the proof
-      state DEF-proof-state gives that node in that build, and no other.
-      Beliefs: by DEF-snapshot, taking a snapshot appends no record to the
-      ledger of any provenance and changes no declaration. Belief-eligible
-      evidence, by DEF-belief-eligible, is a trial record, measured or
-      imported -- a record in the ledger as DEF-ledger names it. Taking a
-      snapshot appends none, so by AXM-no-belief-write-path, under which a
-      measured belief changes only through belief-eligible evidence, no
-      measured belief moves. Proof states: by DEF-proof-state a node's proof
-      state is computed from its place in the premise graph, the version of it
-      the build admitted -- its declaration at the head revision, or, for an
-      id not declared there, its staged proposal -- and the trials recorded on
-      it, and from nothing else belief.yaml or the ledger says about it. By
-      DEF-premise-graph the graph is built from the declarations at the head
-      revision and the proposals staged in the ledger; taking a snapshot
-      changes no declaration and appends no record, so it stages, restates or
-      withdraws no proposal, and neither the graph nor the version of a node it
-      admits changes. The one page it writes lies in a directory that holds no
-      declaration file and no part of the ledger, and by AXM-commit-is-approval
-      every proof state is computed from committed content and the ledger and
-      from no other file in the working tree. By DEF-current-trial whether a
-      trial is current depends on its validity after amendments, its target
-      being in the premise graph, and the fingerprints it recorded; taking a
-      snapshot appends no trial and no amendment and leaves the graph
-      unchanged, so the trials recorded on each node, and which of them are
-      current, are unchanged. So no proof state changes.
+      revision to one commit before it reads any declaration, names that
+      commit and no other revision, and takes every declaration it shows from
+      that commit and from no other version of it; and every proposal it shows
+      is the one staged for that id in the ledger as the snapshot read it. It
+      builds the premise graph as DEF-premise-graph defines it from that
+      commit's declarations and the proposals staged in the ledger as it read
+      it, and for each lemma and branch in that build shows the proof state
+      DEF-proof-state gives that node in that build, and no other. Beliefs: by
+      DEF-snapshot, taking a snapshot appends no record to the ledger of any
+      provenance and changes no declaration. Belief-eligible evidence, by
+      DEF-belief-eligible, is a trial record, measured or imported -- a record
+      in the ledger as DEF-ledger names it. Taking a snapshot appends none, so
+      by AXM-no-belief-write-path, under which a measured belief changes only
+      through belief-eligible evidence, no measured belief moves. Proof
+      states: by DEF-proof-state a node's proof state is computed from its
+      place in the premise graph, the version of it the build admitted -- its
+      declaration at the head revision, or, for an id not declared there, its
+      staged proposal -- and the trials recorded on it, and from nothing else
+      belief.yaml or the ledger says about it. By DEF-premise-graph the graph
+      is built from the declarations at the head revision and the proposals
+      staged in the ledger. Taking a snapshot changes no declaration, makes no
+      commit, does not move the head revision and appends no record, so it
+      stages, restates or withdraws no proposal, and neither the graph nor the
+      version of a node it admits changes. The two files it writes lie in a
+      directory that holds no declaration file and no part of the ledger, and
+      by AXM-commit-is-approval every proof state is computed from committed
+      content and the ledger and from no other file in the working tree. By
+      DEF-current-trial whether a trial is current depends on its validity
+      after amendments, its target being in the premise graph, and the
+      fingerprints it recorded; taking a snapshot appends no trial and no
+      amendment and leaves the graph unchanged, so the trials recorded on each
+      node, and which of them are current, are unchanged. So no proof state
+      changes.
       evidence: CTR-snapshot-shows-one-revision
     sufficiency: {n_min: 3, min_consensus: 0.8}
 

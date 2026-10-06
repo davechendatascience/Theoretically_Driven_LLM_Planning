@@ -247,6 +247,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_every_proof_state_is_the_one_the_server_computes"}
       - {id: FM-revisions-mixed, observable: "a snapshot names one revision and shows a declaration committed at another",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_commit_during_a_snapshot_does_not_mix_revisions"}
+      - {id: FM-superseded-proposal, observable: "a snapshot shows a proposal in a version the ledger no longer stages",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_proposal_shows_as_the_ledger_stages_it"}
       - {id: FM-worktree-shown, observable: "an uncommitted declaration edit appears in a snapshot, or goes unmentioned",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_uncommitted_edits_are_named_and_not_shown"}
       - {id: FM-gap-missed, observable: "an axiom naming no goal, or a component with code and no design, is not listed as a gap",
@@ -257,7 +259,7 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_snapshot_reads_no_evidence"}
       - {id: FM-page-tracked, observable: "git status lists the page a snapshot wrote",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_git_does_not_see_the_page"}
-      - {id: FM-page-is-evidence, observable: "a snapshot rewrites a page that a declared test or component names",
+      - {id: FM-page-is-evidence, observable: "a snapshot writes a file a component's code claims or a declared test names",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_page_a_declaration_names_is_not_written"}
       - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
