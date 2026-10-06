@@ -179,6 +179,13 @@ class TestSourceReferences:
             assert probe_text(a, nid) == probe_text(b, nid)
             assert "SRC-" not in probe_text(b, nid) and "industrial robots" not in probe_text(b, nid)
 
+        # Whatever its id, a source is no candidate for the graph and displaces none.
+        clash = _parse(REFERENCED_YAML + "  - {id: LMA-clearance, title: A source sharing a lemma's id}\n")
+        c = ProofDAG.from_declarations(clash)
+        assert c.nodes["LMA-clearance"].kind == "lemma" and c.parents == a.parents
+        assert {n: x.fingerprint() for n, x in c.nodes.items()} == {n: x.fingerprint() for n, x in a.nodes.items()}
+        assert states(c) == states(a) and probe_text(c, "BRN-motion-gate") == probe_text(a, "BRN-motion-gate")
+
     def test_a_dangling_reference_and_an_unreferenced_source_are_reported(self):
         decl = _parse(REFERENCED_YAML.replace("references: [SRC-robot-safety]", "references: [SRC-missing]")
                       + "  - {id: SRC-unused, title: A work nothing references}\n")
