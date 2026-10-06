@@ -1,4 +1,5 @@
 """End-to-end tool and workflow tests for the consistency-belief MCP server."""
+# tdlp:foreign-ids the graphs and projects these tests build declare their own node ids
 
 from __future__ import annotations
 
@@ -710,3 +711,11 @@ def test_a_trial_made_before_fingerprints_is_judged_by_its_build_then(committed_
 
     commit_at(SAMPLE_CONSISTENCY_YAML.replace("bounded at 100W", "bounded at 80W"), "2026-01-03T00:00:00+00:00")
     assert "BRN-gpu-throttling [STALE]" in status("tree"), "a premise restated after it: it does not"
+
+
+def test_decide_refuses_a_policy_it_does_not_declare(committed_repo: Path):
+    """A typo'd policy id once fell back to the first declared policy and recorded a decision
+    under it -- possibly a laxer one than the one named."""
+    out = decide("BRN-gpu-throttling", policy_id="POL-energy-gaet")
+    assert "unknown policy 'POL-energy-gaet'" in out and "POL-energy-gate" in out
+    assert not (committed_repo / ".consistency" / "decisions.jsonl").exists()

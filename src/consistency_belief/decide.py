@@ -40,8 +40,10 @@ class DecisionVerdict:
 
 
 def active_policy(decl: Declarations, policy_id: str | None = None) -> Policy | None:
-    if policy_id and policy_id in decl.policies:
-        return decl.policies[policy_id]
+    """The named policy, or with none named the first declared. A name that is not declared is
+    None: evaluating a typo'd strict policy under a lenient one records a decision nobody asked for."""
+    if policy_id:
+        return decl.policies.get(policy_id)
     if decl.policies:
         return next(iter(decl.policies.values()))
     return None

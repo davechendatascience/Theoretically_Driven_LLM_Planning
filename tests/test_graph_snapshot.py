@@ -320,3 +320,21 @@ def test_the_cli_says_what_the_tool_says(project, capsys):
     out = capsys.readouterr().out
     assert out.startswith("graph snapshot: ") and "branches 1: 1 obligation" in out
     assert page_data(project)["focus"] == "BRN-motion-gate"
+
+
+def test_tagged_code_is_listed_on_its_claim_and_is_never_an_edge(project):
+    """A region that implements a branch is drawn on the branch, with the link state code_links
+    computes at the same commit; the graph's edges stay premise edges, and no source is copied."""
+    from code_links import UNPINNED
+    from graph_snapshot.snapshot import take
+
+    commit(project, {"motion.py": "def plan():\n    # tdlp:begin CODE-plan\n    # tdlp:implements BRN-motion-gate\n"
+                                  "    secret = 'do not copy me'\n    # tdlp:end CODE-plan\n"
+                                  "# tdlp:end CODE-<script>\n"}, "tag the planner")
+    snap = take(project)
+    [region] = snap["nodes"]["BRN-motion-gate"]["regions"]
+    assert region == {"id": "CODE-plan", "relation": "implements", "at": "motion.py:2-5", "state": UNPINNED}
+    assert not any("CODE-" in a or "CODE-" in b for a, b in snap["edges"])
+    issues = {(i["code"], i["source"]) for i in snap["issues"]}
+    assert ("UNPINNED", "code links") in issues and ("MALFORMED_MARKER", "code links") in issues
+    assert "do not copy me" not in json.dumps(snap)

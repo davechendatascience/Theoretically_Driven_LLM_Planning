@@ -6,7 +6,7 @@ Four MCP servers that hold an LLM agent's engineering work to account, and show 
 |---|---|---|---|
 | **consistency-belief** | Do the reasons for a design **follow**? | declared axioms, checked by falsification probes | `.consistency/` |
 | **component-belief** | Does the built thing **work**? | declared tests, run by the server itself | `.belief/` |
-| **stamp-monitor** | Is the evidence still **current and intact**, and was the loop followed? | both ledgers, their stamps, and git | reads only |
+| **stamp-monitor** | Is the evidence still **current and intact**, was the loop followed, and does the tagged code still match its claims? | both ledgers, their stamps, tagged code, and git | reads only |
 | **graph-snapshot** | What does the **whole design** look like at this revision? | the three declaration files at one commit, and the proof states | reads only; writes one page |
 
 The first two are paired: a design branch names the component it governs, and cites the contract
@@ -57,6 +57,22 @@ does not fetch it on its own.
 * **Which version.** The servers install with `uvx` from the tag `tdlp--v<version>`, so edits here
   reach a project only when a release is tagged and the plugin updated
   (`claude plugin update tdlp@davechendatascience-marketplace`).
+* **The first start after an update is slow.**
+  - **Why.** The first time each server starts at a new version, `uvx` clones that tag, builds
+    the package and installs its dependencies. That took 50 to 100 seconds here, against the 30
+    seconds Claude Code gives an MCP server to connect. Every later start takes about 4 seconds.
+    Too short a limit leaves the servers failed with `CONNECT_TIMEOUT` for the session.
+  - **The fix.** Raise the limit next to `enabledPlugins` in the project's
+    `.claude/settings.json`, and restart Claude Code, which reads it at startup. A plugin cannot
+    set this for its own servers.
+
+    ```json
+    {"enabledPlugins": {"tdlp@davechendatascience-marketplace": true},
+     "env": {"MCP_TIMEOUT": "120000"}}
+    ```
+
+  - **If it already failed.** Reconnect the servers from `/mcp`, since the build finishes in the
+    background.
 * **Which Python a test gets.** A declared test's `run:` line runs in the project's environment:
   its `.venv` if it has one, else the PATH Claude Code inherited, never the plugin's own
   interpreter. For anything else, name the interpreter on the run line (`conda run -n env python ...`).
@@ -101,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.2" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -395,6 +411,7 @@ accepted them would be an agent-writable path into the evidence. Freshness is a 
 | `impact(base, worktree)` | changed path → component / test → contract (state at HEAD) → design branch → policy, and which tests to re-run |
 | `audit()` | every ledger line parses; ids are unique; amendments and decisions cite records that exist; stamps and artifacts still match their digests; declarations are committed |
 | `workflow()` | reclassifications that remove only adverse results; adoptions with no human approver; decisions on dirty-tree evidence; adoptions whose evidence has since gone stale |
+| `links(subject)` | tagged code regions (`# tdlp:begin CODE-...`) and the claims they relate to: each link aligned, or why not, with the header lines to write once reviewed |
 
 ```text
 src/component_belief/runner.py changed
@@ -405,7 +422,33 @@ next: run_test TST-server
 ```
 
 The same reports run from a shell for git hooks, CI, and Claude Code hooks:
-`stamp-monitor impact|audit|workflow`, exiting 1 on a `[block]` finding from `audit` or `workflow`.
+`stamp-monitor impact|audit|workflow|links`, exiting 1 on a `[block]` finding from `audit` or
+`workflow`, and from `links --strict` on any tag that is broken or needs review.
+
+### Code linked to claims
+
+A region of code names the claim it realizes, and carries two pins: one of its own body, and one
+of the claim as it stood when someone read the two together.
+
+```python
+# tdlp:begin CODE-runner-exit-code-fallback@3f9a1c2e      <- the body that was reviewed
+# tdlp:implements BRN-runner-captures@7c41d0e2            <- the claim, and everything upstream
+...
+# tdlp:end CODE-runner-exit-code-fallback
+```
+
+* **Code edit.** The body pin ignores comments and formatting, so a code edit stales it and a
+  formatter run does not.
+* **Claim restated.** The claim pin binds to what a verification trial binds to, so restating the
+  claim, or any premise upstream of it, stales the link.
+* **Persistent.** A stale link is reported at every revision until someone re-reads the region
+  and updates the pin, not only in the commit that broke it.
+* **Dangling ids.** A `DEF-`/`BRN-` id in a comment or docstring that names nothing is reported.
+  So is one outside any region that declares it, since nothing will notice when it rots.
+* **Outside the probe.** None of it reaches the verifier. Links are a stamp-monitor report, not
+  a consistency-belief view.
+
+Design and adoption steps: [`docs/code_to_theory_tagging_design.md`](docs/code_to_theory_tagging_design.md).
 
 ---
 
@@ -511,7 +554,7 @@ traceability and configuration control. The human owns the top of the V; the age
 | Build | `code:` claims per component; `status(view="artifacts")` | inspection |
 | Component, integration, system test | contracts and tests by `layer`, an interface's contract on the interface itself; `run_test`; `.belief/` | test |
 | Risk register | failure modes in `belief.yaml`, each naming the contract and the case that observe it (`observed_by:`, `case:`) | mechanical: `status(view="graph")` lists the ones nothing observes and checks each named case passed in the ledger |
-| Traceability | a branch's `subject` and cited contract; `status(view="coverage")` on both sides | mechanical |
+| Traceability | a branch's `subject` and cited contract; `status(view="coverage")` on both sides; tagged code regions pinned to the claims they realize (`stamp-monitor links`) | mechanical |
 | Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
 | Change control | `audit_change`, STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
 | Configuration audit | `stamp-monitor audit` and `workflow` | mechanical, read-only |
@@ -556,14 +599,16 @@ src/
     decide.py                        policy evaluation and the human approval gate
     stamps.py / views.py / render.py the artifacts view; status views
     store.py                         append-only JSONL ledger in .belief/
+  code_links/                        tagged code regions: parser, revision-pinned index, pins, mentions
   graph_snapshot/                    the design graph at one revision (1 tool)
     snapshot.py                      the join, the revision it pins, the gaps
     page.py / page.html              the one self-contained page, and where it may be written
     server.py / cli.py               MCP server; the same snapshot from a shell
-  stamp_monitor/                     read-only monitor (3 tools)
+  stamp_monitor/                     read-only monitor (4 tools)
     impact.py                        a change traced through both ledgers
     audit.py                         stamp, artifact and ledger integrity
     workflow.py                      conformance patterns in recorded history
+    links.py                         tagged code regions against their claims
     server.py / cli.py               MCP server; the same reports from a shell
 tools/pytest_trials.py               pytest → trials adapter
 tests/                               the suites belief.yaml declares as tests
@@ -609,6 +654,7 @@ The suites assert the invariants above, not the implementation:
 16. A declared input git ignores is judged by its content on disk: changed or missing, its evidence is stale; the same bytes again, current.
 17. A measure promoted from `belief.yaml` into `goals.yaml` keeps its evidence, while both files declare it and after; a draft `goals.yaml` is checked without taking effect.
 18. A snapshot shows the declarations of the one revision it names and the proof states the consistency server computes over them, lists the join's gaps, reads no evidence, and writes nothing but its page, which git does not see and no declaration names.
+19. A tagged code region reads aligned only while its body and its claim, with everything upstream, are as they were pinned; any other link, and any id named in a comment that resolves to nothing, is reported at every revision until fixed; and none of it moves a proof state or reaches the probe.
 
 ---
 
@@ -617,6 +663,53 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.2 — 2026-10-06 · code linked to the claims it realizes
+
+- **Tagged code regions** (`code_links`, a library the servers share, not a fifth server).
+  - `# tdlp:begin CODE-<name>` / `# tdlp:implements BRN-<id>` / `# tdlp:end CODE-<name>` mark
+    a region and the node it realizes (also `uses`, `checks`, `motivated-by`). Targets may be
+    branches, lemmas, definitions or axioms.
+  - Each tag carries pins. The body pin is set by the code tokens; comments and layout do not
+    move it. The claim pin is set by the claim's fingerprint and everything upstream, which is
+    what a trial binds to.
+  - A link whose pins no longer match is reported at every revision until it is re-read and
+    re-pinned, with the revision to diff against or the nodes restated since.
+  - Ids named in comments and docstrings are checked: one that names nothing is an error, and
+    one no region tracks is listed.
+- **stamp-monitor gets `links`**, its fourth tool, plus `stamp-monitor links [--strict]`.
+  `audit` reports broken and stale links as warnings, never blocks. `impact` lists what the range
+  did to tagged regions beside the chain, never on it. consistency-belief gets no view: the
+  verifier holds `status`. `audit_change` names, by id only, the regions a restatement unpins.
+- **graph-snapshot lists each claim's regions** with their link state at the snapshot's commit,
+  and broken or stale links in its Issues tab. Regions are never nodes or edges.
+- **Tag and pin in one commit.** `stamp-monitor links` prints the pins an uncommitted region
+  would need, so an untagged region goes to aligned in a single reviewed commit.
+- **The servers no longer time out after an update.** On 0.7.0 three of the four failed with
+  `CONNECT_TIMEOUT`. The first start at a new tag clones, builds and installs, which took 50 to 100
+  seconds here, against Claude Code's 30-second connect limit; graph-snapshot connected only on a
+  retry, once the build had finished. A plugin cannot raise the limit, so this project sets
+  `MCP_TIMEOUT` to 120 seconds in `.claude/settings.json`, and the quick start says to do the
+  same.
+- **Fixed, from a review of the harness:**
+  - **Compatibility groups.** A refuted compatibility group in a bucket no longer hides behind a
+    supported one: the policy read one state per bucket, and the last slice overwrote the rest.
+  - **Unknown policy id.** consistency-belief `decide` refuses a policy id it does not declare,
+    instead of deciding under the first one.
+  - **Goals policy.** It is no longer approved by the human's commit when it reads something the
+    agent declares: a prior on a goal measure, or `mandatory:` flags through `safety_gates`.
+  - **Goal guard and record.** A file renamed out of a goal test's directory is refused by the
+    guard and found by the record.
+  - **Malformed entries.** One stray entry in `belief.yaml`, `goals.yaml` or `consistency.yaml`
+    (a bare id, a mapping with no id, a string criterion) is reported as `MALFORMED`. It no
+    longer raises in every tool.
+  - **Design-ledger audit.** `audit` checks `.consistency/` for duplicate trial ids and for
+    amendments and decisions citing trials that do not exist.
+  - **Policy ids in both files.** `impact` keeps what each ledger's policy gates when
+    `belief.yaml` and `consistency.yaml` declare the same policy id.
+  - **Unstamped evidence.** It reads a `code:` directory as a directory.
+  - **Test version check.** A changed test stales its evidence even when no staleness reader is
+    passed.
 
 ### 0.7.0 — 2026-10-06 · the whole design, drawn at one revision
 

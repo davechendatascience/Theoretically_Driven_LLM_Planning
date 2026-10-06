@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import stat
 import subprocess
 import sys
@@ -86,9 +87,35 @@ def goal_set(root: Path, *goal_texts: str | None) -> set[str]:
     return paths
 
 
+def _named_entries(*goal_texts: str | None) -> set[str]:
+    """The directory and glob entries goals.yaml's tests name, as written. A file moved out of
+    `tests/goals/` is gone from the tree, so it is no longer among the files the goal set lists;
+    the directory, as a pathspec, still finds the commit that moved it."""
+    entries: set[str] = set()
+    for text in goal_texts:
+        try:
+            data = yaml.safe_load(text or "") or {}
+        except yaml.YAMLError:
+            continue
+        for raw in (data.get("tests") or []) if isinstance(data, dict) else []:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                tokens = shlex.split(str(raw.get("run", "")), posix=True)
+            except ValueError:
+                tokens = str(raw.get("run", "")).split()
+            for token in tokens + [str(r) for r in raw.get("reads") or []]:
+                token = token.split("::", 1)[0].replace("\\", "/").removeprefix("./").rstrip("/")
+                if token and not token.startswith("-") and "$" not in token and (
+                        "/" in token or any(c in token for c in "*?[")):
+                    entries.add(token)
+    return entries
+
+
 def goal_history(root: Path) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
     """The agent's commits to the goal set since your last one (newest first), and your last one."""
-    paths = sorted(goal_set(root, _git(root, "show", f"HEAD:{GOALS_FILE}")))
+    goals_text = _git(root, "show", f"HEAD:{GOALS_FILE}")
+    paths = sorted(goal_set(root, goals_text) | _named_entries(goals_text))
     changes: list[dict[str, Any]] = []
     for sha in (_git(root, "log", "--format=%H", "--", *paths) or "").split():
         message = (_git(root, "show", "-s", "--format=%B", sha) or "").strip()
@@ -119,7 +146,9 @@ def ratification_gap(root: Path, decl: Declarations, policy_id: str) -> str | No
 
 def _staged(root: Path) -> list[str]:
     base = "HEAD" if _git(root, "rev-parse", "--verify", "-q", "HEAD") is not None else _EMPTY_TREE
-    return _split0(_git(root, "diff", "--cached", "--name-only", "-z", base))
+    # --no-renames: a file moved out of the goal set is a deletion from it, and rename detection
+    # would list only where it went
+    return _split0(_git(root, "diff", "--cached", "--name-only", "--no-renames", "-z", base))
 
 
 def check_commit(root: Path, message: str) -> list[str]:

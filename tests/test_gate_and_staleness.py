@@ -480,3 +480,27 @@ class TestTestVersion:
         git(gate_repo, "commit", "-qam", "reformat the run line, same procedure")
         [sl] = compute_slices(load(gate_repo), old, staleness=CodeStaleness(gate_repo))
         assert sl.state == STATE_SUPPORTED
+
+
+class TestRevisionFallback:
+    def test_a_directory_claim_reaches_its_files_without_a_stamp(self, repo):
+        """An unstamped trial falls back to `git diff <revision> HEAD`, which must read a `code:`
+        directory the way a stamp does -- this repository claims `src/stamp_monitor/`."""
+        (repo / "pkg").mkdir()
+        (repo / "pkg" / "a.py").write_text("# v1\n", encoding="utf-8")
+        (repo / "belief.yaml").write_text(CLAIMED_YAML.replace("[grasp.py, grasp/*.py]", "[pkg/]"),
+                                          encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "claim a directory")
+        trials = measured_at(repo)
+        (repo / "pkg" / "a.py").write_text("# v2\n", encoding="utf-8")
+        git(repo, "commit", "-qam", "change a file under it")
+        slices = compute_slices(load(repo), trials, staleness=CodeStaleness(repo))
+        assert slices[0].state == STATE_STALE and "pkg/a.py" in slices[0].stale_reasons[0]
+
+    def test_a_changed_test_stales_its_evidence_with_no_staleness_reader(self, repo):
+        """The test's own version is checked whether or not code staleness is: an operator
+        precedence slip once skipped it whenever no staleness reader was passed."""
+        trials = [dict(trial(ik=True), test_ref="TST-grasp-ik@0000000000") for _ in range(30)]
+        slices = compute_slices(load(repo), trials)
+        assert slices[0].state == STATE_STALE

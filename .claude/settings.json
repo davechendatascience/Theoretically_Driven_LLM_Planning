@@ -1,5 +1,8 @@
 {
   "enabledPlugins": {
     "tdlp@davechendatascience-marketplace": true
+  },
+  "env": {
+    "MCP_TIMEOUT": "120000"
   }
 }

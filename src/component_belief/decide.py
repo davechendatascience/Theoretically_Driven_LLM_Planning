@@ -99,13 +99,15 @@ def evaluate_policy(
         else:
             states = {}
             for sl in contract_slices:
-                states[sl.bucket] = sl.state
+                # one state per slice: two compatibility groups in one bucket are two claims
+                # (rule 9.5), and keying by bucket alone let the last overwrite the other
+                states[sl.condition_label()] = sl.state
                 verdict.evidence_ids.extend(sl.evidence_ids)
 
         if any(s in (STATE_INSUFFICIENT, STATE_STALE) for s in states.values()):
             thin = [b for b, s in states.items() if s in (STATE_INSUFFICIENT, STATE_STALE)]
             for bucket in thin:
-                match = next(s for s in contract_slices if s.bucket == bucket)
+                match = next(s for s in contract_slices if s.condition_label() == bucket)
                 if match.state == STATE_STALE:
                     # Evidence for a revision that no longer exists is not evidence for this
                     # one. The remedy is named: the test that produced it, run again.

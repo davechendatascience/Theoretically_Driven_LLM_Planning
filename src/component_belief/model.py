@@ -211,9 +211,9 @@ def compute_slices(
             bundle["exclusions"][reason] = bundle["exclusions"].get(reason, 0) + 1
             continue
 
-        stale = (_test_changed(decl, trial) or
-                 staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
-                 if staleness is not None else None)
+        stale = _test_changed(decl, trial) or (
+            staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
+            if staleness is not None else None)
         if stale:
             bundle["stale"] += 1
             bundle["stale_reasons"][stale] = bundle["stale_reasons"].get(stale, 0) + 1

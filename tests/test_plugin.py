@@ -115,3 +115,11 @@ class TestManifest:
         for name in skills:
             front = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8").split("---")[1]
             assert f"name: {name}" in front
+
+
+def test_this_project_gives_the_servers_time_to_build_after_an_update():
+    """The first start at a new tag clones, builds and installs (50-100 s measured), against a 30 s
+    default connect limit; every server then fails with CONNECT_TIMEOUT for the session. A plugin
+    cannot raise that limit, so the project that enables it does, beside enabledPlugins."""
+    settings = _json(REPO / ".claude" / "settings.json")
+    assert int(settings["env"]["MCP_TIMEOUT"]) >= 120_000

@@ -248,3 +248,39 @@ policies:
         assert not [i for i in decl.issues if i.code in ("DUPLICATE_ID", "UNMEASURED_GOAL")]
         after = self.pick_slice(measured)
         assert (after.state, after.evidence_ids) == (before.state, before.evidence_ids)
+
+
+class TestWhatTheGoalsPolicyReads:
+    """The human's commit approves a goals policy only if everything the policy reads is theirs."""
+
+    def test_a_prior_on_a_goal_measure_is_the_agents(self, goals_repo):
+        text = (goals_repo / "belief.yaml").read_text(encoding="utf-8").replace(
+            "priors: []", "") + "\npriors:\n  - {contract: CTR-pick-success, alpha: 2000, beta: 1}\n"
+        commit_as_agent(goals_repo, "belief.yaml", text, "a strong prior")
+        gap = ratification_gap(goals_repo, load(goals_repo), "POL-goals")
+        assert gap and "CTR-pick-success has a prior" in gap
+
+    def test_safety_gates_read_the_agents_mandatory_flags(self, goals_repo):
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8").replace(
+            "      - {slice: CTR-cloud-fits-grasp, require: supported}\n",
+            "      - {slice: CTR-cloud-fits-grasp, require: supported}\n      - {safety_gates: all_passed}\n")
+        (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+        git(goals_repo, "commit", "-qam", "gate on safety")
+        gap = ratification_gap(goals_repo, load(goals_repo), "POL-goals")
+        assert gap and "safety_gates" in gap and "TST-grasp-ik" in gap
+
+    def test_a_file_moved_out_of_a_goal_directory_is_refused_and_recorded(self, goals_repo):
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8").replace(
+            "python eval/pick.py $OUT", "python -m pytest eval/goals $OUT")
+        (goals_repo / "eval" / "goals").mkdir()
+        (goals_repo / "eval" / "goals" / "test_hard.py").write_text("def test_hard(): pass\n", encoding="utf-8")
+        (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+        git(goals_repo, "add", "-A")
+        git(goals_repo, "commit", "-q", "-m", "my harder pick check")
+        (goals_repo / "eval" / "other").mkdir()
+        git(goals_repo, "mv", "eval/goals/test_hard.py", "eval/other/test_hard.py")
+        assert "eval/goals/test_hard.py" in check_commit(goals_repo, "tidy" + AGENT_TRAILER), \
+            "a rename is a deletion from the goal set"
+        git(goals_repo, "commit", "-q", "--no-verify", "-m", "tidy" + AGENT_TRAILER)
+        changes, _ = goal_history(goals_repo)
+        assert changes and "eval/goals/test_hard.py" in changes[0]["files"]

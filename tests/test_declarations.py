@@ -243,3 +243,18 @@ def test_a_value_cut_at_an_unquoted_comma_is_reported(repo):
     git(repo, "commit", "-qam", "an observable with a comma")
     split = [i for i in load(repo).issues if i.code == "SPLIT_VALUE"]
     assert split and "or a pose behind the arm" in split[0].message
+
+
+def test_a_malformed_entry_is_reported_and_loading_goes_on(repo):
+    """One stray entry -- a bare id, a mapping with no id, a criterion that is a string -- must
+    not raise into every tool that loads the file; it is left out and reported."""
+    text = (repo / "belief.yaml").read_text(encoding="utf-8")
+    text = text.replace("components:\n", "components:\n  - CMP-bare\n  - {purpose: no id}\n", 1)
+    text = text.replace("      - {slice: CTR-grasp-reachable, require: supported}\n",
+                        "      - {slice: CTR-grasp-reachable, require: supported}\n      - CTR-grasp-reachable\n")
+    (repo / "belief.yaml").write_text(text, encoding="utf-8")
+    git(repo, "commit", "-qam", "stray entries")
+    decl = load(repo)
+    assert set(decl.components) == {"CMP-perception", "CMP-grasp"}
+    assert [i.code for i in decl.issues].count("MALFORMED") == 3
+    assert decl.policies["POL-release"].criteria == [{"slice": "CTR-grasp-reachable", "require": "supported"}]

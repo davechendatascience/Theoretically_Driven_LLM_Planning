@@ -284,11 +284,23 @@ class Declarations:
         if policy_id not in self.goal_owned:
             return f"{policy_id} is declared in {DECLARATION_FILE}, not {GOALS_FILE}"
         for criterion in self.policies[policy_id].criteria:
+            if "safety_gates" in criterion:
+                # The gate ranges over every test flagged mandatory, and a flag on a test the
+                # agent declares can be added or dropped without touching goals.yaml.
+                agents = sorted(t for t in self.tests if t not in self.goal_owned)
+                if agents:
+                    return (f"its safety_gates criterion reads mandatory: on every test, and "
+                            f"{agents[0]} is declared in {DECLARATION_FILE}")
+                continue
             contract_id = criterion.get("slice")
             if not contract_id:
                 continue
             if contract_id not in self.goal_owned:
                 return f"its criterion {contract_id} is declared in {DECLARATION_FILE}"
+            if contract_id in self.priors:
+                # goals.yaml declares no priors, so a prior on a goal's measure is the agent's,
+                # and a strong one moves the slice the criterion reads
+                return f"{contract_id} has a prior, declared in {DECLARATION_FILE}"
             for tid in self.contracts[contract_id].evaluable_by if contract_id in self.contracts else []:
                 if tid not in self.goal_owned:
                     return f"{contract_id} is measured by {tid}, declared in {DECLARATION_FILE}"
@@ -385,23 +397,17 @@ def _parse(text: str, goals_text: str | None = None) -> Declarations:
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, "top level must be a mapping")])
 
     decl = Declarations()
-    for raw in data.get("components") or []:
-        c = Component(**_only(raw, Component))
+    for c in _entries(data, "components", Component, decl.issues):
         decl.components[c.id] = c
-    for raw in data.get("interfaces") or []:
-        i = Interface(**_only(raw, Interface))
+    for i in _entries(data, "interfaces", Interface, decl.issues):
         decl.interfaces[i.id] = i
-    for raw in data.get("contracts") or []:
-        c = Contract(**_only(raw, Contract))
+    for c in _entries(data, "contracts", Contract, decl.issues):
         decl.contracts[c.id] = c
-    for raw in data.get("tests") or []:
-        t = Test(**_only(raw, Test))
+    for t in _entries(data, "tests", Test, decl.issues):
         decl.tests[t.id] = t
-    for raw in data.get("priors") or []:
-        p = Prior(**_only(raw, Prior))
+    for p in _entries(data, "priors", Prior, decl.issues, key="contract"):
         decl.priors[p.contract] = p
-    for raw in data.get("policies") or []:
-        p = Policy(**_only(raw, Policy))
+    for p in _entries(data, "policies", Policy, decl.issues):
         decl.policies[p.id] = p
     decl.artifacts = [str(a) for a in (data.get("artifacts") or [])]
 
@@ -425,11 +431,12 @@ def _merge_goals(decl: Declarations, text: str) -> None:
     if not isinstance(data, dict):
         decl.issues.append(Issue("MALFORMED", GOALS_FILE, "top level must be a mapping"))
         return
-    for raw in data.get("goals") or []:
-        goal = Goal(**_only(raw, Goal))
+    for goal in _entries(data, "goals", Goal, decl.issues, where=GOALS_FILE):
         decl.goals[goal.id] = goal
     for raw in data.get("interfaces") or []:
-        raw = raw or {}
+        if not isinstance(raw, dict) or not raw.get("id"):
+            decl.issues.append(_malformed(GOALS_FILE, "interfaces", raw))
+            continue
         between = GoalInterface(id=str(raw.get("id", "")), from_goal=str(raw.get("from", "")),
                                 to_goal=str(raw.get("to", "")), hands_over=str(raw.get("hands_over", "")),
                                 measure=str(raw.get("measure", "")))
@@ -440,8 +447,7 @@ def _merge_goals(decl: Declarations, text: str) -> None:
     policies: dict[str, Policy] = {}
     for section, cls, target in (("contracts", Contract, decl.contracts), ("tests", Test, decl.tests),
                                  ("policies", Policy, policies)):
-        for raw in data.get(section) or []:
-            node = cls(**_only(raw, cls))
+        for node in _entries(data, section, cls, decl.issues, where=GOALS_FILE):
             if node.id in target or (section == "policies" and node.id in decl.policies):
                 decl.issues.append(Issue("DUPLICATE_ID", node.id,
                                          f"declared in both {DECLARATION_FILE} and {GOALS_FILE}; "
@@ -456,6 +462,34 @@ def _only(raw: dict[str, Any], cls: type) -> dict[str, Any]:
     typo to report, not a reason to refuse the whole file."""
     allowed = set(cls.__dataclass_fields__)
     return {k: v for k, v in (raw or {}).items() if k in allowed}
+
+
+def _malformed(where: str, section: str, raw: Any) -> Issue:
+    return Issue("MALFORMED", where, f"an entry under {section}: is not a mapping with an id, and "
+                 f"is left out: {str(raw)[:80]!r}")
+
+
+def _entries(data: dict[str, Any], section: str, cls: type, issues: list[Issue], *,
+             key: str = "id", where: str = DECLARATION_FILE) -> list[Any]:
+    """A section's entries, built. One that is not a mapping, names no `key`, or does not fit
+    the schema is reported and left out -- a stray `- CMP-x` or `- {purpose: y}` must not raise
+    into every tool that loads the file. A policy's criteria that are not mappings go the same way."""
+    out = []
+    for raw in data.get(section) or []:
+        if not isinstance(raw, dict) or not raw.get(key):
+            issues.append(_malformed(where, section, raw))
+            continue
+        try:
+            node = cls(**_only(raw, cls))
+        except (TypeError, ValueError) as exc:
+            issues.append(Issue("MALFORMED", str(raw.get(key)), f"does not fit the {section} schema: {exc}"))
+            continue
+        criteria = getattr(node, "criteria", None)
+        if isinstance(criteria, list) and not all(isinstance(c, dict) for c in criteria):
+            issues.append(Issue("MALFORMED", node.id, "a criterion that is not a mapping is left out"))
+            node.criteria = [c for c in criteria if isinstance(c, dict)]
+        out.append(node)
+    return out
 
 
 def validate(decl: Declarations) -> list[Issue]:

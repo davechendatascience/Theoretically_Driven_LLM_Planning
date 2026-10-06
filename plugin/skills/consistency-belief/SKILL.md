@@ -75,6 +75,34 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
    component-belief -- a design proven over a refuted measurement is proven of nothing.
    `note()` is inert (zero proof weight) and cannot close an obligation.
 
+## Linking code to claims
+
+When you write the code that realizes a branch, lemma or definition, tag the region. A tag is
+an assertion that you read this code against this claim. It is not a proof, and it moves no
+proof state.
+
+```python
+# tdlp:begin CODE-runner-exit-code-fallback
+# tdlp:implements BRN-runner-captures
+...the code...
+# tdlp:end CODE-runner-exit-code-fallback
+```
+
+1. **Pin before you commit.** `stamp-monitor links` lists your uncommitted regions with the exact
+   header lines that align them, the `@xxxxxxxx` pins. Read the region against the claim
+   (`status(view="branches", subject=<id>)`), then paste the lines and commit both together.
+2. **A stale pin is a review, not a chore.** `BODY_CHANGED` means the code moved since someone
+   read it against the claim, and it names the revision to diff against. `CLAIM_RESTATED` means
+   the claim or a premise upstream changed, and it names which. Re-read, then re-pin. Never
+   re-pin a region you did not re-read.
+3. **Cite the theory inside a region that declares it.** A `DEF-`/`BRN-` id in a comment or
+   docstring outside such a region is `UNTRACKED_MENTION`, and nothing will notice when it rots.
+   One that names nothing is `DANGLING_MENTION`. Fix those first.
+4. **Before you restate a node,** `audit_change` lists the regions whose pins it will stale.
+5. **The verifier never sees any of this.** Links live in stamp-monitor, not in `status`. Do not
+   paste a region into a probe or a trial. Whether code realizes a claim is the implementer's
+   judgment, and whether it works is component-belief's measurement.
+
 ## Citations
 
 Every response ends with a `basis:` line naming the trial set behind it. Quote it when

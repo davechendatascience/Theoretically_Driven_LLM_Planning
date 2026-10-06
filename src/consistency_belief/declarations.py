@@ -486,19 +486,19 @@ def _parse(text: str) -> Declarations:
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, "top level must be a mapping")])
 
     decl = Declarations()
-    for raw in data.get("axioms") or []:
-        a = Axiom(**_only(raw, Axiom))
+    for a in _entries(data, "axioms", Axiom, decl.issues):
         decl.axioms[a.id] = a
-    for raw in data.get("definitions") or []:
-        d = Definition(**_only(raw, Definition))
+    for d in _entries(data, "definitions", Definition, decl.issues):
         decl.definitions[d.id] = d
-    for raw in data.get("lemmas") or []:
-        l = Lemma(**_only(raw, Lemma))
+    for l in _entries(data, "lemmas", Lemma, decl.issues):
         decl.lemmas[l.id] = l
-    for raw in data.get("branches") or []:
-        b = Branch(**_only(raw, Branch))
+    for b in _entries(data, "branches", Branch, decl.issues):
         decl.branches[b.id] = b
     for raw in data.get("components") or []:
+        if not isinstance(raw, (str, dict)) or (isinstance(raw, dict) and not raw.get("id")):
+            decl.issues.append(Issue("MALFORMED", DECLARATION_FILE, "an entry under components: is "
+                                     f"neither an id nor a mapping with one: {str(raw)[:80]!r}"))
+            continue
         c = ComponentImport(id=raw, note="") if isinstance(raw, str) else ComponentImport(**_only(raw, ComponentImport))
         decl.governs[c.id] = c
         stray = sorted(k for k, v in raw.items() if v is None and k not in ComponentImport.__dataclass_fields__) \
@@ -506,12 +506,34 @@ def _parse(text: str) -> Declarations:
         if stray:
             decl.issues.append(Issue("SPLIT_VALUE", c.id, f"stray key(s) {stray}: an unquoted comma "
                                      "in a flow mapping cut the note short; quote it"))
-    for raw in data.get("policies") or []:
-        p = Policy(**_only(raw, Policy))
+    for p in _entries(data, "policies", Policy, decl.issues):
         decl.policies[p.id] = p
 
     decl.issues.extend(validate(decl))
     return decl
+
+
+def _entries(data: dict[str, Any], section: str, cls: type, issues: list[Issue]) -> list[Any]:
+    """A section's entries, built; one that is not a mapping with an id, or does not fit the
+    schema, is reported (MALFORMED) and left out rather than raising into every tool. Neither
+    kind could take a place in the premise graph, so this drops nothing a build could admit."""
+    out = []
+    for raw in data.get(section) or []:
+        if not isinstance(raw, dict) or not raw.get("id"):
+            issues.append(Issue("MALFORMED", DECLARATION_FILE, f"an entry under {section}: is not a "
+                                f"mapping with an id, and is left out: {str(raw)[:80]!r}"))
+            continue
+        try:
+            node = cls(**_only(raw, cls))
+        except (TypeError, ValueError) as exc:
+            issues.append(Issue("MALFORMED", str(raw["id"]), f"does not fit the {section} schema: {exc}"))
+            continue
+        criteria = getattr(node, "criteria", None)
+        if isinstance(criteria, list) and not all(isinstance(c, dict) for c in criteria):
+            issues.append(Issue("MALFORMED", node.id, "a criterion that is not a mapping is left out"))
+            node.criteria = [c for c in criteria if isinstance(c, dict)]
+        out.append(node)
+    return out
 
 
 def _only(raw: dict[str, Any], cls: type) -> dict[str, Any]:

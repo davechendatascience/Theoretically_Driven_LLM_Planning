@@ -545,8 +545,27 @@ def audit_change(
     if restates is not True:
         lines.append("A change only to the derivation rule -- a CTR- citation, the argument's "
                      "wording -- restates nothing and sets no trial aside.")
+    lines += _code_links_unpinned(root, target_id, blast, restates)
 
     return envelope("\n".join(lines), basis_line(ctx.slices))
+
+
+def _code_links_unpinned(root: Path, target_id: str, blast: list[str], restates: bool | None) -> list[str]:
+    """The tagged code regions whose relation pins a restatement would make stale: a link binds
+    to its claim and everything upstream, as a trial does. Ids only -- no path, no line -- so the
+    blast radius names what needs re-review without pointing anyone at the source."""
+    from .links import links_reached, scan
+
+    index = scan(root, explain=False)
+    reached = links_reached(index, {target_id, *blast}) if index is not None else []
+    if not reached:
+        return []
+    if restates is False:
+        return [f"Code links to it or its dependents ({len(reached)}): unaffected, their pins hold."]
+    when = "become stale" if restates else "become stale if its statement or premises change"
+    return [f"Code links that {when} ({len(reached)}) -- each region needs re-reading against its "
+            "claim and a new pin (stamp-monitor links):",
+            bullet(f"{bid} {kind} {target}" for bid, kind, target in reached)]
 
 
 def _restates(node: Any, statement: str, premises: list[str] | None) -> bool | None:
@@ -595,6 +614,9 @@ def decide(
     root = project_root()
     ctx = Context.build(root)
     policy = active_policy(ctx.decl, policy_id)
+    if not policy and policy_id:
+        return (f"unknown policy {policy_id!r}: consistency.yaml at git HEAD declares "
+                f"{', '.join(sorted(ctx.decl.policies)) or 'none'}; nothing was recorded")
     if not policy:
         return "no consistency policy declared in consistency.yaml at git HEAD"
 

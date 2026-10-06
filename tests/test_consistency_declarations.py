@@ -123,3 +123,11 @@ def test_git_head_loading_and_pending_drift(empty_repo):
     assert drift.pending is True
     assert any(i.code == "PENDING" for i in drift.issues)
     assert drift.lemmas["LMA-clearance"].statement == "Clearance must exceed 0.5m."
+
+
+def test_a_malformed_entry_is_reported_and_left_out_of_the_graph():
+    decl = _parse("axioms:\n  - AXM-bare\n  - {id: AXM-a, statement: s, rationale: r}\n"
+                  "components: [3, CMP-x]\npolicies:\n  - {id: POL-a, criteria: [BRN-a]}\n")
+    assert set(decl.axioms) == {"AXM-a"} and set(decl.governs) == {"CMP-x"}
+    assert [i.code for i in decl.issues].count("MALFORMED") == 3
+    assert decl.policies["POL-a"].criteria == []

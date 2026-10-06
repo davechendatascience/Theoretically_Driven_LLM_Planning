@@ -105,13 +105,14 @@ so no existing evidence changed state when stamps were introduced.
 Stale and invalid stay distinct: stale evidence was a valid measurement of a state that no longer
 exists; invalid evidence was never a valid measurement.
 
-## The monitor: three read-only tools
+## The monitor: four read-only tools
 
 | Tool | Answers | Severity |
 |---|---|---|
 | `impact(base, worktree)` | What does a change touch, across both ledgers, and what must be re-run? | report |
 | `audit()` | Is the recorded evidence still what was recorded? | block / warn / info |
 | `workflow()` | Does the history show the loop being routed around? | block / warn / info |
+| `links(subject)` | Is each tagged code region still aligned with the claim it names? | report; warn in `audit` |
 
 ### `impact`
 
@@ -155,7 +156,11 @@ Patterns in recorded history, not verdicts on intent; each finding names the rec
 ### Surfaces
 
 - MCP server `stamp-monitor` (`stamp-monitor-mcp`), shipped in the `tdlp` plugin (`plugin/.mcp.json`).
-- CLI `stamp-monitor impact|audit|workflow`, exiting 1 on a `[block]` finding from `audit` or
+- `links` and the `LINK_*` findings in `audit` read tagged code regions (`code_links`; design in
+  [`code_to_theory_tagging_design.md`](code_to_theory_tagging_design.md)). A link is a declared
+  relationship, not evidence, so it warns and never blocks; `stamp-monitor links --strict` exits 1
+  on any broken tag or link needing review, for a CI job or hook that chooses to gate on it.
+- CLI `stamp-monitor impact|audit|workflow|links`, exiting 1 on a `[block]` finding from `audit` or
   `workflow`, for git hooks, CI, and Claude Code hooks.
 
 ## Decisions against the first draft
@@ -164,7 +169,7 @@ Patterns in recorded history, not verdicts on intent; each finding names the rec
 |---|---|---|
 | `register_artifact`: agents or wrappers submit manifests | no registration; the runner stamps what it ran | a submitted manifest is an agent-writable path into evidence, and whoever submits it chooses the scope that keeps it fresh |
 | monitor is the single source of freshness; belief servers query it | freshness is a shared library both servers import | MCP servers cannot call each other; routing freshness through the agent makes the untrusted party the relay |
-| seven tools | three | tool schemas are standing context in every session; `explain_gate` is `impact` plus `decide`, `prune_candidates` is `status(view="artifacts")` |
+| seven tools | four (three, and `links` in 0.7.2) | tool schemas are standing context in every session; `explain_gate` is `impact` plus `decide`, `prune_candidates` is `status(view="artifacts")` |
 | subject paths declared in the manifest | scope from committed `belief.yaml` (`code:`, `reads:`) and the run line | changing what evidence depends on is a declaration change, gated by a human commit |
 | `CLM-`, `TST-diagnose-202` ids | the ledgers' own `CTR-`, `TST-`, `RUN-`, `EV-`, `BRN-` ids | one vocabulary |
 

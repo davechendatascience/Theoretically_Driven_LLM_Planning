@@ -1,4 +1,5 @@
 """Tests for the Proof DAG kernel: acyclicity, grounding, and blast-radius."""
+# tdlp:foreign-ids the graphs and projects these tests build declare their own node ids
 
 from __future__ import annotations
 

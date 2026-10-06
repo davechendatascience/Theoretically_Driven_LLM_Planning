@@ -192,6 +192,16 @@ class TestPolicy:
         assert len(verdict.evidence_ids) == 0 or verdict.evidence_ids
         assert verdict.policy_id == "POL-release"
 
+    def test_a_refuted_compatibility_group_is_not_hidden_by_a_supported_one(self, repo):
+        """Two compatibility groups in one bucket are two claims (rule 9.5). Keyed by bucket alone,
+        the last slice read overwrote the other, and a refuted group could come out ADOPT."""
+        trials = [trial(ik=True, model_revision="v3") for _ in range(20)]
+        trials += [trial(ik=False, model_revision="v4") for _ in range(20)]
+        decl, slices = prepare(repo, trials)
+        verdict = evaluate_policy(decl, active_policy(decl), slices)
+        assert verdict.status == CONDITIONAL
+        assert any("model_revision=v3" in c and "model_revision=v4" in c for c in verdict.conditions)
+
 
 class TestPlanning:
     def test_redundant_test_skipped_with_a_reason(self, repo):

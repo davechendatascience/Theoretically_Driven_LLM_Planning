@@ -363,8 +363,7 @@ class CodeStaleness:
         changed = self.changed_since(revision)
         if changed is None:
             return f"revision {revision} is not in this repository's history"
-        hit = sorted(path for path in changed
-                     if any(path == entry or fnmatch(path, entry) for entry in code_paths))
+        hit = sorted(path for path in changed if any(matches(path, entry) for entry in code_paths))
         return f"{_shown(hit)} changed since {revision}" if hit else None
 
 

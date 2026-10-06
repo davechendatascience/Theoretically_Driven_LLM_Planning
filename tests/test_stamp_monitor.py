@@ -125,6 +125,14 @@ class TestImpact:
     def test_an_unknown_base_is_an_answer_not_a_crash(self, project):
         assert "does not know" in render(impact(project, "no-such-rev"))
 
+    def test_a_policy_id_both_ledgers_declare_keeps_what_each_gates(self, project):
+        design = (project / "consistency.yaml").read_text(encoding="utf-8").replace(
+            "id: POL-consistency-gate", "id: POL-release")
+        commit(project, "consistency.yaml", design, "one policy id in both files")
+        run(project)
+        commit(project, "grasp.py", "# v2\n", "change the planner")
+        assert impact(project, "HEAD~1").policies["POL-release"] == ["CTR-grasp-reachable", "BRN-grasp-reach"]
+
 
 # --- audit -----------------------------------------------------------------------------------
 
@@ -132,6 +140,18 @@ class TestAudit:
     def test_a_fresh_run_audits_clean(self, project):
         run(project)
         assert not [f for f in audit(project) if f.severity in (BLOCK, WARN)]
+
+    def test_the_design_ledger_is_held_to_the_same_ids_and_citations(self, project):
+        ledger = project / ".consistency"
+        ledger.mkdir()
+        trial_ = {"kind": "trial", "id": "TRL-0001", "target_id": "BRN-grasp-reach", "validity": "valid"}
+        (ledger / "evidence.jsonl").write_text(json.dumps(trial_) + "\n" + json.dumps(trial_) + "\n",
+                                               encoding="utf-8")
+        (ledger / "decisions.jsonl").write_text(
+            json.dumps({"id": "DEC-0001", "status": "hold", "trial_ids": ["TRL-0009"]}) + "\n", encoding="utf-8")
+        found = {(f.code, f.subject) for f in audit(project)}
+        assert ("DUPLICATE_ID", ".consistency/TRL-0001") in found
+        assert ("DECISION_EVIDENCE_UNKNOWN", ".consistency/DEC-0001") in found
 
     def test_an_edited_artifact_is_caught(self, project):
         from component_belief.store import Store

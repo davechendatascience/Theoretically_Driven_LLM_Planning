@@ -14,6 +14,10 @@ different actions.
 
 Uncommitted edits are reported but stale nothing: evidence is compared against HEAD, as every
 declaration is.
+
+Tagged code regions (code_links) are reported beside the chain, never on it: a region that
+implements a branch is not a premise of it, so a changed region asks for a review of that link
+and changes no branch's place in the report.
 """
 
 from __future__ import annotations
@@ -59,6 +63,7 @@ class Impact:
     policies: dict[str, list[str]] = field(default_factory=dict)     # policy -> what it gates
     reruns: list[str] = field(default_factory=list)
     unclaimed: list[str] = field(default_factory=list)
+    links: list[str] = field(default_factory=list)                    # tagged regions touched
     error: str = ""
 
 
@@ -123,6 +128,8 @@ def impact(root: Path, base: str = "HEAD~1", worktree: bool = True) -> Impact:
             result.policies[pid] = gated
 
     _design(root, result)
+    from .links import section
+    result.links = section(root, base, result.committed, result.uncommitted)
     return result
 
 
@@ -146,7 +153,8 @@ def _design(root: Path, result: Impact) -> None:
     for pid, policy in sorted(design.policies.items()):
         gated = [c["target"] for c in policy.criteria if c.get("target") in result.branches]
         if gated:
-            result.policies[pid] = gated
+            # a policy id may be declared in both ledgers; what each gates is kept
+            result.policies.setdefault(pid, []).extend(g for g in gated if g not in result.policies[pid])
 
 
 def render(result: Impact) -> str:
@@ -175,6 +183,8 @@ def render(result: Impact) -> str:
         lines += ["", f"uncommitted (stale nothing until committed): {_short(result.uncommitted)}"]
     if result.unclaimed:
         lines += ["", f"claimed by no component and named by no test: {_short(result.unclaimed)}"]
+    if result.links:
+        lines += ["", "tagged code regions (links to claims, not premises of them):", *result.links]
     lines += ["", "next: " + ("; ".join(f"run_test {t}" for t in result.reruns)
                               if result.reruns else "nothing to re-run")]
     return "\n".join(lines)

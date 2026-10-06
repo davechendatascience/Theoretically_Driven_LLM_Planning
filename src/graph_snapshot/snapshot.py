@@ -9,6 +9,11 @@ the edges between consistency.yaml, belief.yaml and goals.yaml, and the gaps alo
 Every edge points one way, "rests on": a component rests on the branches that govern it, a claim on
 the premises it cites, an axiom on the goal whose requirement it states. A node's lineage is then
 two closures, what it rests on and what rests on it.
+
+Tagged code regions (code_links) are drawn on the node they relate to, as a list -- never as an
+edge. A region that implements a branch is not a premise of it, and the graph is premise edges.
+Each region carries its link state as code_links computes it at the same commit; no source text
+is copied onto the page, only ids, paths and lines.
 """
 
 from __future__ import annotations
@@ -23,7 +28,9 @@ from component_belief.declarations import DECLARATION_FILE as BELIEF_FILE
 from component_belief.declarations import GOALS_FILE
 from component_belief.declarations import load as load_components
 from component_belief.staleness import named_paths
+from code_links import ERROR, REVIEW, CodeIndex, link_state
 from consistency_belief.declarations import DECLARATION_FILE as CONSISTENCY_FILE
+from consistency_belief.links import scan as scan_links
 from consistency_belief.model import PROVEN
 from consistency_belief.views import Context
 
@@ -32,8 +39,10 @@ from .page import PAGE_PATHS
 _CONTRACT = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9_-]*\b")
 _STAGED_ISSUE = re.compile(r"^staged (\S+): (.*)$")
 
-#: The sources an issue is reported under: the two loaders, the premise-graph build, and the join.
+#: The sources an issue is reported under: the two loaders, the premise-graph build, the join, and
+#: the scan of tagged code regions.
 JOINED = "joined graph"
+CODE_LINKS = "code links"
 
 #: Order of the per-kind tallies in the summary: worst first, as the page lists them.
 _CLAIM_ORDER = ("refuted", "ungrounded", "doubted", "stale", "obligation", PROVEN)
@@ -124,9 +133,18 @@ def take(root: Path) -> dict[str, Any]:
             if target in nodes:
                 nodes[target].setdefault("gated_by", []).append(pid)
 
+    links = scan_links(root, sha, explain=False)
+    if links is not None:
+        for block in links.blocks:
+            for r in block.relations:
+                if r.target in nodes:
+                    nodes[r.target].setdefault("regions", []).append({
+                        "id": block.block_id, "relation": r.kind, "at": block.location,
+                        "state": link_state(block, r, links.claims)})
+
     committed = {CONSISTENCY_FILE: ctx.decl.source != "none", BELIEF_FILE: components.source != "none",
                  GOALS_FILE: bool(components.goals_blob)}
-    issues = _loader_issues(ctx, components) + gaps(ctx, nodes, governs)
+    issues = _loader_issues(ctx, components) + gaps(ctx, nodes, governs) + _link_issues(links)
     pending = sorted({i["subject"] for i in issues if i["code"] == "PENDING"})
     return {
         "project": root.name,
@@ -157,6 +175,15 @@ def _loader_issues(ctx: Context, components: Any) -> list[dict[str, str]]:
         out.append({"code": "UNRESOLVED_PROPOSAL", "subject": m.group(1) if m else "",
                     "message": m.group(2) if m else text, "source": "premise graph"})
     return out
+
+
+def _link_issues(links: CodeIndex | None) -> list[dict[str, str]]:
+    """Broken tags and links needing review, as code_links reports them at the same commit.
+    Observations (untracked mentions, unlinked branches) stay in `stamp-monitor links`."""
+    if links is None:
+        return []
+    return [{"code": d.code, "subject": d.subject, "message": d.message, "source": CODE_LINKS}
+            for d in links.sorted_diagnostics() if d.severity in (ERROR, REVIEW)]
 
 
 def gaps(ctx: Context, nodes: dict[str, dict[str, Any]], governs: dict[str, list[str]]) -> list[dict[str, str]]:

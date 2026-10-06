@@ -10,6 +10,8 @@ stops existing. This re-checks, mechanically, what the ledgers assume:
   - every measured or imported trial's artifact exists and still hashes to the value recorded
   - every id a decision cites is in the ledger
   - the declarations in effect are the committed ones
+  - every tagged code region's links resolve, and their pins still match the code and the claim
+    (warnings: a link is a declared relationship, not evidence, so it never blocks here)
 
 It never repairs anything. A finding names what is wrong and where; what to do about it -- amend,
 re-run, restore from git -- is a decision for someone accountable for it. Once that decision is
@@ -69,35 +71,18 @@ def audit(root: Path) -> list[Finding]:
     store = Store(root)
     ledgers = {name: _parse_ledger(root / STORE_DIR / f"{name}.jsonl", findings)
                for name in ("evidence", "events", "decisions")}
-    for name in ("evidence", "events", "decisions"):
-        _parse_ledger(root / DESIGN_DIR / f"{name}.jsonl", findings)
+    design = {name: _parse_ledger(root / DESIGN_DIR / f"{name}.jsonl", findings)
+              for name in ("evidence", "events", "decisions")}
 
     trials = [r for r in ledgers["evidence"] if r.get("kind") == "trial"]
-    seen: dict[str, int] = {}
-    for t in trials:
-        seen[t.get("id", "")] = seen.get(t.get("id", ""), 0) + 1
-    for eid, count in sorted(seen.items()):
-        if count > 1:
-            findings.append(Finding("DUPLICATE_ID", BLOCK, eid,
-                                    f"{count} trials share this id; amendments and citations "
-                                    "cannot tell them apart"))
-    ids = set(seen)
-    for record in ledgers["evidence"]:
-        if record.get("kind") == "amendment" and record.get("target") not in ids:
-            findings.append(Finding("AMENDMENT_TARGET_UNKNOWN", WARN, str(record.get("target")),
-                                    "an amendment reclassifies a trial that is not in the ledger"))
+    ids = _ids_and_citations("", ledgers["evidence"], ledgers["decisions"], "evidence_ids", findings)
+    # The design ledger is held to the same: its trials are cited by amendments and by the
+    # decisions that adopted on them, and a duplicate or a dangling citation there is as silent.
+    _ids_and_citations(DESIGN_DIR + "/", design["evidence"], design["decisions"], "trial_ids", findings)
 
     set_aside = _set_aside(trials, ledgers["evidence"])
     _stamps(root, store, trials, findings, set_aside)
     _artifacts(root, trials, findings, set_aside)
-
-    for decision in ledgers["decisions"]:
-        missing = sorted(set(decision.get("evidence_ids") or []) - ids)
-        if missing:
-            findings.append(Finding(
-                "DECISION_EVIDENCE_UNKNOWN", BLOCK, str(decision.get("id")),
-                f"cites {len(missing)} evidence id(s) the ledger does not hold "
-                f"({', '.join(missing[:3])})"))
 
     for issue in load_components(root).issues:
         if issue.code in ("PENDING", "UNCOMMITTED"):
@@ -111,7 +96,37 @@ def audit(root: Path) -> list[Finding]:
                                             issue.message))
         except ImportError:
             pass
+    from .links import findings as link_findings
+    findings.extend(link_findings(root))
     return findings
+
+
+def _ids_and_citations(prefix: str, records: list[dict], decisions: list[dict], cites: str,
+                       findings: list[Finding]) -> set[str]:
+    """Trial ids are unique, and every amendment and decision cites trials that exist. Returns
+    the ids. `prefix` names the ledger in a finding's subject; empty for the evidence ledger."""
+    seen: dict[str, int] = {}
+    for t in records:
+        if t.get("kind") == "trial":
+            seen[t.get("id", "")] = seen.get(t.get("id", ""), 0) + 1
+    for eid, count in sorted(seen.items()):
+        if count > 1:
+            findings.append(Finding("DUPLICATE_ID", BLOCK, prefix + eid,
+                                    f"{count} trials share this id; amendments and citations "
+                                    "cannot tell them apart"))
+    ids = set(seen)
+    for record in records:
+        if record.get("kind") == "amendment" and record.get("target") not in ids:
+            findings.append(Finding("AMENDMENT_TARGET_UNKNOWN", WARN, prefix + str(record.get("target")),
+                                    "an amendment reclassifies a trial that is not in the ledger"))
+    for decision in decisions:
+        missing = sorted(set(decision.get(cites) or []) - ids)
+        if missing:
+            findings.append(Finding(
+                "DECISION_EVIDENCE_UNKNOWN", BLOCK, prefix + str(decision.get("id")),
+                f"cites {len(missing)} {'trial' if prefix else 'evidence'} id(s) the ledger does "
+                f"not hold ({', '.join(missing[:3])})"))
+    return ids
 
 
 def _set_aside(trials: list[dict], records: list[dict]) -> dict[str, str]:
