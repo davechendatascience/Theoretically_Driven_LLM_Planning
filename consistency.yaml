@@ -439,8 +439,14 @@ definitions:
       report, and the gaps the joined graph shows: an axiom naming no goal, a
       goal no axiom names, a component with code that no declared branch
       governs, an interface or goal no branch governs, and an axiom or
-      definition nothing rests on. It shows no state for a contract and reads
-      no evidence record. Taking a snapshot appends no record to the ledger --
+      definition nothing rests on. Beside each axiom, definition, lemma and
+      branch it shows the code regions linked to that node in the scanned files
+      of that commit, each with its link's state as DEF-aligned-link gives it at
+      that commit, and it lists the tags and mentions the code-link scan of that
+      commit reports as broken and the links it reports as not aligned; a code
+      region is never a node or an edge of the premise graph it shows. It shows
+      no state for a contract and reads no evidence record. Taking a snapshot
+      appends no record to the ledger --
       no trial, amendment, note, event or decision, of any provenance --
       changes no declaration, makes no commit and does not move the head
       revision. Besides the report it returns, it writes two files and nothing
