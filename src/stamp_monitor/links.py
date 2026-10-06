@@ -62,8 +62,20 @@ def findings(root: Path) -> list[Finding]:
     return out
 
 
+#: Past this many lines of one severity, the full report counts the rest per file instead of
+#: listing them: a project with hundreds of untracked mentions produced a report larger than one
+#: tool response carries, and the uncommitted pins an agent needed sat at its end.
+LISTED = 40
+
+
 def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = None,
            worktree: bool = True) -> str:
+    """The map, each link's state, the diagnostics, and the working tree beside them.
+
+    `subject` -- a region id, a claim id or a scanned path -- narrows every section to it,
+    the uncommitted one included, so a region that exists only in the working tree is found by
+    its id and its pins are printed. The uncommitted section comes first: it is what an agent
+    tagging code acts on next."""
     index = index or scan(root)
     if index is None:
         return "code links: git does not know HEAD here, so there is no revision to scan"
@@ -79,11 +91,13 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
     if not index.validated:
         lines.append("no consistency.yaml at this revision: references and pins are unchecked")
 
+    pending = _uncommitted(root, index, subject) if worktree else []
     shown = index.diagnostics
     if subject:
         block = index.get_block(subject)
         related = index.for_claim(subject)
         on_path = index.for_path(subject)
+        scanned = subject in index.scope.files or any(d.path == subject for d in index.diagnostics)
         if block is not None:
             lines += ["", _block_lines(block, claims, index)]
             shown = [d for d in index.diagnostics if d.subject == subject]
@@ -96,13 +110,16 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
                              + ", ".join(claims[subject].candidates[:6]))
             ids = {b.block_id for b, _ in related}
             shown = [d for d in index.diagnostics if d.subject in ids | {subject}]
-        elif on_path:
+        elif on_path or scanned:
             lines += ["", f"{subject}: {len(on_path)} region(s)"]
             lines += [_block_lines(b, claims, index) for b in on_path]
             shown = [d for d in index.diagnostics if d.path == subject]
+        elif pending:
+            lines += ["", f"{subject} is not in the committed index at {rev}; it is in the working tree only"]
+            shown = []
         else:
-            return "\n".join(lines + ["", f"{subject!r} is not a region id, a claim with links, or "
-                                          "a scanned path at this revision"])
+            return "\n".join(lines + ["", f"{subject!r} is not a region id, a claim id, or a scanned "
+                                          f"path at {rev}, and nothing uncommitted matches it either"])
     else:
         by_claim: dict[str, list[str]] = {}
         for b, r, state in states:
@@ -112,25 +129,58 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
             for cid in sorted(by_claim):
                 lines.append(f"  {cid}: " + "; ".join(by_claim[cid]))
 
+    if pending:
+        lines += ["", "uncommitted -- not in effect until committed, and then reviewed like any change:",
+                  *pending]
+
     for severity, title in ((ERROR, "errors -- tags that are malformed or name nothing"),
                             (REVIEW, "review -- links whose pins no longer match, or were never written"),
                             (OBSERVATION, "observations -- coverage, not defects")):
-        items = [d for d in shown if d.severity == severity]
+        items = sorted((d for d in shown if d.severity == severity), key=lambda d: (d.code, d.subject, d.line))
         if not items:
             continue
         lines += ["", f"{title} ({len(items)}):"]
-        for d in sorted(items, key=lambda d: (d.code, d.subject, d.line)):
+        # Narrowed to a subject, everything is listed. The full report lists errors and reviews up
+        # to LISTED and counts the rest; observations past LISTED are counted, never listed.
+        listed = items if subject or len(items) <= LISTED else ([] if severity == OBSERVATION else items[:LISTED])
+        for d in listed:
             lines.append(f"  {d.code} {display(d.subject, 80)}: {display(d.message, 600)}")
             lines += [f"      {display(f, 200)}" for f in d.fix]
-
-    if worktree and subject is None:
-        changes, dirty, working = scan_worktree(root, index)
-        if changes:
-            lines += ["", "uncommitted -- not in effect until committed, and then reviewed like any change:"]
-            lines += [f"  {c.block_id} {c.change}: {c.detail}" for c in changes.items]
-            lines += _pins_to_write(working, {c.block_id for c in changes.items})
+        if len(listed) < len(items):
+            lines += _counted(items[len(listed):], listed_some=bool(listed))
     lines += ["", "next: " + _next(index)]
     return "\n".join(lines)
+
+
+def _counted(items: list, *, listed_some: bool) -> list[str]:
+    """Diagnostics too many to list, counted per kind and per file, with where to see them."""
+    out = [f"  {'and ' if listed_some else ''}{len(items)} {'more ' if listed_some else ''}counted, "
+           "not listed -- links(subject=<path>) lists one file's, links(subject=<id>) one region's "
+           "or claim's:"]
+    by_code: dict[str, list] = {}
+    for d in items:
+        by_code.setdefault(d.code, []).append(d)
+    for code, group in sorted(by_code.items()):
+        per_file: dict[str, int] = {}
+        for d in group:
+            key = d.path or d.subject
+            per_file[key] = per_file.get(key, 0) + 1
+        top = sorted(per_file.items(), key=lambda kv: (-kv[1], kv[0]))
+        shown = ", ".join(f"{display(k, 80)} ({n})" for k, n in top[:8])
+        out.append(f"    {code} {len(group)} in {len(per_file)} place(s): {shown}"
+                   + (f", +{len(top) - 8} more" if len(top) > 8 else ""))
+    return out
+
+
+def _uncommitted(root: Path, index: CodeIndex, subject: str | None) -> list[str]:
+    """The working tree's changes to tagged regions, and the pins each edited region needs once
+    committed as it stands -- narrowed to `subject` (a region id, a claim it names, or its path)."""
+    changes, _dirty, working = scan_worktree(root, index)
+    items = changes.items
+    if subject:
+        items = [c for c in items if subject in (c.block_id, c.path) or subject in c.targets]
+    lines = [f"  {c.block_id} {c.change}: {c.detail}" for c in items]
+    return lines + _pins_to_write(working, {c.block_id for c in items})
 
 
 def _pins_to_write(working: CodeIndex, changed: set[str]) -> list[str]:

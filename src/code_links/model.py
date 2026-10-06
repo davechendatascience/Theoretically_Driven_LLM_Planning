@@ -137,6 +137,7 @@ class Scope:
     paths: list[str] | None = None              # None: the whole tree; else only these
     excluded: dict[str, int] = field(default_factory=dict)   # reason -> file count
     foreign: list[str] = field(default_factory=list)        # files whose mentions are set aside
+    files: set[str] = field(default_factory=set)            # every file read, regions or none
 
     def exclude(self, reason: str) -> None:
         self.excluded[reason] = self.excluded.get(reason, 0) + 1

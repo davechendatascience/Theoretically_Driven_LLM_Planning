@@ -493,3 +493,44 @@ def test_an_unpinned_motivated_by_is_explanatory_never_aligned(project):
     assert link_state(block, block.relations[0], index.claims) == EXPLANATORY
     assert "UNPINNED" not in {d.code for d in index.diagnostics if d.subject == "CODE-why"}
     assert "1 motivated-by, explanatory only" in report(project)
+
+
+
+class TestReportBySubject:
+    """Reported from a project with seven regions in its working tree and hundreds of untracked
+    mentions: a scanned file without regions was 'not a scanned path', a region not yet committed
+    could not be found by its id, and the pins to write were at the end of a report too large to
+    return."""
+
+    def test_a_scanned_file_with_no_region_resolves(self, aligned):
+        from stamp_monitor.links import report
+
+        commit(aligned, {"util.py": "# by LMA-scaling\nx = 1\n", "plain.py": "y = 2\n"})
+        text = report(aligned, "util.py")
+        assert "util.py: 0 region(s)" in text and "UNTRACKED_MENTION util.py:1" in text
+        assert "plain.py: 0 region(s)" in report(aligned, "plain.py")
+        assert "nothing uncommitted matches it either" in report(aligned, "nowhere.py")
+
+    def test_an_uncommitted_region_is_found_by_id_claim_or_path_with_its_pins(self, aligned):
+        from stamp_monitor.links import report
+
+        (aligned / "idle.py").write_text("# tdlp:begin CODE-idle\n# tdlp:implements BRN-idle\nx = 0\n"
+                                         "# tdlp:end CODE-idle\n", encoding="utf-8")
+        for subject in ("CODE-idle", "BRN-idle", "idle.py"):
+            text = report(aligned, subject)
+            assert "CODE-idle added" in text, subject
+            assert "# tdlp:begin CODE-idle@" in text and "# tdlp:implements BRN-idle@" in text, subject
+        assert "in the working tree only" in report(aligned, "CODE-idle")
+        assert "CODE-idle" not in report(aligned, "CODE-servo-cap"), "narrowed to its subject"
+
+    def test_a_long_report_counts_what_it_cannot_list_and_puts_the_pins_first(self, aligned):
+        from stamp_monitor.links import LISTED, report
+
+        commit(aligned, {f"pkg/m{i:02d}.py": f"# per LMA-scaling, step {i}\nx = {i}\n" for i in range(LISTED + 10)})
+        (aligned / "idle.py").write_text("# tdlp:begin CODE-idle\n# tdlp:implements BRN-idle\nx = 0\n"
+                                         "# tdlp:end CODE-idle\n", encoding="utf-8")
+        text = report(aligned)
+        assert text.count("UNTRACKED_MENTION pkg/") == 0, "counted, not listed"
+        assert f"UNTRACKED_MENTION {LISTED + 10} in {LISTED + 10} place(s)" in text
+        assert text.index("uncommitted --") < text.index("observations --")
+        assert "UNTRACKED_MENTION pkg/m03.py:1" in report(aligned, "pkg/m03.py"), "listed in full by subject"

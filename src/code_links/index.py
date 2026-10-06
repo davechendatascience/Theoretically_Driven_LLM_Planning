@@ -147,6 +147,7 @@ def build_index(root: Path, revision: str, claims: Mapping[str, ClaimRef] | None
             continue
         scan = parse_python(path, text)
         index.scope.scanned += 1
+        index.scope.files.add(path)
         if scan.foreign:
             index.scope.foreign.append(path)
         index.blocks += scan.blocks
