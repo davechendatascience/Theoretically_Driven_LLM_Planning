@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -178,7 +179,24 @@ def run_test(
 #: How often a running test tells the client it is still running. A stdio tool call that sends
 #: nothing for 30 minutes is aborted by the client's idle timeout, and a test can run for hours.
 HEARTBEAT_S = 60.0
-_ONE_RUN = anyio.Lock()            # one test at a time: a run takes the next run id
+def max_runs() -> int:
+    """How many declared tests may run at once: BELIEF_MAX_RUNS, or half the cores."""
+    try:
+        return max(1, int(os.environ.get("BELIEF_MAX_RUNS", "")))
+    except ValueError:
+        return max(1, (os.cpu_count() or 2) // 2)
+
+
+#: Each run reserves its own id and artifact directory and appends to the ledger under the
+#: store's lock, so runs need no lock of their own. This only keeps a burst of calls from
+#: oversubscribing the machine. A thread semaphore, taken in the worker thread, so it belongs to
+#: no event loop and the heartbeat beats for a call while it waits for a slot.
+_SLOTS = threading.BoundedSemaphore(max_runs())
+
+
+def _in_slot(work: Any) -> Any:
+    with _SLOTS:
+        return work()
 
 
 @mcp.tool(name="run_test")
@@ -196,12 +214,13 @@ async def run_test_tool(
     trials, or one {"metrics": ...}. If it does not, one trial is synthesised
     from the exit code and the reply says what was wrong with $OUT. A long run
     reports progress every minute, so the client does not take it for idle.
+    Several calls run at once (up to BELIEF_MAX_RUNS, by default half the cores): make them in
+    one turn to run independent suites in parallel.
 
     conditions: captured metadata for bucketing, e.g. {"lighting": "low"}.
     repro:      reproducibility fields, e.g. {"model_revision": "v3", "seed": 7}.
     """
-    async with _ONE_RUN:
-        return await _with_heartbeat(ctx, test_id, lambda: run_test(test_id, conditions, repro))
+    return await _with_heartbeat(ctx, test_id, lambda: _in_slot(lambda: run_test(test_id, conditions, repro)))
 
 
 async def _with_heartbeat(ctx: ToolContext | None, what: str, work: Any) -> Any:
@@ -284,7 +303,7 @@ def ingest(
 
     required = ("contract_id", "test_id", "outcome")
     accepted, rejected = [], []
-    run_id = ctx.store.next_run_id()
+    run_id, _reserved = ctx.store.reserve_run_id()
 
     for index, record in enumerate(records):
         problems = [f"missing {f}" for f in required if not record.get(f)]

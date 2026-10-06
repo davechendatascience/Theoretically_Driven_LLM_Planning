@@ -155,8 +155,7 @@ def run_test(
     repro: dict[str, Any] | None = None,
     actor: str = "agent",
 ) -> dict[str, Any]:
-    run_id = store.next_run_id()
-    artifact_dir = store.artifact_dir(run_id)
+    run_id, artifact_dir = store.reserve_run_id()
     out_path = artifact_dir / RESULT_FILENAME
 
     env = project_environment(root, dict(os.environ))

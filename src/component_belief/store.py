@@ -11,6 +11,7 @@ always regenerable from it (4.6, 10.2).
 from __future__ import annotations
 
 import json
+import threading
 import os
 import re
 from dataclasses import dataclass
@@ -19,6 +20,11 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .ids import sequential_id
+
+#: One writer at a time within a server process. Ids are taken from the ledger as it stands, so a
+#: run that appends while another counts would hand out the same EV- id twice. Runs execute in
+#: parallel; only taking an id and appending hold this.
+_LEDGER = threading.RLock()
 
 STORE_DIR = ".belief"
 VALIDITY = ("valid", "invalid", "quarantined", "superseded")
@@ -72,9 +78,11 @@ class Store:
                         continue
 
     def _append(self, path: Path, record: dict[str, Any]) -> None:
-        self.ensure()
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(record, sort_keys=True, default=str) + "\n")
+        line = json.dumps(record, sort_keys=True, default=str) + "\n"
+        with _LEDGER:
+            self.ensure()
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
 
     # ---------- evidence ----------
 
@@ -86,6 +94,10 @@ class Store:
         return sequential_id("EV", n + 1)
 
     def append_trial(self, record: dict[str, Any]) -> str:
+        with _LEDGER:
+            return self._append_trial(record)
+
+    def _append_trial(self, record: dict[str, Any]) -> str:
         record = dict(record)
         record["kind"] = "trial"
         record.setdefault("id", self.next_evidence_id())
@@ -95,7 +107,12 @@ class Store:
         return record["id"]
 
     def append_trials(self, records: list[dict[str, Any]]) -> list[str]:
-        """Allocate ids in one pass — one re-scan of the ledger, not N."""
+        """Allocate ids in one pass — one re-scan of the ledger, not N — and append them before
+        anyone else counts."""
+        with _LEDGER:
+            return self._append_trials(records)
+
+    def _append_trials(self, records: list[dict[str, Any]]) -> list[str]:
         n = sum(1 for r in self.raw_records() if r.get("kind") == "trial")
         ids: list[str] = []
         for offset, record in enumerate(records, start=1):
@@ -192,8 +209,9 @@ class Store:
     def append_decision(self, record: dict[str, Any]) -> dict[str, Any]:
         record = dict(record)
         record.setdefault("timestamp", utc_now())
-        record.setdefault("id", sequential_id("DEC", len(self.decisions()) + 1))
-        self._append(self.decisions_path, record)
+        with _LEDGER:
+            record.setdefault("id", sequential_id("DEC", len(self.decisions()) + 1))
+            self._append(self.decisions_path, record)
         return record
 
     def decisions(self) -> list[dict[str, Any]]:
@@ -216,3 +234,19 @@ class Store:
         path = self.artifacts_dir / run_id
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def reserve_run_id(self) -> tuple[str, Path]:
+        """A run id no other run holds, with its artifact directory made. The directory is the
+        reservation: it is created with exist_ok=False, so two runs at once -- in this server or
+        in another process on the same project -- never share an id, and an id whose directory
+        exists from a run that recorded nothing is skipped rather than written into."""
+        with _LEDGER:
+            n = int(self.next_run_id().split("-", 1)[1])
+            while True:
+                run_id = sequential_id("RUN", n)
+                path = self.artifacts_dir / run_id
+                try:
+                    path.mkdir(parents=True, exist_ok=False)
+                    return run_id, path
+                except FileExistsError:
+                    n += 1

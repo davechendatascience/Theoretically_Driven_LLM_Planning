@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import re
 from pathlib import Path
 
@@ -96,7 +97,7 @@ def instrument(env: dict[str, str], root: Path, log: Path,
     """
     hook_dir = hook_dir or (log.parent.parent.parent / "cache" / "readhook")
     hook_dir.mkdir(parents=True, exist_ok=True)
-    (hook_dir / "sitecustomize.py").write_text(HOOK, encoding="utf-8")
+    _install_hook(hook_dir / "sitecustomize.py")
     log.write_text("", encoding="utf-8")
 
     out = dict(env)
@@ -105,6 +106,23 @@ def instrument(env: dict[str, str], root: Path, log: Path,
     existing = out.get("PYTHONPATH", "")
     out["PYTHONPATH"] = f"{hook_dir}{os.pathsep}{existing}" if existing else str(hook_dir)
     return out, hook_dir
+
+
+def _install_hook(path: Path) -> None:
+    """Write the hook only when it differs, and never in place: a run starting while another
+    rewrites it would import a half-written file and record no reads at all, which reads exactly
+    like a run that opened nothing."""
+    try:
+        if path.read_text(encoding="utf-8") == HOOK:
+            return
+    except OSError:
+        pass
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
+    tmp.write_text(HOOK, encoding="utf-8")
+    try:
+        os.replace(tmp, path)
+    except OSError:                    # another run replaced it first, with the same text
+        tmp.unlink(missing_ok=True)
 
 
 def weave(command: str, hook_dir: Path) -> str:

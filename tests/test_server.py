@@ -250,6 +250,83 @@ class TestRunner:
         assert "hello" in (artifact_dir / "stdout.txt").read_text()
 
 
+#: Each run marks that it started and waits until another run has too: run one at a time, the
+#: first would wait out its deadline alone and record a failure. Overlap is shown, not timed.
+PEER_PY = (
+    "import json, os, sys, time\n"
+    "d = os.environ['PEERS']\n"
+    "os.makedirs(d, exist_ok=True)\n"
+    "open(os.path.join(d, str(os.getpid())), 'w').close()\n"
+    "end = time.time() + 60\n"
+    "while len(os.listdir(d)) < 2 and time.time() < end:\n"
+    "    time.sleep(0.05)\n"
+    "met = len(os.listdir(d)) >= 2\n"
+    "json.dump([{'metrics': {'ik_success': met}} for _ in range(5)], open(sys.argv[1], 'w'))\n"
+)
+
+
+class TestParallelRuns:
+    @pytest.fixture
+    def peers(self, repo, tmp_path, monkeypatch):
+        (repo / "peer.py").write_text(PEER_PY, encoding="utf-8")
+        git(repo, "add", "peer.py")
+        emit_yaml(repo, "python peer.py $OUT")
+        monkeypatch.setenv("PEERS", str(tmp_path / "peers"))
+        return repo
+
+    def test_two_runs_at_once_take_distinct_ids_and_both_land(self, peers):
+        import threading
+
+        decl = load(peers)
+        results: list[dict] = []
+        runs = [threading.Thread(target=lambda: results.append(
+            execute(peers, Store(peers), decl, decl.tests["TST-grasp-ik"]))) for _ in range(2)]
+        for t in runs:
+            t.start()
+        for t in runs:
+            t.join(120)
+        assert sorted(r["run_id"] for r in results) == ["RUN-0001", "RUN-0002"]
+        trials = [r for r in Store(peers).raw_records() if r.get("kind") == "trial"]
+        assert len(trials) == 10 and len({t["id"] for t in trials}) == 10, "no id handed out twice"
+        assert all(t["metrics"]["ik_success"] for t in trials), "each run saw the other running"
+        assert {t["run_id"] for t in trials} == {"RUN-0001", "RUN-0002"}
+        for run_id in ("RUN-0001", "RUN-0002"):
+            assert (Store(peers).artifacts_dir / run_id / "stamp.json").exists()
+
+    def test_the_tool_runs_calls_made_together_at_once(self, peers, monkeypatch):
+        """Two run_test calls made in one turn overlap, up to BELIEF_MAX_RUNS."""
+        import anyio
+        import threading
+
+        monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(peers))
+        monkeypatch.setattr(server, "_SLOTS", threading.BoundedSemaphore(2))
+        replies: list[str] = []
+
+        async def both() -> None:
+            async def one() -> None:
+                replies.append(await server.run_test_tool(test_id="TST-grasp-ik"))
+            async with anyio.create_task_group() as group:
+                group.start_soon(one)
+                group.start_soon(one)
+
+        anyio.run(both)
+        assert sorted(r.split()[0] for r in replies) == ["RUN-0001", "RUN-0002"], replies
+        assert all("outcomes: {'pass': 5}" in r for r in replies), replies
+
+    def test_a_reserved_id_is_never_reused(self, repo):
+        """An artifact directory left by a run that recorded nothing still holds its id."""
+        store = Store(repo)
+        (store.artifacts_dir / "RUN-0001").mkdir(parents=True)
+        assert store.reserve_run_id()[0] == "RUN-0002"
+        assert store.reserve_run_id()[0] == "RUN-0003"
+
+    def test_max_runs_reads_the_environment(self, monkeypatch):
+        monkeypatch.setenv("BELIEF_MAX_RUNS", "3")
+        assert server.max_runs() == 3
+        monkeypatch.setenv("BELIEF_MAX_RUNS", "zero")
+        assert server.max_runs() >= 1
+
+
 class TestToolSurface:
     def test_exactly_six_tools(self):
         import asyncio

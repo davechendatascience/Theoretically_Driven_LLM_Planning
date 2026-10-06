@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import threading
 import shlex
 import subprocess
 from fnmatch import fnmatch
@@ -187,7 +189,13 @@ class ContentDigests:
             return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-            self.path.write_text(json.dumps(self._cache, sort_keys=True), encoding="utf-8")
+            # replaced whole, never written in place: runs in parallel save it at once
+            tmp = self.path.with_name(f"{self.FILE}.{os.getpid()}.{threading.get_ident()}.tmp")
+            tmp.write_text(json.dumps(self._cache, sort_keys=True), encoding="utf-8")
+            try:
+                os.replace(tmp, self.path)
+            finally:
+                tmp.unlink(missing_ok=True)
             self._changed = False
         except OSError:
             pass           # a cache that cannot be written only costs a re-hash next time
