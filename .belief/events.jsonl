@@ -125,3 +125,4 @@
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 6, "run_id": "RUN-0124", "synthesized": false, "test": "TST-acceptance-evidence@16f4d204"}, "session": "", "timestamp": "2026-10-06T07:35:50+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 0, "n_records": 3, "run_id": "RUN-0125", "synthesized": false, "test": "TST-acceptance-design-gate@a25a0aaf"}, "session": "", "timestamp": "2026-10-06T07:35:52+00:00", "tool": "run_test"}
 {"actor": "agent", "payload": {"exit_code": 1, "n_records": 3, "run_id": "RUN-0126", "synthesized": false, "test": "TST-acceptance-any-project@d80f9ae1"}, "session": "", "timestamp": "2026-10-06T07:35:53+00:00", "tool": "run_test"}
+{"actor": "agent", "payload": {"exit_code": 0, "n_records": 3, "run_id": "RUN-0127", "synthesized": false, "test": "TST-acceptance-any-project@d80f9ae1"}, "session": "", "timestamp": "2026-10-06T07:40:10+00:00", "tool": "run_test"}
