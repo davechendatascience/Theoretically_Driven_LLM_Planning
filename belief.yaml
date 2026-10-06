@@ -163,6 +163,10 @@ components:
          observed_by: CTR-surface-intact, case: "tests.test_server.TestRunner::test_every_measured_record_names_the_revision_it_ran_at"}
       - {id: FM-unbacked-import, observable: "an imported record is recorded without an artifact the server copied and hashed, or against a test its contract does not list",
          observed_by: CTR-surface-intact, case: "tests.test_server.TestToolSurface::test_ingest_accepts_a_complete_record"}
+      - {id: FM-run-id-collision, observable: "two runs at once share a run id, or hand one evidence id to two records",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestParallelRuns::test_two_runs_at_once_take_distinct_ids_and_both_land"}
+      - {id: FM-runs-serialised, observable: "run_test calls made together run one after another",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestParallelRuns::test_the_tool_runs_calls_made_together_at_once"}
     remediation: runner.run_test() synthesis branch; the tool list in server.py; the checks in server.ingest()
     goal: GOL-honest-evidence
     code:
@@ -287,6 +291,10 @@ components:
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestBoundaries::test_the_probe_carries_no_code"}
       - {id: FM-worktree-indexed, observable: "an uncommitted edit changes what the committed index reports",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestRevisions::test_working_tree_edits_are_reported_and_never_indexed"}
+      - {id: FM-aligned-read-as-working, observable: "a link reads aligned with nothing beside it saying the evidence its claim cites is stale or missing",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestMeasurementBesideLinks::test_each_link_shows_the_state_of_the_evidence_its_claim_cites"}
+      - {id: FM-environment-unscoped-silent, observable: "a test behind linked code names no lockfile and nothing says so",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestMeasurementBesideLinks::test_a_test_that_names_no_environment_file_is_reported_until_it_does"}
     remediation: code_links.parser's body digest; code_links.validation; consistency_belief.links.claim_pin
     goal: GOL-sound-designs
     code:
@@ -477,7 +485,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_declarations.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-consistency-declarations
     layer: component
@@ -485,7 +493,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_declarations.py tests/test_consistency_coverage.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-consistency-graph
     layer: component
@@ -493,7 +501,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_graph.py tests/test_consistency_probes.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-beliefs
     layer: component
@@ -501,7 +509,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_beliefs.py tests/test_gate_and_staleness.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-diagnose
     layer: component
@@ -509,7 +517,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_diagnose_decide.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-server
     layer: e2e
@@ -517,7 +525,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_server.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
     mandatory: true
 
   - id: TST-consistency-server
@@ -526,7 +534,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_consistency_server.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
     mandatory: true
 
   - id: TST-stamp-monitor
@@ -535,7 +543,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_stamp_monitor.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-goals
     layer: component
@@ -543,7 +551,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_goals.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-plugin
     layer: component
@@ -551,7 +559,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_plugin.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py, pyproject.toml]
+    reads: [tests/conftest.py, pyproject.toml, uv.lock]
 
   - id: TST-graph-snapshot
     layer: component
@@ -559,7 +567,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_graph_snapshot.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py, pyproject.toml]
+    reads: [tests/conftest.py, pyproject.toml, uv.lock]
 
   - id: TST-code-links
     layer: component
@@ -567,7 +575,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_code_links.py -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-ifc-declarations-model
     layer: interface
@@ -575,7 +583,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestDeclarationsToModel -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-ifc-model-diagnose
     layer: interface
@@ -583,7 +591,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestModelToDiagnosis -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-ifc-cdeclarations-proofdag
     layer: interface
@@ -591,7 +599,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestConsistencyDeclarationsToProofDag -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
   - id: TST-ifc-proofdag-views
     layer: interface
@@ -599,7 +607,7 @@ tests:
     run: python tools/pytest_trials.py $OUT -- tests/test_interfaces.py::TestProofDagToLedgerViews -q -p no:asyncio
     metrics: [passed]
     capture: [case]
-    reads: [tests/conftest.py]
+    reads: [tests/conftest.py, uv.lock]
 
 priors: []
 
