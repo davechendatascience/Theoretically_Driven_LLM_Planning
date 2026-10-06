@@ -723,11 +723,13 @@ button { font: inherit; color: inherit; }
 
   titleBlock();
   summary();
+  // A link names a node (#BRN-x) or a tab (#issues); either beats the focus the page was taken with.
   const fromHash = decodeURIComponent((location.hash || "").slice(1));
   const subjects = Object.values(N).filter(isSubject);
-  const first = (S.focus && N[S.focus] && S.focus) || (N[fromHash] && fromHash)
+  const first = (N[fromHash] && fromHash) || (S.focus && N[S.focus] && S.focus)
     || (subjects.find((n) => n.coverage === "governed") || subjects[0] || Object.values(N).find(isClaim) || Object.values(N)[0]).id;
-  if (isClaim(N[first])) tab = "claims";
+  if (["components", "claims", "foundations", "issues"].includes(fromHash)) tab = fromHash;
+  else if (isClaim(N[first])) tab = "claims";
   else if (!isSubject(N[first])) tab = "foundations";
   renderIndex();
   select(first);
