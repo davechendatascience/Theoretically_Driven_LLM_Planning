@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.6" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.7" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -726,6 +726,8 @@ The suites assert the invariants above, not the implementation:
 20. Runs made together take distinct run ids and evidence ids and overlap in time; a rejected import leaves no run behind.
 21. A cited measurement reads reviewed only while its branch, and everything the branch rests on in the declared graph, is as it was when the pin was written; writing a pin restates nothing and sets no trial aside; a contract no branch cites is reported.
 22. Staleness gives every trial the verdict it would get alone, judged once per run.
+23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
+24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
 
 ---
 
@@ -734,6 +736,36 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.7 — 2026-10-07 · sources cited like a paper's references, and one node's tree
+
+- **A declaration can reference the works it came from.**
+  - `consistency.yaml` takes an optional `sources:` list (id, title, authors, year, doi, arxiv,
+    isbn, url, note). Any axiom, definition, lemma or branch can name sources in `references:`,
+    each with an optional place in the work (`at:`).
+  - A reference is for the reader and weighs nothing in a proof. It is not a premise, not part of
+    a fingerprint, never an edge, and never in a probe, whatever the source's id. Adding one
+    restates nothing. Citing a famous result makes no claim count, and a verifier never sees the
+    name. Stated as `AXM-references-carry-no-weight`, `DEF-source-reference` and
+    `BRN-references-carry-no-weight`.
+  - Nothing checks that a source says what the node states. The skill tells agents to leave an
+    identifier or place out rather than guess it.
+  - `status(view="sources")` is the reference list, and `status(view="axioms")` shows each
+    axiom's references. The graph snapshot lists a node's references in its inspector, linked
+    where a doi, arXiv id or web url gives an address.
+  - `DANGLING_REFERENCE`, `UNREFERENCED_SOURCE`, `UNTITLED_SOURCE` and `MALFORMED_REFERENCE` are
+    advisory.
+  - embodied_ai's prose citations (ten nodes, eighteen sources) were moved over in its `d886f71`.
+- **`status(view="tree", subject=<id>)` draws one node's lineage** (reported from embodied_ai).
+  - It shows what the node rests on and what rests on it, or the same for each branch of a
+    component.
+  - On 157 branches the whole tree is 88.7 KB. The harness saves a reply that long to a file,
+    and the verifier, which has no Read tool, could not report the state it left. The deepest VLA
+    branch's lineage is 4.6 KB.
+  - `status` now names any parameter the view it was given does not read. Before, `subject=` on
+    `tree` was dropped in silence.
+  - The verifier's protocol ends with each `verify_step` reply's state and, for a lineage, the
+    subject tree.
 
 ### 0.7.6 — 2026-10-07 · status views in seconds, and the cited-measurement report sorted
 

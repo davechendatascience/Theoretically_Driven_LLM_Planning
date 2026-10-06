@@ -114,7 +114,8 @@ columns.
      claims, in their own group (0.7.6); broken code tags and unaligned links (0.7.2); and a count
      of claims not proven, linking to the Claims tab. Each issue links to its node, and the
      inspector lists a node's own issues. The inspector also shows a branch's cited measurements
-     with their review state, and any node's tagged code regions with their link state. Both are
+     with their review state, any node's tagged code regions with their link state, and (0.7.7)
+     the sources a node references, as a list and never an edge, since a reference is no premise. Both are
      judged from the declarations and code at the snapshot's commit, so no evidence is read.
 2. **Lineage.** The selected node, everything it rests on and everything that rests on it, drawn
    left to right as "rests on":
