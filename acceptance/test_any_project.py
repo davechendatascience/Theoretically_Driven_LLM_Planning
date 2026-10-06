@@ -28,7 +28,7 @@ def test_all_three_servers_read_the_project_claude_code_reports(tmp_path, monkey
 def test_the_plugin_installs_the_release_of_its_own_version():
     version = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["version"]
     servers = json.loads((PLUGIN / ".mcp.json").read_text(encoding="utf-8"))["mcpServers"]
-    assert set(servers) == {"component-belief", "consistency-belief", "stamp-monitor"}
+    assert set(servers) == {"component-belief", "consistency-belief", "stamp-monitor", "graph-snapshot"}
     for server in servers.values():
         source = server["args"][server["args"].index("--from") + 1]
         assert source.endswith(f"@tdlp--v{version}")
