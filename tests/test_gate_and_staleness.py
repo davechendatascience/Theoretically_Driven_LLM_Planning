@@ -504,3 +504,35 @@ class TestRevisionFallback:
         trials = [dict(trial(ik=True), test_ref="TST-grasp-ik@0000000000") for _ in range(30)]
         slices = compute_slices(load(repo), trials)
         assert slices[0].state == STATE_STALE
+
+
+
+class TestJudgedOncePerRun:
+    """A coverage view on embodied_ai (7,108 trials) took minutes: every trial was judged on its
+    own, matching every claimed entry against every tracked file. A run's trials share a stamp."""
+
+    def test_the_trials_of_one_run_are_judged_once_and_alike(self, code_repo, monkeypatch):
+        trials = measured_at(code_repo, n=12)
+        change_claimed_code(code_repo)
+        staleness = CodeStaleness(code_repo)
+        calls = []
+        real = CodeStaleness._stale_reason
+        monkeypatch.setattr(CodeStaleness, "_stale_reason",
+                            lambda self, paths, t: calls.append(t["id"]) or real(self, paths, t))
+        slices = compute_slices(load(code_repo), trials, staleness=staleness)
+        assert len(calls) == 1, "twelve trials of one run, judged once"
+        assert slices[0].state == STATE_STALE and slices[0].n_stale == 12
+        fresh = [CodeStaleness(code_repo).stale_reason(["grasp.py", "grasp/*.py"], t) for t in trials]
+        assert len(set(fresh)) == 1 and fresh[0] == slices[0].stale_reasons[0], "the same verdict as alone"
+
+    @pytest.mark.parametrize("path,entry", [
+        ("src/a.py", "src/*.py"), ("SRC/a.py", "src/*.py"), ("src/a.py", "src/a.py"),
+        ("src/sub/a.py", "src/"), ("src/a.pyc", "src/*.py"), ("x/src/a.py", "src/*.py"),
+    ])
+    def test_matching_reads_a_glob_exactly_as_fnmatch_does(self, path, entry):
+        from fnmatch import fnmatch
+
+        from component_belief.staleness import matches
+
+        assert matches(path, entry) == (path == entry or fnmatch(path, entry)
+                                         or path.startswith(entry.rstrip("/") + "/"))

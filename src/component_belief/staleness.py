@@ -42,7 +42,8 @@ import os
 import threading
 import shlex
 import subprocess
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -73,9 +74,17 @@ def _split0(text: str | None) -> list[str]:
     return [p for p in (text or "").split("\0") if p]
 
 
+#: os.path.normcase, remembered: fnmatch(name, pat) is fnmatchcase(normcase(name), normcase(pat)),
+#: and on Windows normcase is a system call. Judging a ledger of a few thousand trials against a
+#: tree of a few thousand files called it fifty million times (0.7.5, 42 s for one coverage view).
+_norm = lru_cache(maxsize=1 << 16)(os.path.normcase)
+
+
 def matches(path: str, entry: str) -> bool:
-    """A `code:` or `reads:` entry names a file, a glob, or a directory."""
-    return path == entry or fnmatch(path, entry) or path.startswith(entry.rstrip("/") + "/")
+    """A `code:` or `reads:` entry names a file, a glob, or a directory -- exactly as fnmatch
+    reads a glob, on every platform."""
+    return (path == entry or fnmatchcase(_norm(path), _norm(entry))
+            or path.startswith(entry.rstrip("/") + "/"))
 
 
 def head_blobs(root: Path) -> dict[str, str] | None:
@@ -272,6 +281,8 @@ class CodeStaleness:
         self._changed: dict[str, set[str] | None] = {}
         self._digests = ContentDigests(root)
         self._outside: dict[str, str | None] = {}    # stamp digest -> why its ignored inputs moved
+        self._reasons: dict[tuple[Any, ...], str | None] = {}
+        self._claimed: dict[tuple[str, ...], set[str]] = {}
 
     def head(self) -> dict[str, str] | None:
         if self._head is False:
@@ -298,7 +309,20 @@ class CodeStaleness:
         return self._stamps[key]
 
     def stale_reason(self, code_paths: list[str], trial: dict[str, Any]) -> str | None:
-        """Why this trial no longer speaks for HEAD, or None if it still does."""
+        """Why this trial no longer speaks for HEAD, or None if it still does.
+
+        Everything the answer depends on is the run's stamp, its run id, the revision it names and
+        the code paths asked about -- every trial of one run shares them -- so a run is judged once
+        and its trials share the verdict, instead of every trial matching every claimed entry
+        against every tracked file again."""
+        repro = trial.get("repro") or {}
+        key = (str(trial.get("stamp") or ""), str(trial.get("run_id") or ""),
+               str(repro.get("sw_revision") or trial.get("system_version") or ""), tuple(code_paths))
+        if key not in self._reasons:
+            self._reasons[key] = self._stale_reason(code_paths, trial)
+        return self._reasons[key]
+
+    def _stale_reason(self, code_paths: list[str], trial: dict[str, Any]) -> str | None:
         stamp = self.stamp_for(trial)
         if stamp is None:
             return self._revision_reason(code_paths, trial)
@@ -311,7 +335,8 @@ class CodeStaleness:
         files: dict[str, str | None] = stamp.get("files") or {}
         covered = [e for e in code_paths if e in (stamp.get("claimed") or [])]
         watch = set(stamp.get("named") or [])
-        watch |= {p for p in set(files) | set(head) if any(matches(p, e) for e in covered)}
+        watch |= self._claimed_at_head(tuple(covered))
+        watch |= {p for p in files if any(matches(p, e) for e in covered)}
         # a path absent from the stamp did not exist when the run looked
         changed = sorted(p for p in watch if files.get(p) != head.get(p))
         if changed:
@@ -333,6 +358,13 @@ class CodeStaleness:
         # A path claimed after the run was stamped has no recorded content: judge it by revision.
         uncovered = [e for e in code_paths if e not in covered]
         return self._revision_reason(uncovered, trial) if uncovered else None
+
+    def _claimed_at_head(self, entries: tuple[str, ...]) -> set[str]:
+        """The files at HEAD the entries claim: the same tree for every run, so matched once."""
+        if entries not in self._claimed:
+            head = self.head() or {}
+            self._claimed[entries] = {p for p in head if any(matches(p, e) for e in entries)}
+        return self._claimed[entries]
 
     def _outside_reason(self, stamp: dict[str, Any], trial: dict[str, Any]) -> str | None:
         """Declared inputs git ignores, compared by content with what the run hashed. Once per
@@ -358,7 +390,9 @@ class CodeStaleness:
         """Paths changed between `revision` and HEAD. None when git does not know the revision --
         a rebase or a different clone -- which is itself a fact about the evidence."""
         if revision not in self._changed:
-            out = _git(self.root, "diff", "--name-only", revision, "HEAD")
+            # the ledgers are never measured, and with them in the diff, rename detection paired
+            # up hundreds of artifact files: about two seconds a revision on a long history
+            out = _git(self.root, "diff", "--name-only", "--no-renames", revision, "HEAD", "--", ".", *_EXCLUDE)
             self._changed[revision] = None if out is None else {
                 line.strip() for line in out.splitlines() if line.strip()}
         return self._changed[revision]
