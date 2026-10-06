@@ -229,6 +229,23 @@ axioms:
       revision is not, and one that can read aligned when the link is not is
       worse than none.
 
+  - id: AXM-cited-measurements-reviewed
+    domain: verification
+    goal: [GOL-sound-designs, GOL-honest-evidence]
+    statement: >-
+      At every revision, every cited measurement is reported as reviewed
+      exactly when it is reviewed, and otherwise as not reviewed, with why; and
+      every contract declared at that revision that no branch's derivation
+      rule names is reported. Producing these reports changes no proof state,
+      no measured belief and no recorded decision.
+    rationale: >-
+      A branch is proven of its statement and its cited contract measures
+      something; nothing else holds the two together. A claim restated to say
+      more keeps citing the contract that measured the old one, and the gate
+      reads that contract as supported; a contract no design cites measures
+      something no design says why it matters. Either reads exactly like a
+      design and a measurement that agree.
+
 definitions:
   - id: DEF-proof-obligation
     term: Proof Obligation
@@ -487,6 +504,20 @@ definitions:
       the declared graph at that revision, its body pin equals the region's
       body digest at that revision, and its claim pin equals the node's claim
       digest at that revision.
+
+  - id: DEF-cited-measurement
+    term: Cited measurement
+    meaning: >-
+      A cited measurement is a contract id that a branch's derivation rule
+      names. It may carry a pin, written directly after the id, taken by
+      recording the branch's claim digest, as DEF-code-link defines it, when
+      the contract's acceptance rule and the tests that measure it were read
+      against the branch's claim; so a pin equals that digest for the claim as
+      it stood then. A cited measurement is reviewed at a revision exactly
+      when it carries a pin and that pin equals its branch's claim digest at
+      that revision. A derivation rule is neither a node's statement nor the
+      premises it cites, so writing, changing or removing a pin changes
+      neither.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -994,6 +1025,45 @@ branches:
       evidence: CTR-code-links-aligned
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-cited-measurements-reviewed-while-the-claim-stands
+    subject: CMP-trial-ledger
+    claim_type: contract
+    statement: >-
+      At every revision, a cited measurement reads reviewed exactly when it is
+      reviewed. One that carries no pin is not reviewed, and neither is one
+      whose branch, or a node its branch depends on, has a statement or cited
+      premises other than when its pin was taken, or whose branch depends on a
+      different set of nodes; each is reported with why at every revision at
+      which that holds. Writing or changing a pin restates no node and leaves
+      every current trial current. A declared contract no branch's derivation
+      rule names is reported. None of these reports changes a proof state.
+    premises: [AXM-cited-measurements-reviewed, DEF-cited-measurement, DEF-code-link, DEF-current-trial, DEF-premise-graph, DEF-restatement, DEF-report, DEF-proof-state]
+    derivation_rule: >-
+      By AXM-cited-measurements-reviewed every cited measurement is reported
+      at every revision as reviewed exactly when it is reviewed, and otherwise
+      as not reviewed with why, so it reads reviewed exactly when it is
+      reviewed. By DEF-cited-measurement one is reviewed only when it carries
+      a pin equal to its branch's claim digest, so one with no pin is not. A
+      pin equals the claim digest of the claim as it stood when the pin was
+      taken; by DEF-code-link the claim digest is determined by the
+      fingerprints of the branch and of every node it depends on in the
+      declared graph, and differs whenever one of them, or the set of them,
+      differs; by DEF-current-trial a fingerprint differs whenever a statement
+      or the cited premises differ. So in each listed case the digest differs
+      from the pin, the measurement is not reviewed, and
+      AXM-cited-measurements-reviewed reports it with why at every revision at
+      which the case holds. By DEF-cited-measurement a pin lives in a
+      derivation rule, which is neither a statement nor cited premises, so by
+      DEF-restatement changing it restates no node; by DEF-premise-graph a
+      build admits nodes by the premises they cite alone, so every build is as
+      it was; and by DEF-current-trial, with no amendment appended, every
+      trial current before is current after. The uncited-contract clause is
+      AXM-cited-measurements-reviewed's. By DEF-report producing a report
+      appends no record and changes no declaration, and by DEF-proof-state a
+      proof state is computed from the premise graph and the trials recorded
+      on it alone, so no proof state changes. evidence: CTR-trial-ledger-replay
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -1010,4 +1080,5 @@ policies:
       - {target: BRN-design-gate-reads-evidence, require: proven, evidence: supported}
       - {target: BRN-audit-blocks-what-counts, require: proven, evidence: supported}
       - {target: BRN-links-stale-when-either-side-moves, require: proven, evidence: supported}
+      - {target: BRN-cited-measurements-reviewed-while-the-claim-stands, require: proven, evidence: supported}
       - {target: BRN-snapshot-shows-one-revision, require: proven, evidence: supported}
