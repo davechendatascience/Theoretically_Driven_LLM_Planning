@@ -410,3 +410,12 @@
 {"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-audit-blocks-what-counts", "trial_id": "TRL-0299"}, "session": "", "timestamp": "2026-10-01T05:38:40+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-audit-blocks-what-counts", "trial_id": "TRL-0300"}, "session": "", "timestamp": "2026-10-01T05:38:40+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"subject": "BRN-audit-blocks-what-counts"}, "session": "", "timestamp": "2026-10-01T05:38:46+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"passed": false, "strategy": "counterexample", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0301"}, "session": "", "timestamp": "2026-10-06T07:28:57+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": false, "strategy": "entailment", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0302"}, "session": "", "timestamp": "2026-10-06T07:28:57+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": false, "strategy": "negation", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0303"}, "session": "", "timestamp": "2026-10-06T07:28:57+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"subject": "DEF-snapshot"}, "session": "", "timestamp": "2026-10-06T07:29:02+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "counterexample", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0304"}, "session": "", "timestamp": "2026-10-06T07:34:36+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0305"}, "session": "", "timestamp": "2026-10-06T07:34:36+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-snapshot-shows-one-revision", "trial_id": "TRL-0306"}, "session": "", "timestamp": "2026-10-06T07:34:37+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"subject": "BRN-snapshot-shows-one-revision"}, "session": "", "timestamp": "2026-10-06T07:34:41+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"subject": "BRN-snapshot-shows-one-revision"}, "session": "", "timestamp": "2026-10-06T07:34:49+00:00", "tool": "note"}
