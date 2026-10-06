@@ -215,17 +215,19 @@ axioms:
     domain: integrity
     goal: GOL-sound-designs
     statement: >-
-      At every revision, every code link in a scanned file is reported as
-      aligned or as not aligned, with why, and every mention, in a comment or
-      docstring of a scanned file, of an id that names no node in the premise
-      graph and no code region is reported. Producing these reports changes no
-      proof state and no measured belief.
+      At every revision, every code link is reported as aligned exactly when
+      it is aligned, and otherwise as not aligned, with why; and every
+      mention, in a comment or docstring of a scanned file that does not
+      declare its ids foreign, of an id that names no node in the declared
+      graph at that revision and no code region is reported. Producing these
+      reports changes no proof state and no measured belief.
     rationale: >-
       Code that realizes a claim changes constantly, and so do the claims. A
       link left behind by either reads exactly like one that still holds, and a
       comment naming a renamed claim reads like a citation. A report made only
       in the commit that broke a link is gone a commit later; one made at every
-      revision is not.
+      revision is not, and one that can read aligned when the link is not is
+      worse than none.
 
 definitions:
   - id: DEF-proof-obligation
@@ -451,25 +453,34 @@ definitions:
   - id: DEF-code-link
     term: Code link
     meaning: >-
-      A relation, declared in comments of a file git tracks at a revision, from
-      a delimited region of that file to a node, carrying two pins: a body pin
-      on the region and a claim pin on the relation. A region's body digest is
-      determined by its code with comments and layout set aside, and differs
-      whenever that code differs. A node's claim digest at a revision is
-      determined by the fingerprints, as DEF-current-trial uses them, of the
-      node and of every node it depends on in the premise graph at that
-      revision, and differs whenever any of those differs or the set of nodes
-      it depends on differs. A code link is a declared relationship: it is not a
-      trial and not a record in the ledger.
+      A scanned file at a revision is a Python source file git tracks at that
+      revision outside the ledger directories. A code link is a relation of
+      kind implements, uses or checks, declared in comments of a scanned file
+      at a revision, from a delimited region of that file to a node, carrying
+      two pins: a body pin on the region and a claim pin on the relation. A
+      relation of kind motivated-by asserts no correspondence and is not a code
+      link. A region's body digest is determined by its code with comments and
+      layout set aside, and differs whenever that code differs. The declared
+      graph at a revision is the premise graph DEF-premise-graph describes,
+      built from the declarations committed at that revision with no staged
+      proposal. A node's claim digest at a revision is determined by the
+      fingerprints, as DEF-current-trial uses them, of the node and of every
+      node it depends on in the declared graph at that revision, and differs
+      whenever any of those differs or the set of nodes it depends on differs.
+      A pin is taken by recording the digest it names for the code and the
+      claim as they stand, so it equals that digest for them. A file that
+      declares tdlp:foreign-ids names ids of the projects it builds; its
+      mentions are not mentions of this project's nodes. A code link is a
+      declared relationship: it is not a trial and not a record in the ledger.
 
   - id: DEF-aligned-link
     term: Aligned link
     meaning: >-
       A code link is aligned at a revision exactly when its region is well
-      formed and its id is carried by no other region there, its node is in the
-      premise graph at that revision, its body pin equals the region's body
-      digest at that revision, and its claim pin equals the node's claim digest
-      at that revision.
+      formed and its id is carried by no other region there, its node is in
+      the declared graph at that revision, its body pin equals the region's
+      body digest at that revision, and its claim pin equals the node's claim
+      digest at that revision.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -940,35 +951,41 @@ branches:
     subject: CMP-code-links
     claim_type: contract
     statement: >-
-      A code link reads aligned exactly at the revisions at which it is
-      aligned. A link stops reading aligned at the first revision at which its
-      region's code, comments and layout aside, differs from the code its body
-      pin was taken from, or at which its node, or any node its node depends
-      on, has been restated or removed since its claim pin was taken; at that
-      revision and every later one at which it is not aligned, it is reported
-      with why. A mention of an id that names no node in the premise graph and
-      no code region is reported. None of these reports changes a proof state.
-    premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-current-trial, DEF-restatement, DEF-report, DEF-proof-state]
+      At every revision, a code link reads aligned exactly when it is aligned.
+      A link is not aligned, and is reported with why, at every revision at
+      which its region's code, comments and layout aside, differs from the code
+      its body pin was taken from; or its node is not in the declared graph; or
+      its node, or a node its node depends on there, has a statement or cited
+      premises other than when its claim pin was taken, or its node depends on
+      a different set of nodes. A mention, in a comment or docstring of a
+      scanned file that does not declare its ids foreign, of an id that names
+      no node in the declared graph and no code region is reported. None of
+      these reports changes a proof state.
+    premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-current-trial, DEF-premise-graph, DEF-report, DEF-proof-state]
     derivation_rule: >-
-      By AXM-links-never-silent every link is reported at every revision as
-      aligned or as not aligned with why, so it reads aligned exactly where it
-      is aligned. By DEF-aligned-link it is aligned only while its body pin
-      equals the region's body digest and its claim pin equals the node's claim
-      digest. By DEF-code-link the body digest differs whenever the region's
-      code, comments and layout aside, differs, so a body pin taken from other
-      code no longer equals it; and the claim digest differs whenever the
-      fingerprint of the node or of a node it depends on differs, or the set of
-      those nodes does. By DEF-current-trial a fingerprint differs whenever the
-      statement or the cited premises differ, which DEF-restatement calls
-      restating; a removed node is in no premise graph, and by DEF-aligned-link
-      a link to a node outside it is not aligned. So either change makes the
-      link not aligned, and AXM-links-never-silent reports it, with why, at
-      that revision and at every later one at which it is still not aligned.
-      The mention clause is AXM-links-never-silent's. By DEF-report producing a
-      report appends no record and changes no declaration, and by DEF-code-link
-      a link is neither a trial nor a ledger record; by DEF-proof-state a proof
-      state is computed from the premise graph and the trials recorded on it
-      alone, so no proof state changes. evidence: CTR-code-links-aligned
+      By AXM-links-never-silent every code link is reported, at every
+      revision, as aligned exactly when it is aligned and otherwise as not
+      aligned with why, so it reads aligned exactly when it is aligned. By
+      DEF-code-link a pin equals the digest it names for the code and the
+      claim as they stood when it was taken. The body digest is determined by
+      the region's code with comments and layout set aside and differs
+      whenever that code differs, so where the code differs from the code the
+      body pin was taken from, the body digest differs from the body pin. The
+      claim digest is determined by the fingerprints of the node and of every
+      node it depends on in the declared graph -- which DEF-code-link builds as
+      DEF-premise-graph describes -- and differs whenever one of them differs
+      or the set of them does; by DEF-current-trial a fingerprint differs
+      whenever a statement or the cited premises differ, so in each of those
+      cases the claim digest differs from the claim pin. A node not in the
+      declared graph fails DEF-aligned-link directly. In every case
+      DEF-aligned-link is not met, so the link is not aligned, and by
+      AXM-links-never-silent it is reported with why at every revision at
+      which the case holds. The mention clause is AXM-links-never-silent's. By
+      DEF-report producing a report appends no record and changes no
+      declaration, and by DEF-code-link a link is neither a trial nor a ledger
+      record; by DEF-proof-state a proof state is computed from the premise
+      graph and the trials recorded on it alone, so no proof state changes.
+      evidence: CTR-code-links-aligned
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:
