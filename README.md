@@ -286,6 +286,11 @@ A result stops counting the moment the thing it measured changes — and not bef
 * A **test run** writes a content stamp: the git blob id of every file its evidence rests on, as the
   working tree actually stood. Once one of those files differs at HEAD, its trials are `stale`.
 
+* A **review** is bound to what was reviewed. A tagged code region carries a pin of its body
+  and of the claim it realizes. A branch's cited contract carries a pin of the claim it was read
+  against. When either side moves, the region or citation reads unreviewed, at every revision,
+  until someone re-reads it and writes the new pin.
+
 Stale evidence stays on record and cited; it is not counted, cannot satisfy an adopt criterion,
 and the plan schedules the re-run. Nothing re-runs automatically.
 
@@ -340,12 +345,12 @@ hand it work.
 
 | Tool | Does |
 |---|---|
-| `status` | 9 views: `tree`, `branches`, `axioms`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle` |
+| `status` | 9 views: `tree`, `branches`, `axioms`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the pin to write, and lists the contracts no branch cites by what they measure |
 | `propose_branch` | stages a branch or lemma; checks acyclicity and premises; warns when a claim names a file, class or call instead of what must hold of any implementation |
 | `verify_step` | records one pass of falsification trials, each bound to the statement it verified |
 | `amend` | reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending; the original and the reason stay |
 | `withdraw` | retires a staged proposal; refused for a declaration or anything a declared node cites |
-| `audit_change` | computes the blast radius of changing an axiom or lemma, and records the audit so impact, approval and re-verification form one chain |
+| `audit_change` | computes the blast radius of changing an axiom or lemma, and records the audit so impact, approval and re-verification form one chain. It also names, by id, the tagged code regions and cited measurements the change would leave unreviewed |
 | `note` | qualitative annotation; zero weight |
 | `decide` | evaluates a policy; `evidence: supported` also requires each cited contract supported in component-belief; human approval for `ADOPT`; records the revision |
 
@@ -373,6 +378,14 @@ declarations in [`belief.yaml`](belief.yaml).
 * **Diagnosis before optimisation.** Bottlenecks are ranked by decision relevance, never by lowest score, and a component no test observes is reported as a coverage limit rather than blamed.
 * **Components claim their code.** `code:` lists the files a component owns. A file no component claims is unowned; a claimed path that no longer exists is `MISSING_CODE_PATH`; a component with no `code:` is *planned*.
 * **Content stamps.** Before a test's command starts, the runner records the git blob id of every file the evidence could rest on — the components' claimed `code:`, the files the test names on its `run:` line or in `reads:` — and records beside them what the run opened, which the artifacts view reads and staleness does not. Every trial carries the stamp's digest. Content rather than revision, so evidence from uncommitted edits later discarded is stale, an amend or squash-merge that keeps the bytes keeps the evidence, and weakening the test itself stales what it produced. A declared input git ignores — a checkpoint, a dataset, a directory of demonstrations — has no blob at HEAD, so it is stamped by its content digest instead, and the evidence stays current while the file on disk still has it: retrain the checkpoint and the evidence goes stale, restore the same bytes and it counts again. Trials recorded before stamps fall back to `git diff <sw_revision> HEAD`. Design: [`docs/stamp_monitor_mcp_design.md`](docs/stamp_monitor_mcp_design.md).
+* **Runs in parallel.** `run_test` calls made together run at once, up to `BELIEF_MAX_RUNS`
+  (by default half the cores). Each run reserves its own id and artifact directory, and only
+  appends to the ledger one at a time. To run independent suites side by side, make the calls in
+  one turn.
+* **Environment scope.** A dependency upgrade under unchanged code stales evidence only if the
+  test declares the lockfile, so list `uv.lock` (or your requirements file) in `reads:`. This
+  repository's suites do. `stamp-monitor links` names a test behind linked code that does not
+  (`UNSCOPED_ENVIRONMENT`).
 * **Runs record what they read.** Each `run_test` installs an audit hook through `sitecustomize` (chaining to any the environment already had), so the run reports each project file it opened for reading — an import from cached bytecode counts as reading its source. Files a non-Python child opens are declared with `reads:`.
 * **Every file carries a verdict.** `status(view="artifacts")` joins git history, the run ledger, the declarations and the filesystem. A file nothing claims, nothing ran, and no live evidence rests on is a prune candidate; a generated artifact is *kept*, *prunable*, or *undecidable* — with the source of each fact named, because "RUN-0140 opened it" is a fact and "its mtime is three weeks old" is a hint.
 
@@ -387,7 +400,7 @@ status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 | Tool | Does |
 |---|---|
 | `status` | 9 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace`, `goals` |
-| `run_test` | runs a declared test, captures its artifact and stamp, records its trials |
+| `run_test` | runs a declared test, captures its artifact and stamp, records its trials; calls made together run at once |
 | `ingest` | imports external evidence: each record names a test its contract lists, and the server copies and hashes the results file itself |
 | `amend` | reclassifies or supersedes trials by appending; nothing is edited |
 | `note` | qualitative annotation; zero weight |
@@ -416,10 +429,10 @@ accepted them would be an agent-writable path into the evidence. Freshness is a 
 
 | Tool | Answers |
 |---|---|
-| `impact(base, worktree)` | changed path → component / test → contract (state at HEAD) → design branch → policy, and which tests to re-run |
-| `audit()` | every ledger line parses; ids are unique; amendments and decisions cite records that exist; stamps and artifacts still match their digests; declarations are committed |
+| `impact(base, worktree)` | changed path → component / test → contract (state at HEAD) → design branch → policy, and which tests to re-run. What the range did to tagged code regions is listed beside the chain, never on it |
+| `audit()` | every ledger line in both ledgers parses; ids are unique; amendments and decisions cite records that exist; stamps and artifacts still match their digests; declarations are committed. It also warns on code links that are broken or need review (`LINK_*`) and on cited measurements not reviewed, and lists the contracts no branch cites |
 | `workflow()` | reclassifications that remove only adverse results; adoptions with no human approver; decisions on dirty-tree evidence; adoptions whose evidence has since gone stale |
-| `links(subject)` | tagged code regions (`# tdlp:begin CODE-...`) and the claims they relate to: each link aligned, or why not, with the header lines to write once reviewed |
+| `links(subject)` | tagged code regions (`# tdlp:begin CODE-...`) and the claims they relate to: each link aligned, or why not, beside the state of the evidence its claim cites, with the header lines to write once reviewed. `subject` narrows to a region, a claim or a path, uncommitted regions included |
 
 ```text
 src/component_belief/runner.py changed
@@ -453,6 +466,12 @@ of the claim as it stood when someone read the two together.
   and updates the pin, not only in the commit that broke it.
 * **Dangling ids.** A `DEF-`/`BRN-` id in a comment or docstring that names nothing is reported.
   So is one outside any region that declares it, since nothing will notice when it rots.
+* **Aligned is not "works".** Each link is printed beside the state of the contract its claim
+  cites. A region reads aligned while its evidence is stale, and that combination is flagged
+  (`LINKED_EVIDENCE_NOT_SUPPORTED`).
+* **Tag and pin in one commit.** For an uncommitted region, `links` prints the pins it would need
+  once committed as it stands. `links --strict` exits 1 on any broken tag or link needing review,
+  for CI or a hook.
 * **Outside the probe.** None of it reaches the verifier. Links are a stamp-monitor report, not
   a consistency-belief view.
 
@@ -484,9 +503,18 @@ about: every component, the theory it rests on, each claim's proof tree, and the
   its state, and its proof tree down to axioms and definitions. The same file opens in a browser
   and publishes as an Artifact; publishing is the person's call, since the page carries their
   design.
-* **Issues and gaps.** The issues the loaders and the build report, under their own codes, and the
-  gaps only the join shows: an axiom naming no goal, a goal no axiom names, code with no design, an
-  interface or goal no branch governs, ground nothing rests on.
+* **Issues and gaps.** It lists the issues the loaders and the build report, under their own
+  codes, and the gaps only the join shows:
+  - an axiom naming no goal, or a goal no axiom names;
+  - code with no design, or an interface or goal no branch governs;
+  - ground nothing rests on;
+  - a cited measurement not reviewed against its claim;
+  - a contract no branch cites, marked by what it measures.
+
+  Broken code tags and unaligned links appear too.
+* **Beside each node.** Each branch shows its cited measurements with their review state. Each
+  claim, axiom and definition shows its tagged code regions with their link state. Both are judged
+  from the declarations and the code at that commit, so the snapshot still reads no evidence.
 * **Writes nothing else.** Its directory carries its own `.gitignore`, so git never lists the page,
   and where a component claims or a test names that directory it writes nothing at all, because
   rewriting a file evidence rests on would stale that evidence.
@@ -542,6 +570,13 @@ claim follows from its premises has nothing to do with whether anyone built it.
 | `UNATTACHED_SUBJECT` | the subject is prose, so the design was never bound to a component |
 | `UNKNOWN_EVIDENCE` | a derivation rule cites a `CMP-`/`CTR-` id `belief.yaml` does not declare |
 
+A citation can carry a pin, `evidence: CTR-motion-clear@<pin>`: the claim's digest when the
+contract's rule and tests were read against it. A contract can read supported for a claim it never
+measured: the claim was restated after its test was written. So the coverage view reports each
+cited measurement as `reviewed`, `unpinned` or `not reviewed`, and prints the pin to write. It also
+lists every contract no branch cites, sorted by what it measures: a component's (decide why it is
+measured), an interface's, or a goal's (its outcome says why). One with no evidence yet is marked.
+
 The release gate spans both: `POL-consistency-gate` requires each branch **proven** and its cited
 contract **supported**. A project with no `belief.yaml` still works — subjects go unchecked, and
 the coverage view says so.
@@ -550,7 +585,7 @@ the coverage view says so.
 
 ## The systems-engineering view
 
-Read as a V-model, the three servers cover stakeholder needs down to component test, joined by
+Read as a V-model, the four servers cover stakeholder needs down to component test, joined by
 traceability and configuration control. The human owns the top of the V; the agent owns the rest.
 
 | Stage | Artifact | Method |
@@ -562,16 +597,16 @@ traceability and configuration control. The human owns the top of the V; the age
 | Build | `code:` claims per component; `status(view="artifacts")` | inspection |
 | Component, integration, system test | contracts and tests by `layer`, an interface's contract on the interface itself; `run_test`; `.belief/` | test |
 | Risk register | failure modes in `belief.yaml`, each naming the contract and the case that observe it (`observed_by:`, `case:`) | mechanical: `status(view="graph")` lists the ones nothing observes and checks each named case passed in the ledger |
-| Traceability | a branch's `subject` and cited contract; `status(view="coverage")` on both sides; tagged code regions pinned to the claims they realize (`stamp-monitor links`) | mechanical |
+| Traceability | a branch's `subject` and cited contract, the citation pinned to the claim it was read against; `status(view="coverage")` on both sides; tagged code regions pinned to the claims they realize (`stamp-monitor links`) | mechanical |
 | Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
-| Change control | `audit_change`, STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
-| Configuration audit | `stamp-monitor audit` and `workflow` | mechanical, read-only |
+| Change control | `audit_change` (with the code links and cited measurements a change leaves unreviewed), STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
+| Configuration audit | `stamp-monitor audit`, `workflow` and `links`; `graph-snapshot` for the whole design at one revision | mechanical, read-only |
 | Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
 | Release gate | `POL-consistency-gate`: each branch proven **and** its cited contract supported; the goals policy in `goals.yaml` | both ledgers, and the human's goals |
 
 Every stage now has a home. This repository applies each to itself: every axiom names its goal,
 the goal interface carries a design claim, each component interface has an integration test,
-and each of its 35 failure modes names the case that would catch it.
+and each of its 61 failure modes names the case that would catch it.
 
 ---
 
@@ -588,6 +623,7 @@ docs/
   component_belief_mcp_design.md           empirical model and architecture
   stamp_monitor_mcp_design.md              stamps, freshness, and the read-only monitor
   graph_snapshot_mcp_design.md             the design graph at one revision, drawn as one page
+  code_to_theory_tagging_design.md         tagged code regions: pins, alignment, adoption
 src/
   consistency_belief/                deductive server (8 tools)
     declarations.py                  git-HEAD loader, validation, the component join
@@ -596,11 +632,13 @@ src/
     probes.py                        falsification probe generators and parsers
     decide.py                        policy evaluation and the human approval gate
     views.py / render.py             proof tree, status and coverage views
+    measurements.py                  cited measurements: pins, review state, contracts no branch cites
+    links.py                         the theory side of code links: what a claim pin must be
     store.py                         append-only JSONL ledger in .consistency/
   component_belief/                  empirical server (6 tools)
     declarations.py                  git-HEAD loader, validation, code claims
     model.py                         belief slices; gate and rate contracts
-    staleness.py                     content stamps and freshness (shared with both other servers)
+    staleness.py                     content stamps and freshness (shared with the other servers); a run judged once
     runner.py / readlog.py           test execution in the project's environment, artifact capture, the read hook
     project.py                       which project root all four servers read
     diagnose.py / planning.py        bottleneck ranking; round test selection
@@ -626,7 +664,8 @@ plugin/                              the `tdlp` Claude Code plugin
   .mcp.json                          the four servers, installed with uvx from tag tdlp--v<version>
   agents/consistency-verifier.md     verifier subagent: consistency-belief tools only, no file access
   skills/component-belief/SKILL.md   the empirical loop, four rules
-  skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate
+  skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate, pinning what a branch cites, linking code
+  skills/adopt-goals/SKILL.md        setting up goals.yaml in a project that already uses TDLP
 ```
 
 A release: bump `version` in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`, the marketplace
@@ -663,6 +702,9 @@ The suites assert the invariants above, not the implementation:
 17. A measure promoted from `belief.yaml` into `goals.yaml` keeps its evidence, while both files declare it and after; a draft `goals.yaml` is checked without taking effect.
 18. A snapshot shows the declarations of the one revision it names and the proof states the consistency server computes over them, lists the join's gaps, reads no evidence, and writes nothing but its page, which git does not see and no declaration names.
 19. A tagged code region reads aligned only while its body and its claim, with everything upstream, are as they were pinned; any other link, and any id named in a comment that resolves to nothing, is reported at every revision until fixed; and none of it moves a proof state or reaches the probe.
+20. Runs made together take distinct run ids and evidence ids and overlap in time; a rejected import leaves no run behind.
+21. A cited measurement reads reviewed only while its branch, and everything the branch rests on in the declared graph, is as it was when the pin was written; writing a pin restates nothing and sets no trial aside; a contract no branch cites is reported.
+22. Staleness gives every trial the verdict it would get alone, judged once per run.
 
 ---
 

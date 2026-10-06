@@ -109,8 +109,13 @@ columns.
    * **Issues**: the declaration issues the loaders already report, under their own codes; the
      gaps only the joined graph shows (an axiom naming no goal, a goal no axiom names, a component
      with code and no design, an interface or goal with no design claim, an axiom or definition
-     nothing rests on); and a count of claims not proven, linking to the Claims tab. Each issue
-     links to its node, and the inspector lists a node's own issues.
+     nothing rests on, and since 0.7.6 a contract no branch cites, marked as a goal's, an
+     interface's or a component's measure); the cited measurements not reviewed against their
+     claims, in their own group (0.7.6); broken code tags and unaligned links (0.7.2); and a count
+     of claims not proven, linking to the Claims tab. Each issue links to its node, and the
+     inspector lists a node's own issues. The inspector also shows a branch's cited measurements
+     with their review state, and any node's tagged code regions with their link state. Both are
+     judged from the declarations and code at the snapshot's commit, so no evidence is read.
 2. **Lineage.** The selected node, everything it rests on and everything that rests on it, drawn
    left to right as "rests on":
    * Claims are placed in columns by longest path, with definitions, axioms and goals as the last

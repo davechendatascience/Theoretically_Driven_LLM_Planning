@@ -234,6 +234,9 @@ def test_the_joined_graph_lists_its_gaps(project):
         ("NO_DESIGN_CLAIM", "GOL-hold"),
         ("UNUSED_GROUND", "AXM-unused"),
         ("UNUSED_GROUND", "DEF-spare"),
+        # DEF-snapshot as restated: a contract no declared branch names is a gap of the join too
+        ("UNCITED_CONTRACT", "CTR-reaches"),
+        ("UNCITED_CONTRACT", "CTR-holds"),
     }
 
 
