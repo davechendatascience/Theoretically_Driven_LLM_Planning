@@ -1,0 +1,508 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestFailureModes::test_a_failure_mode_nothing_observes_is_listed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestFailureModes::test_a_named_case_is_checked_against_the_ledger"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestFailureModes::test_an_observer_that_is_not_a_contract_is_reported"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_structured_trials_become_measured_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_out_placeholder_is_expanded_cross_platform"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_exit_code_fallback_does_not_fabricate_a_declared_metric"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_long_run_tells_the_client_it_is_still_running"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_every_measured_record_names_the_revision_it_ran_at"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_result_it_cannot_read_is_named_not_crashed_on[echo nothing-structured-the test wrote no $OUT file]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_result_it_cannot_read_is_named_not_crashed_on[python -c \"import os; os.makedirs(os.environ['OUT'])\"-$OUT is a directory, not a file]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_result_it_cannot_read_is_named_not_crashed_on[python -c \"import os; open(os.environ['OUT'], 'w').write('{not json')\"-$OUT is not valid JSON]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_result_it_cannot_read_is_named_not_crashed_on[python -c \"import os; open(os.environ['OUT'], 'w').write('{}')\"-$OUT is JSON in none of the accepted shapes]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_failing_command_records_a_failing_trial"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_plugin_server_runs_tests_with_the_projects_python"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_a_plugin_server_never_lends_tests_its_own_python"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_outside_a_plugin_the_servers_environment_is_left_alone"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestRunner::test_artifacts_are_written"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_exactly_six_tools"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_no_tool_writes_a_belief"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_status_views_carry_a_basis_line"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_unknown_view_is_reported"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_note_is_inert"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_amend_requires_a_reason"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_rejects_records_without_repro"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_requires_an_artifact"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_an_artifact_it_cannot_read[ci://run/1-it is a URL]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_an_artifact_it_cannot_read[out/never-written.json-nothing exists at that path]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_an_artifact_it_cannot_read[out-it is a directory]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_an_artifact_it_cannot_read[out/a.json out/b.json-it names more than one path]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_an_artifact_it_cannot_read[out/a.json ; out/b.json-it names more than one path]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_refuses_a_test_the_contract_does_not_list"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_ingest_accepts_a_complete_record"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_an_import_naming_a_bare_test_id_records_the_declared_version"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_a_fabricated_import_cannot_adopt"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_run_test_reports_unknown_test"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_trace_expands_a_citation_handle"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_trace_lists_known_handles_when_none_match"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_cycle_emits_the_seven_outputs"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_decide_refuses_to_self_approve_an_adopt"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_decide_records_with_an_approver"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestToolSurface::test_more_testing_records_without_an_approver"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestPendingGate::test_uncommitted_threshold_change_does_not_reach_a_decision"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_evidence_views_name_the_blocker[belief]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_evidence_views_name_the_blocker[diagnose]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_evidence_views_name_the_blocker[plan]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_evidence_views_name_the_blocker[cycle]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_evidence_views_name_the_blocker[trace]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_graph_and_coverage_keep_their_headers"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_run_test_and_decide_point_at_the_commit"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestNoDeclarationsInEffect::test_missing_file_says_author_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server::test_multi_slice_basis_handle_resolves"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestGoals::test_the_goals_view_is_what_you_read_to_check_in"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestGoals::test_without_goals_the_view_says_what_to_write"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestGoals::test_an_adoption_under_your_goals_needs_no_approver"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestGoals::test_after_the_agent_touches_your_goal_set_it_needs_you_again"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_server.TestGoals::test_a_policy_in_belief_yaml_still_needs_an_approver"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

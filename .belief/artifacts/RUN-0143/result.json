@@ -1,0 +1,22 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestConsistencyDeclarationsToProofDag::test_an_unknown_premise_is_marked_and_never_admitted"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestConsistencyDeclarationsToProofDag::test_a_cycle_is_reported_and_the_graph_built_without_it"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
