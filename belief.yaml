@@ -97,6 +97,8 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_restating_the_claim_or_a_premise_leaves_it_unreviewed_until_read_again"}
       - {id: FM-pin-restates, observable: "writing a pin on a cited measurement sets a trial aside",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_a_pin_reads_reviewed_and_restates_nothing"}
+      - {id: FM-goal-measures-mixed, observable: "a goal's measure is listed among the component contracts no design cites",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_goal_and_interface_measures_are_listed_apart_from_a_components"}
       - {id: FM-uncited-contract-silent, observable: "a contract no branch cites goes unreported",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_an_unpinned_measurement_and_an_uncited_contract_are_shown"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
@@ -128,6 +130,8 @@ components:
          observed_by: CTR-model-honest, case: "tests.test_beliefs::test_insufficient_evidence_is_a_state_not_a_low_number"}
       - {id: FM-stale-counted, observable: "a trial measured before a claimed file changed still counts as current",
          observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestStaleness::test_evidence_measured_before_a_claimed_file_changed_is_stale"}
+      - {id: FM-judged-per-trial, observable: "a view re-judges every trial of a run, its time growing with trials times tracked files",
+         observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestJudgedOncePerRun::test_the_trials_of_one_run_are_judged_once_and_alike"}
       - {id: FM-blind-outside-git, observable: "a trial resting on a declared input git ignores stays current after that file changes, or is never current",
          observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestInputsOutsideGit::test_the_same_bytes_again_are_current"}
     remediation: model.eligible() and the slice key in compute_slices(); staleness.CodeStaleness
@@ -272,6 +276,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_git_does_not_see_the_page"}
       - {id: FM-page-is-evidence, observable: "a snapshot writes a file a component's code claims or a declared test names",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_page_a_declaration_names_is_not_written"}
+      - {id: FM-measurements-unshown, observable: "a snapshot omits a branch's unreviewed cited measurement or a contract no design cites",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_cited_measurements_and_uncited_contracts_are_shown"}
       - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
     remediation: graph_snapshot.snapshot (the join, the revision it pins and the gaps); graph_snapshot.page; the one tool in graph_snapshot/server.py
