@@ -20,6 +20,8 @@ status(view="probe")  →  verify_step(target, trials=[...])  →  status(view="
 premise's statement, the derivation rule, the three strategies and the call that records
 them. `obligations` is the shorter list; `tree` shows the DAG with badges;
 `contradictions` shows what is refuted or ungrounded, with the counterexamples.
+`tree` with `subject=<id>` draws one node's lineage alone; on a large ledger the whole tree is
+too long to read inline.
 
 ## Delegate the probing
 

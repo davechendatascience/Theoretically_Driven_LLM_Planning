@@ -115,3 +115,45 @@ def render_ascii_dag(dag: ProofDAG, slices: list[ConsistencySlice]) -> str:
             lines.append("")
 
     return "\n".join(lines) if lines else "(empty proof DAG)"
+
+
+def _badge(dag: ProofDAG, slice_map: dict[str, ConsistencySlice], nid: str) -> str:
+    node = dag.get(nid)
+    if node is not None and node.kind == "axiom":
+        return "[AXIOM]"
+    if node is not None and node.kind == "definition":
+        return "[DEF]"
+    return slice_badge(slice_map.get(nid))
+
+
+def render_lineage(dag: ProofDAG, slices: list[ConsistencySlice], node_id: str) -> str:
+    """One node's lineage, drawn from the node up: the premises it rests on, theirs beneath them,
+    each statement once; then every node that rests on it, by id and badge. It grows with the
+    node's ancestry, not with the graph, so it fits where the whole tree of a large ledger does not."""
+    slice_map = {s.target_id: s for s in slices}
+    node = dag.get(node_id)
+    if node is None:
+        return f"unknown node {node_id!r}"
+    lines = [f"{node_id} {_badge(dag, slice_map, node_id)}: {headline(node.statement)}"]
+    visited = {node_id}
+
+    def premises_of(nid: str, prefix: str) -> None:
+        parents = sorted(dag.parents.get(nid, set()))
+        for i, pid in enumerate(parents):
+            last = i == len(parents) - 1
+            connector = "└── " if last else "├── "
+            pnode = dag.get(pid)
+            if pid in visited or pnode is None:
+                lines.append(f"{prefix}{connector}{pid} {_badge(dag, slice_map, pid)} (shown above)")
+                continue
+            visited.add(pid)
+            lines.append(f"{prefix}{connector}{pid} {_badge(dag, slice_map, pid)}: {headline(pnode.statement)}")
+            premises_of(pid, prefix + ("    " if last else "│   "))
+
+    premises_of(node_id, "")
+    dependents = sorted(dag.descendants(node_id))
+    lines.append("")
+    lines.append(f"rests on it ({len(dependents)}): "
+                 + (", ".join(f"{d} {_badge(dag, slice_map, d)}" for d in dependents) or "nothing"))
+    return "\n".join(lines)
+

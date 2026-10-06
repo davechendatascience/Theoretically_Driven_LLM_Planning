@@ -20,6 +20,7 @@ from .declarations import BOUNDARY_ID, COMPONENT_ID, contract_states, git_head
 from .render import basis_line, bullet, envelope
 from .store import VALIDITY, Store
 from .views import (
+    SUBJECT_VIEWS,
     VIEWS,
     Context,
     no_declarations_next,
@@ -43,6 +44,7 @@ Axioms, definitions, and policies live in a checked-in consistency.yaml and load
 from git HEAD, not the working tree — editing that file changes nothing until a human commits it.
 
 The loop: status(view="probe") -> verify_step(target, trials=[...]) -> status(view="tree").
+On a large ledger the whole tree is long; status(view="tree", subject=<id>) draws one node's lineage.
 
 status(view="probe") serves every open obligation with its premises in full -- the claim, each
 premise's statement, the derivation rule, the three strategies -- so a verifier reads that and
@@ -157,7 +159,9 @@ def status(
     """Read the proof and consistency state.
 
     view:
-      tree           - ASCII proof DAG showing Axioms -> Lemmas -> Branches with proof badges
+      tree           - ASCII proof DAG showing Axioms -> Lemmas -> Branches with proof badges;
+                       subject=<node id> (or a CMP- id, for its branches) draws only that node's
+                       lineage: the premises it rests on, and every node that rests on it
       branches       - detailed status per branch: claim, premises, axiomatic roots, trial counts
       axioms         - root axioms, domains, the sources each references, and lists of all
                        downstream dependents
@@ -177,15 +181,29 @@ def status(
                        and lemmas they reach, and which other components share that ground)
       cycle          - full state as structured JSON
     """
-    root = project_root()
-    ctx = Context.build(root)
     if view not in VIEWS:
         return f"unknown view {view!r}; expected one of {', '.join(VIEWS)}"
+    ignored = ([f"subject={subject!r}"] if subject and view not in SUBJECT_VIEWS else []) + \
+        ([f"policy={policy!r}"] if policy else [])
+    out = _status(view, subject)
+    if not ignored:
+        return out
+    # A parameter a view does not read is named, never dropped in silence: the caller asked for less
+    # than they got, and on a large ledger the difference does not fit where they read it.
+    if view == "cycle" and out.startswith("{"):
+        return json.dumps({**json.loads(out), "ignored": ignored}, indent=2, default=str)
+    return (f"note: view {view!r} ignores {' and '.join(ignored)}. subject= is read by "
+            f"{', '.join(SUBJECT_VIEWS)}; a policy is evaluated by decide(policy_id=...).\n\n{out}")
+
+
+def _status(view: str, subject: str | None) -> str:
+    root = project_root()
+    ctx = Context.build(root)
     if ctx.decl.source == "none" and view not in ("axioms",):
         return view_no_declarations(ctx, view)
 
     if view == "tree":
-        return view_tree(ctx)
+        return view_tree(ctx, subject)
     if view == "branches":
         return view_branches(ctx, subject)
     if view == "axioms":

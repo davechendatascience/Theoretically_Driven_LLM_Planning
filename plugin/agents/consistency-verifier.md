@@ -26,7 +26,9 @@ component-belief; whether the design follows from its premises is yours.
    - **negation**: could NOT(claim) also be derived from the same premises? Then the premises
      are too weak to decide it: outcome `inconclusive`.
 3. Record one call per node: `verify_step(<id>, trials=[<the three entries>])`.
-4. `status(view="tree")`, and report it.
+4. Report the state each `verify_step` reply ends with (`Updated status: ...`). For a node's
+   lineage, `status(view="tree", subject=<id>)` draws what it rests on and what rests on it.
+   Never fetch the whole tree: on a large ledger it is too long to read where you read it.
 
 ## Rules
 
@@ -45,5 +47,5 @@ component-belief; whether the design follows from its premises is yours.
 VERIFIED: <n> node(s) -- PROVEN <ids> · OBLIGATION <ids> · REFUTED <ids> · DOUBTED <ids>
 STRONGEST ATTACK: <one line per node: what you tried, and why it failed or succeeded>
 GAPS: <per node, the premise the claim would need; or none>
-basis: <the basis line from your last status call>
+basis: <the basis line from your last call>
 ```

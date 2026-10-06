@@ -893,3 +893,48 @@ sources:
     probe = status(view="probe")
     assert "LMA-compute-cap" in probe and "SRC-" not in probe and "datasheet" not in probe
 
+
+
+def _wide_ledger(n: int) -> str:
+    """One axiom under n branches, and one chain beside them: a ledger whose whole tree is long."""
+    branches = "".join(
+        f"  - id: BRN-wide-{i:03d}\n    subject: CMP-x\n    statement: Wide branch {i} holds.\n"
+        f"    premises: [AXM-wide]\n    derivation_rule: \"By AXM-wide. evidence: CTR-x\"\n"
+        for i in range(n))
+    return (SAMPLE_CONSISTENCY_YAML.replace("policies:\n", "")
+            .replace("  - id: POL-energy-gate\n    criteria:\n      - {target: BRN-gpu-throttling, require: proven}\n", "")
+            .replace("axioms:\n", "axioms:\n  - {id: AXM-wide, domain: x, statement: Wide things hold., rationale: r}\n")
+            .replace("branches:\n", "branches:\n" + branches))
+
+
+def test_the_tree_of_one_node_draws_only_its_lineage(empty_repo: Path, monkeypatch):
+    """Reported from embodied_ai: on 157 branches the whole tree ran to ~90 KB, more than a verifier
+    with no Read tool can take in, and subject= was dropped in silence."""
+    (empty_repo / "consistency.yaml").write_text(_wide_ledger(150), encoding="utf-8")
+    git(empty_repo, "add", "consistency.yaml")
+    git(empty_repo, "commit", "-q", "-m", "a wide ledger")
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(empty_repo))
+
+    whole, one = status(view="tree"), status(view="tree", subject="BRN-gpu-throttling")
+    assert "BRN-wide-149" in whole
+    assert one.startswith("Lineage of BRN-gpu-throttling")
+    for nid in ("BRN-gpu-throttling", "LMA-compute-cap", "AXM-energy-budget", "DEF-subsystem-power"):
+        assert nid in one
+    assert "BRN-wide" not in one and "AXM-wide" not in one
+    assert "rests on it (0): nothing" in one and "basis:" in one
+    assert len(one) < 2000 < len(whole)
+
+    axiom = status(view="tree", subject="AXM-energy-budget")
+    assert "rests on it (2): BRN-gpu-throttling [OBLIGATION 0/2], LMA-compute-cap [OBLIGATION 0/2]" in axiom
+    assert status(view="tree", subject="BRN-nope").startswith("unknown node 'BRN-nope'")
+
+
+def test_a_parameter_a_view_ignores_is_named(committed_repo: Path):
+    out = status(view="obligations", subject="BRN-gpu-throttling")
+    assert out.startswith("note: view 'obligations' ignores subject='BRN-gpu-throttling'.")
+    assert "Open Proof Obligations" in out
+    assert status(view="tree", policy="POL-energy-gate").startswith("note: view 'tree' ignores policy='POL-energy-gate'")
+    import json
+    assert json.loads(status(view="cycle", subject="X"))["ignored"] == ["subject='X'"]
+    # A parameter the view reads draws no note.
+    assert not status(view="probe", subject="LMA-compute-cap").startswith("note:")

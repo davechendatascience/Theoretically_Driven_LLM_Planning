@@ -108,6 +108,10 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_an_unpinned_measurement_and_an_uncited_contract_are_shown"}
       - {id: FM-references-unlisted, observable: "status lists a source without the nodes that reference it, or an axiom without its references",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_sources_are_listed_with_the_nodes_that_reference_them"}
+      - {id: FM-tree-unreadable, observable: "the tree for one node draws nodes outside its lineage",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_the_tree_of_one_node_draws_only_its_lineage"}
+      - {id: FM-ignored-parameter-silent, observable: "a status view given a parameter it does not read says nothing of it",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_parameter_a_view_ignores_is_named"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:

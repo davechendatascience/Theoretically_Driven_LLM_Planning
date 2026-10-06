@@ -19,11 +19,14 @@ from .measurements import adopted as adopted_pins
 from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
 from .probes import probe_text
-from .render import basis_line, bullet, envelope, render_ascii_dag, slice_badge
+from .render import basis_line, bullet, envelope, render_ascii_dag, render_lineage, slice_badge
 from .store import Store
 
 VIEWS = ("tree", "branches", "axioms", "sources", "obligations", "probe", "contradictions", "coverage", "audit",
          "cycle")
+
+#: The views that read status(subject=...); every other view ignores it, and says so.
+SUBJECT_VIEWS = ("tree", "branches", "probe", "audit")
 
 #: States a verifier can still act on: the probe view serves these.
 OPEN_STATES = (OBLIGATION, STALE, DOUBTED)
@@ -132,7 +135,9 @@ def view_no_declarations(ctx: Context, view: str) -> str:
     return envelope("\n".join(lines), f"basis: declarations none · next: {no_declarations_next(decl)}")
 
 
-def view_tree(ctx: Context) -> str:
+def view_tree(ctx: Context, subject: str | None = None) -> str:
+    if subject:
+        return view_lineage(ctx, subject)
     n_staged = sum(1 for n in ctx.dag.nodes.values() if n.staged)
     header = [
         f"Proof DAG: {len(ctx.dag.nodes)} nodes ({len(ctx.decl.axioms)} axioms, "
@@ -159,6 +164,24 @@ def view_tree(ctx: Context) -> str:
     header.append("")
     tree_text = render_ascii_dag(ctx.dag, ctx.slices)
     return envelope("\n".join(header) + "\n" + tree_text, basis_line(ctx.slices))
+
+
+def view_lineage(ctx: Context, subject: str) -> str:
+    """The tree for one node, or for each branch governing a component, interface or goal: what it
+    rests on and what rests on it, and nothing else of the graph."""
+    if ctx.dag.get(subject) is not None:
+        targets = [subject]
+    elif ctx.decl.subject_known(subject):
+        targets = sorted(nid for nid, n in ctx.dag.nodes.items() if n.kind == "branch" and n.subject == subject)
+        if not targets:
+            return envelope(f"{subject} has no branch in the graph; status(view=\"coverage\") says what governs it.",
+                            basis_line(ctx.slices))
+    else:
+        return f"unknown node {subject!r}; status(view=\"tree\") without a subject draws the whole graph."
+    head = (f"Lineage of {subject}" + (f" -- its {len(targets)} branch(es)" if targets != [subject] else "")
+            + f" · source: {ctx.decl.source}{' [PENDING UNCOMMITTED EDITS]' if ctx.decl.pending else ''}")
+    body = "\n\n".join(render_lineage(ctx.dag, ctx.slices, t) for t in targets)
+    return envelope(head + "\n\n" + body, basis_line(ctx.slices))
 
 
 def view_branches(ctx: Context, subject: str | None = None) -> str:
