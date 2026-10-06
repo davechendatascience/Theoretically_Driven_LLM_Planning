@@ -13,6 +13,7 @@ what it must not be handed.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from code_links import ClaimRef, CodeIndex, build_index, resolve_revision
 from .declarations import DECLARATION_FILE, Declarations, _git_show, _parse, import_subjects
 from .graph import ProofDAG
 from .ids import content_hash
+
+_CONTRACT = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9_-]*\b")
 
 
 def claim_pin(dag: ProofDAG, node_id: str) -> str:
@@ -47,7 +50,8 @@ def claim_refs(root: Path, revision: str) -> dict[str, ClaimRef] | None:
         comp = components.get(node.subject)
         refs[nid] = ClaimRef(pin=claim_pin(dag, nid), kind=node.kind,
                              basis=frozenset(dag.ancestors(nid)), subject=node.subject,
-                             candidates=tuple(comp.code) if comp else ())
+                             candidates=tuple(comp.code) if comp else (),
+                             cites=tuple(sorted(set(_CONTRACT.findall(node.derivation_rule or "")))))
     return refs
 
 

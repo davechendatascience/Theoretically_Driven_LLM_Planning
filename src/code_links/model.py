@@ -119,13 +119,15 @@ class ClaimRef:
     `pin` is what a relation to the node must carry to be aligned; `basis` is every node it
     depends on, so a mention of a premise inside a block that implements the claim is covered by
     the claim's pin; `candidates` are files a link to it would be expected in (its subject's
-    claimed code), for the coverage observation only."""
+    claimed code), for the coverage observation only; `cites` are the contracts its derivation
+    rule names -- where the measurement of the claim lives, which a link is not."""
 
     pin: str
     kind: str                                   # axiom | definition | lemma | branch
     basis: frozenset[str] = frozenset()
     subject: str = ""
     candidates: tuple[str, ...] = ()
+    cites: tuple[str, ...] = ()
 
 
 @dataclass

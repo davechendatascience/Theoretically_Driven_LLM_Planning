@@ -534,3 +534,36 @@ class TestReportBySubject:
         assert f"UNTRACKED_MENTION {LISTED + 10} in {LISTED + 10} place(s)" in text
         assert text.index("uncommitted --") < text.index("observations --")
         assert "UNTRACKED_MENTION pkg/m03.py:1" in report(aligned, "pkg/m03.py"), "listed in full by subject"
+
+
+
+class TestMeasurementBesideLinks:
+    """'aligned' says the code was read against the claim; only the cited contract says whether it
+    still works. A solver upgraded under an unchanged region moves the second, never the first."""
+
+    def test_each_link_shows_the_state_of_the_evidence_its_claim_cites(self, aligned):
+        from stamp_monitor.links import report
+
+        text = report(aligned)
+        assert "evidence: CTR-grasp-reachable [no evidence]" in text
+        assert "LINKED_EVIDENCE_NOT_SUPPORTED BRN-servo" in text
+        assert "evidence: CTR-grasp-reachable [no evidence]" in report(aligned, "CODE-servo-cap")
+
+    def test_a_test_that_names_no_environment_file_is_reported_until_it_does(self, aligned):
+        from stamp_monitor.audit import audit
+        from stamp_monitor.links import report
+
+        assert "UNSCOPED_ENVIRONMENT TST-grasp-ik" in report(aligned)
+        assert "LINK_UNSCOPED_ENVIRONMENT" in {f.code for f in audit(aligned)}
+        belief = (aligned / "belief.yaml").read_text(encoding="utf-8").replace(
+            "    capture: [lighting, model_revision]\n",
+            "    capture: [lighting, model_revision]\n    reads: [uv.lock]\n")
+        commit(aligned, {"belief.yaml": belief, "uv.lock": "# the lock\n"}, "scope the test's environment")
+        assert "UNSCOPED_ENVIRONMENT" not in report(aligned)
+
+    def test_names_environment_reads_run_lines_and_reads(self):
+        from stamp_monitor.links import _names_environment
+
+        assert _names_environment("python run.py", ["deps/requirements-dev.txt"])
+        assert _names_environment("pip install -r requirements.txt && pytest", [])
+        assert not _names_environment("python run.py $OUT", ["tests/conftest.py"])

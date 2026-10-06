@@ -139,6 +139,11 @@ Every report states the revision, how many Python files were scanned, and what w
 
 `links(subject)` narrows every section to a region id, a claim or a path, including the uncommitted section. A region that exists only in the working tree is found that way, with its pins. The full report puts the uncommitted section first. Past 40 lines, the rest of a severity are counted per file, so it fits in one tool response on a large project.
 
+Each link is printed beside the state of the contracts its claim cites (`evidence: CTR-x [stale]`). "Aligned" says the code was read against the claim; only the contract says whether it still works. A solver upgraded under an unchanged region changes the second and not the first, and only if the test declares the lockfile. So two observations are added:
+
+- `LINKED_EVIDENCE_NOT_SUPPORTED`: a claim whose regions read aligned while its cited evidence is not supported.
+- `UNSCOPED_ENVIRONMENT`: a test behind linked code that names no environment file (`uv.lock`, a requirements file, ...) on its run line or in `reads:`.
+
 A link never blocks in `audit`, because it is not evidence. `stamp-monitor links --strict` exits 1 on any error or review. It is how a CI job or a pre-push hook makes "every tagged region was reviewed against its claim as both stand now" a condition of landing.
 
 `impact` reports a region **beside** the chain, never on it. A changed region asks for a review of that link. It adds no reason to the design branch it implements, and the branch is still reached only through its component.

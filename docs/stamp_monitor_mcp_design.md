@@ -193,7 +193,7 @@ The monitor is triggered, not continuously running. Useful triggers, none instal
 
 ## Not yet
 
-- **Environment scopes** are declared, not built in: `reads: [uv.lock, pyproject.toml]` on a test
+- **Environment scopes** are declared, not built in: `reads: [uv.lock, pyproject.toml]` on a test (`stamp-monitor links` names, as `UNSCOPED_ENVIRONMENT`, each test behind linked code that declares none)
   makes a dependency bump stale its evidence today. No interpreter, platform, or hardware
   fingerprint is stamped. **Data outside git is built in:** a declared input git ignores (a
   checkpoint, a dataset, a directory of demonstrations, in `reads:` or named as a file on the run
