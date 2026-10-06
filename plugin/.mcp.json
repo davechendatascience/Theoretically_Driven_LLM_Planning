@@ -34,6 +34,17 @@
         "STAMP_MONITOR_ROOT": "${CLAUDE_PROJECT_DIR}",
         "UV_LINK_MODE": "copy"
       }
+    },
+    "graph-snapshot": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.6.2",
+        "graph-snapshot-mcp"
+      ],
+      "env": {
+        "GRAPH_SNAPSHOT_ROOT": "${CLAUDE_PROJECT_DIR}",
+        "UV_LINK_MODE": "copy"
+      }
     }
   }
 }

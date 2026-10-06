@@ -19,7 +19,7 @@ from component_belief.project import project_root
 
 REPO = Path(__file__).resolve().parents[1]
 PLUGIN = REPO / "plugin"
-ROOT_VARS = ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT")
+ROOT_VARS = ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT", "GRAPH_SNAPSHOT_ROOT")
 
 
 def _json(path: Path) -> dict:
@@ -50,15 +50,17 @@ class TestProjectRoot:
         monkeypatch.chdir(tmp_path)
         assert project_root("BELIEF_PROJECT_ROOT") == tmp_path.resolve()
 
-    def test_all_three_servers_resolve_the_same_project(self, tmp_path, monkeypatch):
+    def test_every_server_resolves_the_same_project(self, tmp_path, monkeypatch):
         from component_belief import server as component
         from consistency_belief import server as consistency
+        from graph_snapshot import server as snapshot
         from stamp_monitor import server as monitor
 
         for var in ROOT_VARS:
             monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        roots = {component.project_root(), consistency.project_root(), monitor.project_root()}
+        roots = {component.project_root(), consistency.project_root(), monitor.project_root(),
+                 snapshot.project_root()}
         assert roots == {tmp_path.resolve()}
 
 
@@ -76,7 +78,7 @@ class TestManifest:
         tag, so the code a project runs is the code this version shipped."""
         tag = f"{MANIFEST['name']}--v{MANIFEST['version']}"
         scripts = PYPROJECT["project"]["scripts"]
-        assert set(SERVERS) == {"component-belief", "consistency-belief", "stamp-monitor"}
+        assert set(SERVERS) == {"component-belief", "consistency-belief", "stamp-monitor", "graph-snapshot"}
         for name, server in SERVERS.items():
             args = server["args"]
             source = args[args.index("--from") + 1]

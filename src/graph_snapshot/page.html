@@ -1,0 +1,736 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>__TITLE__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap">
+<style>
+/* Layout: a drawing's title block across the top; below it an index of components and claims,
+   the selected node's lineage drawn left to right as "rests on", and an inspector that reads
+   the node in full, proof tree included. */
+:root {
+  --paper: #f3f5f7;
+  --sheet: #ffffff;
+  --ink: #15181c;
+  --ink-2: #545c66;
+  --ink-3: #8a929c;
+  --rule: #dde2e7;
+  --rule-strong: #b9c1ca;
+  --edge: #a9b2bc;
+  --accent: #3446c9;
+  --accent-tint: #e9ecfb;
+  --ok: #1f8a4c;
+  --open: #b7791f;
+  --stale: #5a7591;
+  --bad: #c8323c;
+  --warn-bg: #fdf4e3;
+  --font-ui: "IBM Plex Sans Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --font-id: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-prose: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1114; --sheet: #161a1f; --ink: #e5e8ec; --ink-2: #a3acb7; --ink-3: #6f7883;
+    --rule: #262c33; --rule-strong: #3a424c; --edge: #4d5661; --accent: #8e9bff; --accent-tint: #1f2440;
+    --ok: #4cc07a; --open: #e3a33b; --stale: #8fa8c4; --bad: #f06a72; --warn-bg: #2b2414;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1114; --sheet: #161a1f; --ink: #e5e8ec; --ink-2: #a3acb7; --ink-3: #6f7883;
+  --rule: #262c33; --rule-strong: #3a424c; --edge: #4d5661; --accent: #8e9bff; --accent-tint: #1f2440;
+  --ok: #4cc07a; --open: #e3a33b; --stale: #8fa8c4; --bad: #f06a72; --warn-bg: #2b2414;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 14px/1.45 var(--font-ui); margin: 0; }
+.page { padding: 20px 16px 40px; max-width: 1880px; margin: 0 auto; display: grid; gap: 14px; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- title block ---------- */
+.titleblock { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-strong); background: var(--sheet); }
+.titleblock > div { padding: 10px 14px; border-left: 1px solid var(--rule); min-width: 0; }
+.titleblock > div:first-child { border-left: 0; }
+.tb-label { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.tb-name { font: 600 22px/1.2 var(--font-ui); text-wrap: balance; overflow-wrap: anywhere; }
+.tb-val { font: 13px/1.5 var(--font-id); overflow-wrap: anywhere; }
+.tb-sub { color: var(--ink-2); font-size: 13px; overflow-wrap: anywhere; }
+.tb-note { grid-column: 1 / -1; border-left: 0 !important; border-top: 1px solid var(--rule); color: var(--ink-2); font-size: 13px; }
+.pending { background: var(--warn-bg); border: 1px solid var(--open); padding: 8px 14px; font-size: 13px; }
+
+/* ---------- summary ---------- */
+.summary { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: flex-end; }
+.sum { display: grid; gap: 4px; min-width: 150px; }
+.sum-head { display: flex; gap: 8px; align-items: baseline; }
+.sum-head b { font: 600 13px var(--font-ui); }
+.sum-head span { color: var(--ink-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.bar { display: flex; height: 8px; width: 220px; max-width: 100%; background: var(--rule); border-radius: 2px; overflow: hidden; gap: 1px; }
+.bar i { display: block; height: 100%; }
+.sum-keys { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sum-keys span { display: inline-flex; align-items: center; gap: 5px; }
+.sum-counts { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.sum-issues { border: 1px solid var(--rule-strong); background: var(--sheet); border-radius: 4px; padding: 4px 10px; cursor: pointer; text-align: left; display: grid; gap: 1px; }
+.sum-issues:hover { border-color: var(--accent); }
+.sum-issues b { font: 600 13px var(--font-ui); }
+.sum-issues span { color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+/* ---------- marks: state in form as well as color ---------- */
+.mark { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; }
+.m-ok { background: var(--ok); }
+.m-open { border: 1.5px solid var(--open); }
+.m-doubt { border: 1.5px solid var(--open); background: linear-gradient(90deg, var(--open) 50%, transparent 50%); }
+.m-stale { border: 1.5px dashed var(--stale); }
+.m-bad { background: var(--bad); border-radius: 1px; width: 8px; height: 8px; transform: rotate(45deg); }
+.m-none { border: 1.5px solid var(--rule-strong); }
+.m-decl { background: var(--ink-3); border-radius: 1px; width: 7px; height: 7px; }
+.c-ok { background: var(--ok); } .c-open { background: var(--open); } .c-doubt { background: var(--open); opacity: .6; }
+.c-stale { background: var(--stale); } .c-bad { background: var(--bad); } .c-none { background: var(--rule-strong); }
+
+/* ---------- workspace ---------- */
+.work { display: grid; grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(320px, 440px); gap: 14px; align-items: start; }
+.panel { background: var(--sheet); border: 1px solid var(--rule); min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.panel-head h2 { font: 600 13px var(--font-ui); margin: 0; letter-spacing: .02em; }
+
+/* index */
+.index { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; display: flex; flex-direction: column; }
+.tabs { display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--rule); }
+.tab { border: 0; background: none; padding: 6px 8px 7px; cursor: pointer; color: var(--ink-2); border-bottom: 2px solid transparent; font-size: 13px; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+.search { margin: 8px 8px 4px; }
+.search input { width: 100%; padding: 6px 8px; border: 1px solid var(--rule-strong); border-radius: 4px; background: var(--paper); color: var(--ink); font: 13px var(--font-id); }
+.filters { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 8px; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--rule); background: var(--sheet); border-radius: 999px; padding: 1px 8px; font-size: 12px; cursor: pointer; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--ink); background: var(--accent-tint); }
+.list { overflow-y: auto; flex: 1; min-height: 120px; border-top: 1px solid var(--rule); }
+.group-h { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding: 10px 10px 4px; }
+.row { display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 2px 8px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 5px 10px; cursor: pointer; border-left: 2px solid transparent; }
+.row:hover { background: var(--paper); }
+.row[aria-current="true"] { background: var(--accent-tint); border-left-color: var(--accent); }
+.row .rid { font: 12.5px var(--font-id); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .rsub { grid-column: 2; color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row.issue .rsub { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.row.static { cursor: default; }
+.row.static:hover { background: none; }
+.code { font: 11.5px var(--font-id); color: var(--ink-2); }
+.issue-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13px; }
+.issue-list li { display: grid; gap: 1px; }
+.strip { grid-column: 2; display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.strip .mark { width: 7px; height: 7px; }
+.strip .more { font-size: 11px; color: var(--ink-3); margin-left: 3px; }
+
+/* lineage graph */
+.graph-panel { min-width: 0; }
+.graph-tools { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.btn { border: 1px solid var(--rule-strong); background: var(--sheet); border-radius: 4px; padding: 3px 9px; font-size: 12.5px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); }
+.btn[disabled] { opacity: .45; cursor: default; border-color: var(--rule); }
+.btn[aria-pressed="true"] { background: var(--accent-tint); border-color: var(--accent); }
+.graph-scroll { overflow: auto; max-height: calc(100vh - 60px); }
+.graph-sizer { position: relative; }
+.graph { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.graph svg { position: absolute; left: 0; top: 0; overflow: visible; }
+.colh { position: absolute; top: 8px; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.node { position: absolute; display: flex; gap: 6px; align-items: center; height: 36px; padding: 3px 8px; border: 1px solid var(--rule-strong); background: var(--sheet); border-radius: 5px; cursor: pointer; text-align: left; overflow: hidden; }
+.node:hover { border-color: var(--accent); }
+.node.sel { border: 2px solid var(--accent); background: var(--accent-tint); padding: 2px 7px; }
+.node.staged { border-style: dotted; border-width: 1.5px; }
+.node .lbl { font: 11.5px/1.25 var(--font-ui); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.node .pfx { color: var(--ink-3); }
+.edge { fill: none; stroke: var(--edge); stroke-width: 1.2; }
+.edge.hot { stroke: var(--accent); stroke-width: 2; }
+.arrowhead { fill: var(--edge); }
+.graph-note { padding: 8px 10px; color: var(--ink-3); font-size: 12px; border-top: 1px solid var(--rule); }
+
+/* inspector */
+.inspector { position: sticky; top: env(safe-area-inset-top, 0px); max-height: 100vh; overflow-y: auto; padding: 14px 16px 20px; }
+.eyebrow { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.insp-id { font: 500 15px/1.35 var(--font-id); margin: 2px 0 6px; overflow-wrap: anywhere; }
+.statebadge { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; }
+.why { color: var(--ink-2); font-size: 13px; margin: 4px 0 0; overflow-wrap: anywhere; }
+.insp section { margin-top: 16px; }
+.insp h3 { font: 600 11px var(--font-ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 6px; }
+.prose { font: 15px/1.55 var(--font-prose); margin: 0; overflow-wrap: anywhere; max-width: 65ch; }
+.prose.muted { color: var(--ink-2); font-size: 14px; }
+.ref { border: 0; background: none; padding: 0; font: inherit; font-family: var(--font-id); font-size: .86em; color: var(--accent); cursor: pointer; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent); text-underline-offset: 2px; overflow-wrap: anywhere; text-align: left; }
+.ref:hover { text-decoration-color: var(--accent); }
+.plain-id { font: 12.5px var(--font-id); color: var(--ink-2); overflow-wrap: anywhere; }
+.refs { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.refs .item { display: inline-flex; gap: 6px; align-items: center; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; font-size: 13px; }
+.kv dt { color: var(--ink-3); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.code-list { margin: 0; padding: 0; list-style: none; font: 12px/1.6 var(--font-id); color: var(--ink-2); }
+.code-list li { overflow-wrap: anywhere; }
+.reach { display: grid; gap: 8px; }
+.reach-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 8px; font-size: 13px; }
+.reach-row > span:first-child { color: var(--ink-3); }
+
+/* proof tree */
+.tree { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--rule); }
+.tree.root { padding-left: 0; border-left: 0; }
+.tree li { margin: 2px 0; }
+.tree summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: 12px 12px minmax(0, 1fr); gap: 6px; align-items: start; padding: 3px 4px; border-radius: 4px; }
+.tree summary::-webkit-details-marker { display: none; }
+.tree summary:hover { background: var(--paper); }
+.tree summary .tw { color: var(--ink-3); font-size: 10px; line-height: 18px; transition: transform .12s; }
+.tree details[open] > summary .tw { transform: rotate(90deg); }
+.tree summary .mark { margin-top: 5px; }
+.tree .sline { min-width: 0; }
+.tree .hd { display: block; color: var(--ink-2); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree .body { padding: 2px 0 6px 30px; display: grid; gap: 6px; }
+.tree .body .prose { font-size: 14px; }
+.tree .kindtag { color: var(--ink-3); font-size: 11.5px; margin-left: 6px; }
+.empty { color: var(--ink-3); font-size: 13px; padding: 14px 10px; }
+
+@media (max-width: 1200px) {
+  .work { grid-template-columns: minmax(230px, 280px) minmax(0, 1fr); }
+  .inspector { grid-column: 1 / -1; position: static; max-height: none; }
+}
+@media (max-width: 760px) {
+  .titleblock { grid-template-columns: minmax(0, 1fr); }
+  .titleblock > div { border-left: 0; border-top: 1px solid var(--rule); }
+  .titleblock > div:first-child { border-top: 0; }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .index { position: static; max-height: 360px; }
+  .graph-scroll { max-height: 70vh; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header class="titleblock" id="titleblock"></header>
+  <div class="pending" id="pending" hidden></div>
+  <section class="summary" id="summary" aria-label="State of the design graph"></section>
+  <div class="work">
+    <nav class="panel index" aria-label="Index">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="tab-components" data-tab="components">Components</button>
+        <button class="tab" role="tab" id="tab-claims" data-tab="claims">Claims</button>
+        <button class="tab" role="tab" id="tab-foundations" data-tab="foundations">Foundations</button>
+        <button class="tab" role="tab" id="tab-issues" data-tab="issues">Issues</button>
+      </div>
+      <div class="search"><input id="search" type="search" placeholder="Find an id" aria-label="Find an id" autocomplete="off"></div>
+      <div class="filters" id="filters"></div>
+      <div class="list" id="list"></div>
+    </nav>
+    <section class="panel graph-panel" aria-labelledby="graph-title">
+      <div class="panel-head">
+        <h2 id="graph-title">Lineage</h2>
+        <div class="graph-tools">
+          <button class="btn" id="back" disabled>Back</button>
+          <button class="btn" id="fit" aria-pressed="false">Fit width</button>
+        </div>
+      </div>
+      <div class="graph-scroll" id="graph-scroll"><div class="graph-sizer" id="graph-sizer"><div class="graph" id="graph"></div></div></div>
+      <div class="graph-note">Arrows read "rests on": a component rests on the branches that govern it, a claim on its premises, an axiom on the goal whose requirement it states. Click a node to walk to it.</div>
+    </section>
+    <aside class="panel inspector" id="inspector" aria-label="Selected node"></aside>
+  </div>
+</div>
+
+<script type="application/json" id="snapshot">__SNAPSHOT__</script>
+<script>
+(function () {
+  "use strict";
+  const S = JSON.parse(document.getElementById("snapshot").textContent);
+  const N = S.nodes;
+  const out = {}, inc = {};
+  for (const id in N) { out[id] = []; inc[id] = []; }
+  for (const [a, b] of S.edges) { out[a].push(b); inc[b].push(a); }
+
+  const KIND = {
+    goal: { word: "Goal", file: "goals.yaml" }, axiom: { word: "Axiom", file: "consistency.yaml" },
+    definition: { word: "Definition", file: "consistency.yaml" }, lemma: { word: "Lemma", file: "consistency.yaml" },
+    branch: { word: "Branch", file: "consistency.yaml" }, component: { word: "Component", file: "belief.yaml" },
+    interface: { word: "Interface", file: "belief.yaml" },
+  };
+  const STATE = {
+    refuted: ["bad", "Refuted"], ungrounded: ["bad", "Ungrounded"], doubted: ["doubt", "Doubted"],
+    stale: ["stale", "Stale"], obligation: ["open", "Open obligation"], proven: ["ok", "Proven"],
+    "undeclared design": ["open", "Undeclared design"], planned: ["open", "Planned"],
+    governed: ["ok", "Governed"], "no design claim": ["none", "No design claim"], "declared only": ["none", "Declared only"],
+  };
+  const CLAIM_ORDER = ["refuted", "ungrounded", "doubted", "stale", "obligation", "proven"];
+  const COVER_ORDER = ["undeclared design", "planned", "governed", "declared only", "no design claim"];
+  const COVER_WORDS = {
+    governed: "Code exists, and a declared branch says why.",
+    "undeclared design": "Code exists, and no declared branch says why: declare the design or prune the code.",
+    planned: "A design is declared ahead of the code.",
+    "declared only": "Declared in belief.yaml with no code and no design.",
+    "no design claim": "No design claim governs this interface.",
+  };
+  const stateOf = (n) => n.state || n.coverage || null;
+  const cls = (n) => { const s = stateOf(n); return s && STATE[s] ? STATE[s][0] : "decl"; };
+  const word = (n) => { const s = stateOf(n); return s && STATE[s] ? STATE[s][1] : ""; };
+  const isClaim = (n) => n.kind === "branch" || n.kind === "lemma";
+  const isSubject = (n) => n.kind === "component" || n.kind === "interface";
+
+  const el = (tag, attrs, ...kids) => {
+    const e = document.createElement(tag);
+    for (const k in attrs || {}) {
+      if (k === "class") e.className = attrs[k];
+      else if (k === "text") e.textContent = attrs[k];
+      else if (k.startsWith("on")) e.addEventListener(k.slice(2), attrs[k]);
+      else if (attrs[k] !== null && attrs[k] !== undefined && attrs[k] !== false) e.setAttribute(k, attrs[k]);
+    }
+    for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k);
+    return e;
+  };
+  const mark = (n) => el("span", { class: "mark m-" + cls(n), "aria-hidden": "true" });
+  const headline = (t, len) => { t = (t || "").replace(/\s+/g, " ").trim(); return t.length > len ? t.slice(0, len - 1) + "…" : t; };
+
+  // ---------- closure ----------
+  function closure(id, adj) {
+    const seen = new Set(), stack = [...adj[id]];
+    while (stack.length) { const x = stack.pop(); if (!seen.has(x)) { seen.add(x); stack.push(...adj[x]); } }
+    return seen;
+  }
+  const upCache = {}, downCache = {};
+  const up = (id) => upCache[id] || (upCache[id] = closure(id, out));
+  const down = (id) => downCache[id] || (downCache[id] = closure(id, inc));
+
+  // ---------- title block ----------
+  function titleBlock() {
+    const tb = document.getElementById("titleblock");
+    const pretty = S.project.replace(/[_-]+/g, " ");
+    const src = Object.entries(S.sources).map(([f, committed]) => el("div", { class: "tb-val" }, committed ? f : `${f} · not committed`));
+    tb.append(
+      el("div", {}, el("div", { class: "tb-label", text: "Graph snapshot" }), el("div", { class: "tb-name", text: pretty })),
+      el("div", {}, el("div", { class: "tb-label", text: "Revision" }), el("div", { class: "tb-val", text: S.revision + " · " + S.committed }),
+        el("div", { class: "tb-sub", text: S.subject })),
+      el("div", {}, el("div", { class: "tb-label", text: `Declarations read at ${S.revision}` }), ...src),
+      el("div", {}, el("div", { class: "tb-label", text: "Taken" }), el("div", { class: "tb-val", text: S.taken })),
+      el("div", { class: "tb-note" }, "The declarations committed at this revision, joined across the three files, with each lemma's and branch's proof state and the gaps between them. It reads no evidence, so contracts appear by name only. It does not update: take a new snapshot to see later commits."),
+    );
+    if (S.pending.length) {
+      const p = document.getElementById("pending");
+      p.hidden = false;
+      p.textContent = `${S.pending.join(" and ")} ${S.pending.length > 1 ? "have" : "has"} uncommitted edits. This snapshot shows the committed version.`;
+    }
+  }
+
+  // ---------- summary ----------
+  function summary() {
+    const box = document.getElementById("summary");
+    const groups = [
+      ["Branches", (n) => n.kind === "branch", CLAIM_ORDER],
+      ["Lemmas", (n) => n.kind === "lemma", CLAIM_ORDER],
+      ["Components", (n) => n.kind === "component", COVER_ORDER],
+      ["Interfaces", (n) => n.kind === "interface", COVER_ORDER],
+    ];
+    for (const [title, pred, order] of groups) {
+      const items = Object.values(N).filter(pred);
+      if (!items.length) continue;
+      const counts = {};
+      for (const n of items) { const s = stateOf(n) || "?"; counts[s] = (counts[s] || 0) + 1; }
+      const keys = order.filter((s) => counts[s]);
+      const bar = el("div", { class: "bar", role: "img", "aria-label": keys.map((s) => `${counts[s]} ${STATE[s][1].toLowerCase()}`).join(", ") },
+        keys.map((s) => el("i", { class: "c-" + STATE[s][0], style: `flex:${counts[s]}` })));
+      box.append(el("div", { class: "sum" },
+        el("div", { class: "sum-head" }, el("b", { text: title }), el("span", { text: String(items.length) })),
+        bar,
+        el("div", { class: "sum-keys" }, keys.map((s) => el("span", {}, el("span", { class: "mark m-" + STATE[s][0] }), `${counts[s]} ${STATE[s][1].toLowerCase()}`)))));
+    }
+    const count = (k) => Object.values(N).filter((n) => n.kind === k).length;
+    box.append(el("div", { class: "sum-counts" }, `${count("axiom")} axioms · ${count("definition")} definitions · ${count("goal")} goals`));
+    const loaders = S.issues.filter((i) => i.source !== "joined graph").length, gaps = S.issues.length - loaders;
+    if (S.issues.length) box.append(el("button", { class: "sum-issues", onclick: () => { tab = "issues"; filter = null; renderIndex(); } },
+      el("b", { text: `Issues ${S.issues.length}` }), el("span", { text: `${loaders} from the loaders · ${gaps} gaps in the joined graph` })));
+  }
+
+  // ---------- index ----------
+  let tab = "components", filter = null;
+  function rowFor(n, sub, strip) {
+    return el("button", { class: "row", "data-id": n.id, "aria-current": n.id === current ? "true" : "false", onclick: () => select(n.id) },
+      mark(n), el("span", { class: "rid", text: n.id, title: n.id }),
+      sub ? el("span", { class: "rsub", text: sub }) : null, strip || null);
+  }
+  function branchStrip(id) {
+    const bs = out[id].filter((b) => N[b].kind === "branch").map((b) => N[b])
+      .sort((a, b) => CLAIM_ORDER.indexOf(a.state) - CLAIM_ORDER.indexOf(b.state));
+    if (!bs.length) return null;
+    const shown = bs.slice(0, 24);
+    return el("span", { class: "strip", "aria-label": `${bs.length} branches` }, shown.map(mark),
+      bs.length > shown.length ? el("span", { class: "more", text: `+${bs.length - shown.length}` }) : null);
+  }
+  function renderIndex() {
+    for (const t of document.querySelectorAll(".tab")) t.setAttribute("aria-selected", t.dataset.tab === tab ? "true" : "false");
+    const q = document.getElementById("search").value.trim().toLowerCase();
+    const match = (n) => !q || n.id.toLowerCase().includes(q) || (n.text || "").toLowerCase().includes(q);
+    const list = document.getElementById("list"), filters = document.getElementById("filters");
+    list.replaceChildren(); filters.replaceChildren();
+    const addGroup = (title, nodes, render) => {
+      if (!nodes.length) return;
+      list.append(el("div", { class: "group-h", text: `${title} · ${nodes.length}` }), ...nodes.map(render));
+    };
+    if (tab === "components") {
+      const subjects = Object.values(N).filter(isSubject);
+      const states = COVER_ORDER.filter((s) => subjects.some((n) => n.coverage === s));
+      filters.append(...states.map((s) => filterChip(s, subjects.filter((n) => n.coverage === s).length)));
+      const shown = subjects.filter((n) => match(n) && (!filter || n.coverage === filter));
+      const sub = (n) => n.kind === "interface" ? `${n.producer} → ${n.consumer}` : headline(n.text, 60);
+      addGroup("Components", shown.filter((n) => n.kind === "component"), (n) => rowFor(n, sub(n), branchStrip(n.id)));
+      addGroup("Interfaces", shown.filter((n) => n.kind === "interface"), (n) => rowFor(n, sub(n), branchStrip(n.id)));
+      if (!subjects.length) list.append(el("div", { class: "empty", text: "belief.yaml declares no components at this revision." }));
+    } else if (tab === "claims") {
+      const claims = Object.values(N).filter(isClaim);
+      const states = CLAIM_ORDER.filter((s) => claims.some((n) => n.state === s));
+      filters.append(...states.map((s) => filterChip(s, claims.filter((n) => n.state === s).length)));
+      const shown = claims.filter((n) => match(n) && (!filter || n.state === filter))
+        .sort((a, b) => CLAIM_ORDER.indexOf(a.state) - CLAIM_ORDER.indexOf(b.state) || a.id.localeCompare(b.id));
+      const sub = (n) => (n.staged ? "staged · " : "") + (n.kind === "branch" ? `governs ${n.subject}` : "lemma");
+      addGroup("Branches and lemmas, worst first", shown, (n) => rowFor(n, sub(n)));
+    } else if (tab === "issues") {
+      const codes = [...new Set(S.issues.map((i) => i.code))];
+      filters.append(...codes.map((c) => codeChip(c, S.issues.filter((i) => i.code === c).length)));
+      const shown = S.issues.filter((i) => (!filter || i.code === filter)
+        && (!q || [i.subject, i.code, i.message].some((s) => (s || "").toLowerCase().includes(q))));
+      const open = Object.values(N).filter((n) => isClaim(n) && n.state !== "proven");
+      if (!filter && open.length) {
+        list.append(el("div", { class: "group-h", text: `Claims not proven · ${open.length}` }));
+        for (const s of CLAIM_ORDER.filter((s) => s !== "proven")) {
+          const k = open.filter((n) => n.state === s).length;
+          if (k) list.append(el("button", { class: "row", onclick: () => { tab = "claims"; filter = s; renderIndex(); } },
+            el("span", { class: "mark m-" + STATE[s][0] }), el("span", { class: "rid", text: `${k} ${STATE[s][1].toLowerCase()}` }),
+            el("span", { class: "rsub", text: "open in Claims" })));
+        }
+      }
+      for (const [source, title] of [["consistency.yaml", "Reported by the consistency loader"], ["belief.yaml", "Reported by the component loader"],
+                                     ["premise graph", "Reported by the premise-graph build"], ["joined graph", "Gaps in the joined graph"]]) {
+        addGroup(title, shown.filter((i) => i.source === source), issueRow);
+      }
+      if (!S.issues.length && !open.length) list.append(el("div", { class: "empty", text: "No issues at this revision." }));
+    } else {
+      const reach = (id) => [...down(id)].filter((x) => isSubject(N[x])).length;
+      const sub = (n) => `${headline(n.kind === "definition" ? n.term : n.text, 44)} · ${reach(n.id)} subj.`;
+      for (const [k, title] of [["goal", "Goals"], ["axiom", "Axioms"], ["definition", "Definitions"]]) {
+        addGroup(title, Object.values(N).filter((n) => n.kind === k && match(n)), (n) => rowFor(n, sub(n)));
+      }
+    }
+    if (!list.querySelector(".row") && !list.querySelector(".empty")) list.append(el("div", { class: "empty", text: "Nothing matches." }));
+  }
+  function issueRow(i) {
+    const node = N[i.subject];
+    const kids = [el("span", { class: "mark m-open", "aria-hidden": "true" }), el("span", { class: "rid", text: i.subject, title: i.subject }),
+      el("span", { class: "rsub" }, el("span", { class: "code", text: i.code }), " " + i.message)];
+    return node ? el("button", { class: "row issue", "data-id": i.subject, "aria-current": i.subject === current ? "true" : "false", onclick: () => select(i.subject) }, kids)
+      : el("div", { class: "row issue static" }, kids);
+  }
+  function codeChip(code, n) {
+    return el("button", { class: "chip", "aria-pressed": filter === code ? "true" : "false",
+      onclick: () => { filter = filter === code ? null : code; renderIndex(); } }, el("span", { class: "code", text: code }), String(n));
+  }
+  function filterChip(state, n) {
+    return el("button", { class: "chip", "aria-pressed": filter === state ? "true" : "false",
+      onclick: () => { filter = filter === state ? null : state; renderIndex(); } },
+      el("span", { class: "mark m-" + STATE[state][0] }), `${STATE[state][1]} ${n}`);
+  }
+
+  // ---------- lineage graph ----------
+  // Columns by longest path along "rests on", with definitions, axioms and goals as the last three.
+  // An edge that crosses a column runs through a lane slot there, shared by every edge bound for
+  // the same premise, so it never passes behind a node it does not touch.
+  const PITCH = 46, NODE_H = 36, LANE_H = 12, GAP = 48, TOP = 30;
+  let fit = false;
+  function lineageOf(id) {
+    const n = N[id];
+    const ids = new Set([id, ...up(id)]);
+    // Below a goal lies nearly everything, so a goal's lineage stops at the axioms stating it.
+    if (n.kind === "goal") for (const a of inc[id]) ids.add(a);
+    else for (const d of down(id)) ids.add(d);
+    return ids;
+  }
+  function layout(ids) {
+    const derived = [...ids].filter((i) => isSubject(N[i]) || isClaim(N[i]));
+    const rank = {};
+    const rankOf = (i) => {
+      if (rank[i] !== undefined) return rank[i];
+      rank[i] = 0;
+      let r = 0;
+      for (const p of inc[i]) if (ids.has(p) && (isSubject(N[p]) || isClaim(N[p]))) r = Math.max(r, rankOf(p) + 1);
+      return (rank[i] = r);
+    };
+    let R = 0;
+    for (const i of derived) R = Math.max(R, rankOf(i));
+    const tail = { definition: 1, axiom: 2, goal: 3 };
+    const byRank = [];
+    for (const i of ids) {
+      const c = tail[N[i].kind] ? R + tail[N[i].kind] : rank[i];
+      (byRank[c] = byRank[c] || []).push(i);
+    }
+    const real = byRank.filter(Boolean);
+    const colOf = {};
+    real.forEach((c, ci) => c.forEach((i) => (colOf[i] = ci)));
+    const order = real.map((c) => [...c].sort((a, b) => N[a].kind.localeCompare(N[b].kind) || a.localeCompare(b)));
+
+    const isLane = (x) => x.charCodeAt(0) === 126;          // "~"
+    const links = new Map(), prev = {}, next = {}, laneCol = {};
+    const link = (u, v, e) => {
+      const key = u + ">" + v;
+      if (!links.has(key)) {
+        links.set(key, { u, v, edges: [] });
+        (next[u] = next[u] || []).push(v); (prev[v] = prev[v] || []).push(u);
+      }
+      links.get(key).edges.push(e);
+    };
+    for (const e of S.edges) {
+      const [a, b] = e;
+      if (!ids.has(a) || !ids.has(b)) continue;
+      const ca = colOf[a], cb = colOf[b];
+      let u = a;
+      for (let c = ca + 1; c < cb; c++) {
+        const lane = `~${b}@${c}`;
+        if (laneCol[lane] === undefined) { laneCol[lane] = c; order[c].push(lane); }
+        link(u, lane, e); u = lane;
+      }
+      link(u, b, e);
+    }
+
+    const pos = {};
+    const refresh = (c) => order[c].forEach((x, k) => (pos[x] = order[c].length > 1 ? k / (order[c].length - 1) : 0.5));
+    order.forEach((_, c) => refresh(c));
+    const mean = (xs) => { const v = (xs || []).filter((x) => pos[x] !== undefined); return v.length ? v.reduce((s, x) => s + pos[x], 0) / v.length : null; };
+    for (let sweep = 0; sweep < 8; sweep++) {
+      const fwd = sweep % 2 === 0;
+      const cols = fwd ? [...order.keys()].slice(1) : [...order.keys()].reverse().slice(1);
+      for (const c of cols) {
+        const key = {};
+        for (const x of order[c]) { const m = mean(fwd ? prev[x] : next[x]); key[x] = m === null ? pos[x] : m; }
+        order[c].sort((x, y) => key[x] - key[y]);
+        refresh(c);
+      }
+    }
+
+    const widths = order.map((c) => Math.min(250, Math.max(120, ...c.filter((x) => !isLane(x)).map(labelWidth))));
+    const h = (x) => (isLane(x) ? LANE_H : PITCH);
+    const colH = order.map((c) => c.reduce((s, x) => s + h(x), 0));
+    const tallest = Math.max(...colH);
+    let x = 0;
+    const xs = widths.map((w) => { const v = x; x += w + GAP; return v; });
+    const at = {};
+    order.forEach((c, ci) => {
+      let y = TOP + (tallest - colH[ci]) / 2;
+      for (const id of c) {
+        at[id] = { x: xs[ci], y, w: widths[ci], cy: y + (isLane(id) ? LANE_H / 2 : NODE_H / 2), lane: isLane(id) };
+        y += h(id);
+      }
+    });
+    const names = { component: "Components", interface: "Interfaces", branch: "Branches", lemma: "Lemmas", definition: "Definitions", axiom: "Axioms", goal: "Goals" };
+    const heads = real.map((c, ci) => ({ x: xs[ci], text: [...new Set(c.map((i) => N[i].kind))].map((k) => names[k]).join(" & ") }));
+    return { at, W: x - GAP, H: TOP + tallest + 8, heads, links: [...links.values()], laneCol };
+  }
+  let measure;
+  function labelWidth(i) {
+    measure = measure || document.createElement("canvas").getContext("2d");
+    measure.font = '11.5px "IBM Plex Sans Condensed", "Arial Narrow", sans-serif';
+    const one = measure.measureText(i).width + 36;          // the mark and the padding
+    return one <= 210 ? Math.ceil(one) : Math.ceil(measure.measureText(i).width / 1.8) + 40;
+  }
+  const touches = (edges, id) => edges.some(([a, b]) => a === id || b === id);
+  function paint(path, hot) {
+    path.classList.toggle("hot", hot);
+    if (path.dataset.head) path.setAttribute("marker-end", hot ? "url(#ahot)" : "url(#ah)");
+  }
+  function renderGraph() {
+    const g = document.getElementById("graph"), sizer = document.getElementById("graph-sizer"), scroll = document.getElementById("graph-scroll");
+    g.replaceChildren();
+    const ids = lineageOf(current);
+    const { at, W, H, heads, links, laneCol } = layout(ids);
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", W); svg.setAttribute("height", H); svg.setAttribute("aria-hidden", "true");
+    const defs = document.createElementNS(NS, "defs");
+    defs.innerHTML = '<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path class="arrowhead" d="M0,0 L8,4 L0,8 z"/></marker>' +
+      '<marker id="ahot" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path style="fill:var(--accent)" d="M0,0 L8,4 L0,8 z"/></marker>';
+    svg.append(defs);
+    const paths = [];
+    const mk = (d, edges, head) => {
+      const p = document.createElementNS(NS, "path");
+      p.setAttribute("d", d); p.setAttribute("class", "edge");
+      p._edges = edges;
+      if (head) p.dataset.head = "1";
+      paint(p, touches(edges, current));
+      paths.push(p);
+    };
+    const laneEdges = {};
+    for (const l of links) {
+      const p = at[l.u], q = at[l.v];
+      const x1 = p.x + p.w, y1 = p.cy, x2 = q.lane ? q.x : q.x - 2, y2 = q.cy;
+      const dx = Math.max(16, (x2 - x1) / 2);
+      mk(`M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}`, l.edges, !q.lane);
+      if (q.lane) (laneEdges[l.v] = laneEdges[l.v] || []).push(...l.edges);
+    }
+    for (const lane in laneCol) {
+      const q = at[lane];
+      mk(`M${q.x},${q.cy} L${q.x + q.w},${q.cy}`, laneEdges[lane] || [], false);
+    }
+    paths.sort((p, q) => p.classList.contains("hot") - q.classList.contains("hot"));
+    svg.append(...paths);
+    g.append(svg);
+    for (const h of heads) g.append(el("div", { class: "colh", style: `left:${h.x}px`, text: h.text }));
+    for (const i of ids) {
+      const n = N[i], p = at[i];
+      const dash = i.indexOf("-");
+      g.append(el("button", {
+        class: "node" + (i === current ? " sel" : "") + (n.staged ? " staged" : ""),
+        style: `left:${p.x}px;top:${p.y}px;width:${p.w}px`,
+        title: `${i}${word(n) ? " · " + word(n) : ""}${n.text ? "\n" + headline(n.text, 200) : ""}`,
+        "aria-label": `${i}${word(n) ? ", " + word(n) : ""}`,
+        onclick: () => select(i),
+        onmouseenter: () => hover(i, true), onmouseleave: () => hover(i, false),
+      }, mark(n), el("span", { class: "lbl" }, el("span", { class: "pfx", text: i.slice(0, dash + 1) }), i.slice(dash + 1))));
+    }
+    g.style.width = W + "px"; g.style.height = H + "px";
+    const k = fit ? Math.min(1, (scroll.clientWidth - 16) / W) : 1;
+    g.style.transform = k < 1 ? `scale(${k})` : "";
+    sizer.style.width = Math.ceil(W * k) + 8 + "px"; sizer.style.height = Math.ceil(H * k) + 12 + "px";
+    document.getElementById("graph-title").textContent = `Lineage of ${current} · ${ids.size} nodes`;
+    const sel = at[current];
+    if (!fit && sel) scroll.scrollTo({ left: Math.max(0, sel.x - 60), top: Math.max(0, sel.y * k - 120) });
+  }
+  function hover(id, on) {
+    for (const p of document.querySelectorAll("#graph path.edge")) {
+      if (touches(p._edges, id)) paint(p, on || touches(p._edges, current));
+    }
+  }
+
+  // ---------- inspector ----------
+  const ID_RE = /\b(?:AXM|DEF|LMA|BRN|CMP|IFC|GOL)-[A-Za-z0-9_-]*[A-Za-z0-9]/g;
+  function linked(text) {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    for (const m of (text || "").matchAll(ID_RE)) {
+      frag.append(text.slice(last, m.index));
+      frag.append(N[m[0]] ? refBtn(m[0]) : m[0]);
+      last = m.index + m[0].length;
+    }
+    frag.append((text || "").slice(last));
+    return frag;
+  }
+  const refBtn = (id) => el("button", { class: "ref", onclick: () => select(id), text: id });
+  const refItem = (id) => N[id] ? el("span", { class: "item" }, mark(N[id]), refBtn(id)) : el("span", { class: "plain-id", text: id });
+  const section = (title, ...kids) => el("section", {}, el("h3", { text: title }), ...kids);
+  const prose = (t, muted) => el("p", { class: "prose" + (muted ? " muted" : "") }, linked(t));
+  const refs = (ids) => el("div", { class: "refs" }, ids.map(refItem));
+  const plainIds = (ids) => el("div", { class: "refs" }, ids.map((i) => el("span", { class: "plain-id", text: i })));
+
+  function stateLine(n) {
+    if (!stateOf(n)) return null;
+    const count = isClaim(n) && n.count ? ` · ${n.count} independent passes` : "";
+    return el("div", {}, el("span", { class: "statebadge" }, mark(n), word(n) + count),
+      n.staged ? el("span", { class: "why", text: " · staged: proposed, not yet declared at HEAD" }) : null);
+  }
+  function proofTree(id, depth) {
+    const ul = el("ul", { class: "tree" + (depth === 0 ? " root" : "") });
+    const prem = (N[id].premises || []);
+    for (const p of prem) {
+      const n = N[p];
+      if (!n) { ul.append(el("li", {}, el("span", { class: "plain-id", text: `${p} (not in the graph)` }))); continue; }
+      const det = el("details", {});
+      const body = el("div", { class: "body" });
+      let filled = false;
+      det.addEventListener("toggle", () => {
+        if (!det.open || filled) return;
+        filled = true;
+        body.append(prose(n.kind === "definition" ? `${n.term}: ${n.text}` : n.text));
+        if (n.why && n.state !== "proven") body.append(el("div", { class: "why", text: n.why }));
+        if ((n.premises || []).length) body.append(proofTree(p, depth + 1));
+      });
+      det.append(el("summary", {},
+        el("span", { class: "tw", text: "▶" }), mark(n),
+        el("span", { class: "sline" }, refBtn(p), el("span", { class: "kindtag", text: KIND[n.kind].word.toLowerCase() + (word(n) && isClaim(n) ? " · " + word(n).toLowerCase() : "") }),
+          el("span", { class: "hd", text: headline(n.kind === "definition" ? n.term : n.text, 90) }))), body);
+      ul.append(el("li", {}, det));
+    }
+    return ul;
+  }
+  function groupedReach(set) {
+    const by = {};
+    for (const i of set) (by[N[i].kind] = by[N[i].kind] || []).push(i);
+    const rows = [["branch", "Branches"], ["lemma", "Lemmas"], ["definition", "Definitions"], ["axiom", "Axioms"], ["goal", "Goals"], ["component", "Components"], ["interface", "Interfaces"]]
+      .filter(([k]) => by[k]).map(([k, t]) => el("div", { class: "reach-row" }, el("span", { text: `${t} ${by[k].length}` }), refs(by[k].sort())));
+    return rows.length ? el("div", { class: "reach" }, rows) : el("div", { class: "empty", text: "Nothing." });
+  }
+  function renderInspector() {
+    const n = N[current], box = document.getElementById("inspector");
+    const kids = [el("div", { class: "eyebrow", text: `${KIND[n.kind].word} · ${KIND[n.kind].file}` }), el("div", { class: "insp-id", text: n.id }), stateLine(n)];
+    if (isClaim(n) && n.why && n.state !== "proven") kids.push(el("p", { class: "why", text: n.why }));
+    const own = S.issues.filter((i) => i.subject === n.id);
+    if (own.length) kids.push(section(`Issues · ${own.length}`, el("ul", { class: "issue-list" },
+      own.map((i) => el("li", {}, el("span", { class: "code", text: `${i.code} · ${i.source}` }), el("span", {}, linked(i.message)))))));
+    const parts = [];
+    if (isClaim(n)) {
+      parts.push(section("Claim", prose(n.text)));
+      if (n.kind === "branch" && n.subject) parts.push(section("Governs", refs([n.subject])));
+      parts.push(section(`Proof tree · ${n.premises.length} premise${n.premises.length === 1 ? "" : "s"}`, proofTree(n.id, 0)));
+      if (n.rule) parts.push(section("Derivation", prose(n.rule, true)));
+      const users = inc[n.id].filter((i) => isClaim(N[i]));
+      if (users.length) parts.push(section("Cited by", refs(users.sort())));
+      if (n.cites && n.cites.length) parts.push(section("Cites the measures", plainIds(n.cites)));
+      if (n.gated_by) parts.push(section("Release gate", plainIds(n.gated_by)));
+    } else if (isSubject(n)) {
+      parts.push(section(n.kind === "component" ? "Purpose" : "Hands over", prose(n.text)));
+      if (n.coverage) parts.push(el("p", { class: "why", text: COVER_WORDS[n.coverage] || "" }));
+      if (n.kind === "interface") parts.push(section("Between", refs([n.producer, n.consumer].filter(Boolean))));
+      if (n.capability) parts.push(section("Testable capability", prose(n.capability, true)));
+      if (n.goal) parts.push(section("Serves", refs([n.goal])));
+      const branches = out[n.id].filter((b) => N[b].kind === "branch");
+      if (branches.length) parts.push(section(`Governed by · ${branches.length}`, el("div", { class: "reach" }, branches.sort().map((b) =>
+        el("div", {}, el("span", { class: "item refs" }, mark(N[b]), refBtn(b)), el("div", { class: "why", text: headline(N[b].text, 160) }))))));
+      parts.push(section("Theory it rests on", groupedReach(new Set([...up(n.id)].filter((i) => N[i].kind !== "branch")))));
+      if (n.measured_by && n.measured_by.length) parts.push(section("Measured by", plainIds(n.measured_by)));
+      if (n.code && n.code.length) parts.push(section(`Code · ${n.code.length} path${n.code.length === 1 ? "" : "s"}`, el("ul", { class: "code-list" }, n.code.map((c) => el("li", { text: c })))));
+    } else if (n.kind === "axiom") {
+      parts.push(section("Statement", prose(n.text)));
+      if (n.rationale) parts.push(section("Rationale", prose(n.rationale, true)));
+      parts.push(el("dl", { class: "kv" }, el("dt", { text: "Domain" }), el("dd", { text: n.domain || "—" })));
+      if (n.goals && n.goals.length) parts.push(section("States a requirement of", refs(n.goals)));
+      parts.push(section("What rests on it", groupedReach(down(n.id))));
+    } else if (n.kind === "definition") {
+      parts.push(section(n.term || "Meaning", prose(n.text)));
+      parts.push(section("What rests on it", groupedReach(down(n.id))));
+    } else if (n.kind === "goal") {
+      parts.push(section("Outcome", prose(n.text)));
+      if (n.measure) parts.push(section("Measured by", plainIds([n.measure])));
+      parts.push(section("Requirements stated as axioms", inc[n.id].length ? refs(inc[n.id].sort())
+        : el("div", { class: "empty", text: "No axiom names this goal, so no theory traces to it." })));
+      const served = Object.values(N).filter((c) => c.kind === "component" && c.goal === n.id).map((c) => c.id);
+      parts.push(section("Components that name it", served.length ? refs(served) : el("div", { class: "empty", text: "No component names this goal." })));
+    }
+    box.replaceChildren(el("div", { class: "insp" }, kids, parts));
+    box.scrollTop = 0;
+  }
+
+  // ---------- selection ----------
+  let current = null;
+  const history = [];
+  function select(id, fromBack) {
+    if (!N[id] || id === current) return;
+    if (current && !fromBack) history.push(current);
+    current = id;
+    document.getElementById("back").disabled = !history.length;
+    try { window.history.replaceState(null, "", "#" + id); } catch (e) { /* the frame may refuse it */ }
+    for (const r of document.querySelectorAll(".row")) r.setAttribute("aria-current", r.dataset.id === id ? "true" : "false");
+    renderGraph();
+    renderInspector();
+  }
+  document.getElementById("back").addEventListener("click", () => { if (history.length) select(history.pop(), true); });
+  document.getElementById("fit").addEventListener("click", (e) => { fit = !fit; e.currentTarget.setAttribute("aria-pressed", String(fit)); renderGraph(); });
+  for (const t of document.querySelectorAll(".tab")) t.addEventListener("click", () => { tab = t.dataset.tab; filter = null; renderIndex(); });
+  document.getElementById("search").addEventListener("input", renderIndex);
+
+  titleBlock();
+  summary();
+  const fromHash = decodeURIComponent((location.hash || "").slice(1));
+  const subjects = Object.values(N).filter(isSubject);
+  const first = (S.focus && N[S.focus] && S.focus) || (N[fromHash] && fromHash)
+    || (subjects.find((n) => n.coverage === "governed") || subjects[0] || Object.values(N).find(isClaim) || Object.values(N)[0]).id;
+  if (isClaim(N[first])) tab = "claims";
+  else if (!isSubject(N[first])) tab = "foundations";
+  renderIndex();
+  select(first);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measure = null; renderGraph(); });
+})();
+</script>

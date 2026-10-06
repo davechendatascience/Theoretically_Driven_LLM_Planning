@@ -308,9 +308,13 @@ def _git_show(root: Path, ref: str, name: str = DECLARATION_FILE) -> str | None:
     return out.stdout if out.returncode == 0 else None
 
 
-def load(root: Path) -> Declarations:
-    """Load declarations from git HEAD; report working-tree drift as pending."""
-    committed = _git_show(root, "HEAD")
+def load(root: Path, revision: str = "HEAD") -> Declarations:
+    """Load declarations from git HEAD; report working-tree drift as pending.
+
+    `revision` pins the commit for a reader that must take every declaration from one commit
+    while HEAD may move under it (graph-snapshot passes the sha it resolved); the servers read HEAD.
+    """
+    committed = _git_show(root, revision)
     worktree_path = root / DECLARATION_FILE
     worktree = worktree_path.read_text(encoding="utf-8") if worktree_path.exists() else None
 
@@ -324,7 +328,7 @@ def load(root: Path) -> Declarations:
             ))
         return decl
 
-    goals_committed = _git_show(root, "HEAD", GOALS_FILE)
+    goals_committed = _git_show(root, revision, GOALS_FILE)
     goals_path = root / GOALS_FILE
     goals_worktree = goals_path.read_text(encoding="utf-8") if goals_path.exists() else None
 
@@ -332,7 +336,7 @@ def load(root: Path) -> Declarations:
     decl.source = "git-HEAD"
     decl.raw_present = True
     if goals_committed is not None:
-        decl.goals_blob = (_git_rev(root, f"HEAD:{GOALS_FILE}") or "")[:12]
+        decl.goals_blob = (_git_rev(root, f"{revision}:{GOALS_FILE}") or "")[:12]
     elif goals_worktree is not None:
         decl.issues.append(Issue(
             "UNCOMMITTED", GOALS_FILE,

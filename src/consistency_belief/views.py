@@ -36,16 +36,16 @@ class Context:
     staged_issues: list[str] = field(default_factory=list)
 
     @classmethod
-    def build(cls, root: Path, staged_nodes: list[Any] | None = None) -> Context:
+    def build(cls, root: Path, staged_nodes: list[Any] | None = None, revision: str = "HEAD") -> Context:
         store = Store(root)
-        decl = load_declarations(root)
+        decl = load_declarations(root, revision)
         dag = ProofDAG.from_declarations(decl)
 
         staged = [staged_node(p) for p in store.staged_proposals() if p["id"] not in dag.nodes]
         staged_issues = _add_in_dependency_order(dag, staged + list(staged_nodes or []))
 
         trials = store.effective_trials()
-        slices = compute_consistency(dag, trials, legacy=HistoricalBuilds(root, store).fingerprints)
+        slices = compute_consistency(dag, trials, legacy=HistoricalBuilds(root, store, revision).fingerprints)
         return cls(root=root, store=store, decl=decl, dag=dag, slices=slices, staged_issues=staged_issues)
 
 
@@ -54,13 +54,13 @@ class HistoricalBuilds:
     recorded fingerprints: consistency.yaml as the last commit before that moment held it, and
     the proposals staged by then. One build per distinct (revision, staged set), cached."""
 
-    def __init__(self, root: Path, store: Store) -> None:
-        self.root, self.store = root, store
+    def __init__(self, root: Path, store: Store, revision: str = "HEAD") -> None:
+        self.root, self.store, self.revision = root, store, revision
         self._builds: dict[tuple[str, str], ProofDAG] = {}
 
     def _revision(self, when: str) -> str:
         out = subprocess.run(
-            ["git", "log", "-1", "--format=%H", f"--before={when}", "HEAD", "--", DECLARATION_FILE],
+            ["git", "log", "-1", "--format=%H", f"--before={when}", self.revision, "--", DECLARATION_FILE],
             cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace",
             stdin=subprocess.DEVNULL, timeout=60)
         return out.stdout.strip() if out.returncode == 0 else ""

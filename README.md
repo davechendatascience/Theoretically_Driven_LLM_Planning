@@ -1,16 +1,18 @@
 # Theoretically Driven LLM Planning
 
-Three MCP servers that hold an LLM agent's engineering work to account.
+Four MCP servers that hold an LLM agent's engineering work to account, and show it.
 
 | Server | Asks | Grounded in | Ledger |
 |---|---|---|---|
 | **consistency-belief** | Do the reasons for a design **follow**? | declared axioms, checked by falsification probes | `.consistency/` |
 | **component-belief** | Does the built thing **work**? | declared tests, run by the server itself | `.belief/` |
 | **stamp-monitor** | Is the evidence still **current and intact**, and was the loop followed? | both ledgers, their stamps, and git | reads only |
+| **graph-snapshot** | What does the **whole design** look like at this revision? | the three declaration files at one commit, and the proof states | reads only; writes one page |
 
 The first two are paired: a design branch names the component it governs, and cites the contract
 that measures it — so neither a proof about nothing nor code nobody justified can hide. The third
-watches the joins between them and writes nothing.
+watches the joins between them and writes nothing. The fourth draws the joined graph as one page a
+person can read.
 
 ```
      consistency-belief (deductive)                  component-belief (empirical)
@@ -28,6 +30,7 @@ watches the joins between them and writes nothing.
 [consistency-belief](#consistency-belief-does-the-design-follow) ·
 [component-belief](#component-belief-does-it-work) ·
 [stamp-monitor](#stamp-monitor-is-the-evidence-still-current) ·
+[graph-snapshot](#graph-snapshot-what-does-the-whole-design-look-like) ·
 [How the ledgers join](#how-the-ledgers-join) · [Systems-engineering view](#the-systems-engineering-view) ·
 [Reference](#reference) · [Changelog](#changelog)
 
@@ -35,7 +38,7 @@ watches the joins between them and writes nothing.
 
 ## Quick start
 
-The three servers, the two workflow skills and the `consistency-verifier` subagent ship as one
+The four servers, the two workflow skills and the `consistency-verifier` subagent ship as one
 Claude Code plugin, `tdlp`, pinned to a release tag. Add this repository as a marketplace once per
 machine, then enable the plugin in each project that uses it:
 
@@ -50,7 +53,7 @@ add the marketplace once and run the same install; a project that lists the plug
 does not fetch it on its own.
 
 * **Which project.** Every server reads the project Claude Code reports (`${CLAUDE_PROJECT_DIR}`),
-  so all three describe the same repository.
+  so all four describe the same repository.
 * **Which version.** The servers install with `uvx` from the tag `tdlp--v<version>`, so edits here
   reach a project only when a release is tagged and the plugin updated
   (`claude plugin update tdlp@davechendatascience-marketplace`).
@@ -155,14 +158,14 @@ The marketplace was named `tdlp` until `956a80e`; it is now `davechendatascience
    `mcp__plugin_tdlp_component-belief__run_test`, and likewise for the other two servers.
 6. Check each `run:` line's interpreter. A plain `python` now resolves to the project's `.venv`
    when it has one; a conda environment needs naming (`conda run -n env python ...`).
-7. Restart the session (or `/reload-plugins`). `claude mcp list` should show three
+7. Restart the session (or `/reload-plugins`). `claude mcp list` should show four
    `plugin:tdlp:*` servers as connected, and `status(view="belief")` your own contracts.
 
 Nothing in the ledgers moves. `belief.yaml`, `consistency.yaml`, `.belief/` and `.consistency/` are
 read as they are, and evidence stays current, because staleness is judged by content, not by which
 server recorded it.
 
-To work on the harness itself, install it editable and register the servers by hand, all three at
+To work on the harness itself, install it editable and register the servers by hand, all four at
 the **same** project root: the joins exist only when the ledgers describe one repository.
 
 ```bash
@@ -186,13 +189,18 @@ pip install -e .          # or: uv sync
       "command": "uv",
       "args": ["--directory", "/path/to/Theoretically_Driven_LLM_Planning", "run", "stamp-monitor-mcp"],
       "env": {"STAMP_MONITOR_ROOT": "/path/to/your/project"}
+    },
+    "graph-snapshot": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/Theoretically_Driven_LLM_Planning", "run", "graph-snapshot-mcp"],
+      "env": {"GRAPH_SNAPSHOT_ROOT": "/path/to/your/project"}
     }
   }
 }
 ```
 
 Or run them directly: `PYTHONPATH=src python -m consistency_belief.server` (likewise
-`component_belief.server`, `stamp_monitor.server`).
+`component_belief.server`, `stamp_monitor.server`, `graph_snapshot.server`).
 
 Then declare your system in two committed files and work the loops:
 
@@ -401,6 +409,50 @@ The same reports run from a shell for git hooks, CI, and Claude Code hooks:
 
 ---
 
+## graph-snapshot: what does the whole design look like?
+
+Design in [`docs/graph_snapshot_mcp_design.md`](docs/graph_snapshot_mcp_design.md); declared as
+`DEF-snapshot` and `BRN-snapshot-shows-one-revision`.
+
+The other three answer one question each, in text. None of them shows the graph a person reasons
+about: every component, the theory it rests on, each claim's proof tree, and the gaps between
+`consistency.yaml`, `belief.yaml` and `goals.yaml`. One tool draws it:
+
+| Tool | Does |
+|---|---|
+| `snapshot(focus)` | resolves HEAD to one commit, reads the declarations committed there and the proof state consistency-belief computes for each lemma and branch, writes `.graph-snapshot/snapshot.html`, and returns the state counts, the issues and the gaps |
+
+* **A snapshot, not a verdict.** It names its revision and the time it was taken, and it does not
+  update. Every proof state on it is the one consistency-belief computes for that commit; it adds
+  only the edges between the files and the gaps along them. It reads no evidence: contracts appear
+  by name, and whether their evidence holds is component-belief's to say.
+* **One revision.** It resolves HEAD once and reads every declaration file at that sha, so a commit
+  landing mid-read cannot mix two revisions into one page. Uncommitted edits are named, not shown.
+* **The page.** An index (components, claims worst first, foundations, issues), the selected
+  node's lineage drawn left to right as "rests on", and an inspector with the claim, why it is in
+  its state, and its proof tree down to axioms and definitions. The same file opens in a browser
+  and publishes as an Artifact; publishing is the person's call, since the page carries their
+  design.
+* **Issues and gaps.** The issues the loaders and the build report, under their own codes, and the
+  gaps only the join shows: an axiom naming no goal, a goal no axiom names, code with no design, an
+  interface or goal no branch governs, ground nothing rests on.
+* **Writes nothing else.** Its directory carries its own `.gitignore`, so git never lists the page,
+  and where a component claims or a test names that directory it writes nothing at all, because
+  rewriting a file evidence rests on would stale that evidence.
+
+```text
+graph snapshot: embodied_ai @ a50ed9e (2026-10-06) -- consistency.yaml, belief.yaml, goals.yaml as committed there
+uncommitted edits, not shown: consistency.yaml
+branches 146: 1 refuted, 8 doubted, 83 stale, 2 obligation, 52 proven · lemmas 22: 2 refuted, 9 doubted, 4 stale, 7 proven
+components 24: 15 undeclared design, 9 governed · interfaces 12: 12 no design claim · 82 axioms · 20 definitions · 4 goals
+issues: 1 PENDING, 50 MISSING_EVIDENCE, 1 UNKNOWN_EVIDENCE, 3 UNLISTED_SUBJECT, 82 AXIOM_WITHOUT_GOAL, ...
+page: .../embodied_ai/.graph-snapshot/snapshot.html
+```
+
+The same snapshot runs from a shell: `graph-snapshot [--focus ID]`.
+
+---
+
 ## How the ledgers join
 
 `consistency.yaml` opens with the components its designs govern, and each branch names one of them
@@ -484,6 +536,7 @@ docs/
   component_belief_mcp_design_rules.md     11 design rules for empirical belief
   component_belief_mcp_design.md           empirical model and architecture
   stamp_monitor_mcp_design.md              stamps, freshness, and the read-only monitor
+  graph_snapshot_mcp_design.md             the design graph at one revision, drawn as one page
 src/
   consistency_belief/                deductive server (8 tools)
     declarations.py                  git-HEAD loader, validation, the component join
@@ -498,11 +551,15 @@ src/
     model.py                         belief slices; gate and rate contracts
     staleness.py                     content stamps and freshness (shared with both other servers)
     runner.py / readlog.py           test execution in the project's environment, artifact capture, the read hook
-    project.py                       which project root all three servers read
+    project.py                       which project root all four servers read
     diagnose.py / planning.py        bottleneck ranking; round test selection
     decide.py                        policy evaluation and the human approval gate
     stamps.py / views.py / render.py the artifacts view; status views
     store.py                         append-only JSONL ledger in .belief/
+  graph_snapshot/                    the design graph at one revision (1 tool)
+    snapshot.py                      the join, the revision it pins, the gaps
+    page.py / page.html              the one self-contained page, and where it may be written
+    server.py / cli.py               MCP server; the same snapshot from a shell
   stamp_monitor/                     read-only monitor (3 tools)
     impact.py                        a change traced through both ledgers
     audit.py                         stamp, artifact and ledger integrity
@@ -513,7 +570,7 @@ tests/                               the suites belief.yaml declares as tests
 .claude-plugin/marketplace.json      this repository as the `davechendatascience-marketplace`, listing `tdlp`
 plugin/                              the `tdlp` Claude Code plugin
   .claude-plugin/plugin.json         name and version (one version: plugin, marketplace, package, tag)
-  .mcp.json                          the three servers, installed with uvx from tag tdlp--v<version>
+  .mcp.json                          the four servers, installed with uvx from tag tdlp--v<version>
   agents/consistency-verifier.md     verifier subagent: consistency-belief tools only, no file access
   skills/component-belief/SKILL.md   the empirical loop, four rules
   skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate
@@ -547,10 +604,11 @@ The suites assert the invariants above, not the implementation:
 11. Evidence is bound to the content it measured: discarded uncommitted edits, a weakened test, or an edited stamp make it stale; a rewritten history with the same bytes does not.
 12. The monitor writes nothing, and reports a damaged ledger line, a changed artifact, and an agent approving its own adoption.
 13. An import rests on a local artifact the server copied and hashed, from a test its contract lists; a fabricated import cannot move a gate or reach an adoption.
-14. As a plugin, all three servers read the project Claude Code reports, install from their own version's tag, and never lend a test the plugin's own interpreter.
+14. As a plugin, every server reads the project Claude Code reports, installs from its own version's tag, and never lends a test the plugin's own interpreter.
 15. An agent-trailered commit to the goal set is refused and one the human types passes; an adoption under the goals policy needs no approver until the agent touches the goal set.
 16. A declared input git ignores is judged by its content on disk: changed or missing, its evidence is stale; the same bytes again, current.
 17. A measure promoted from `belief.yaml` into `goals.yaml` keeps its evidence, while both files declare it and after; a draft `goals.yaml` is checked without taking effect.
+18. A snapshot shows the declarations of the one revision it names and the proof states the consistency server computes over them, lists the join's gaps, reads no evidence, and writes nothing but its page, which git does not see and no declaration names.
 
 ---
 

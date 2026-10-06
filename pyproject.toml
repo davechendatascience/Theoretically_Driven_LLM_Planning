@@ -20,10 +20,15 @@ component-belief-mcp = "component_belief.server:main"
 consistency-belief-mcp = "consistency_belief.server:main"
 stamp-monitor-mcp = "stamp_monitor.server:main"
 stamp-monitor = "stamp_monitor.cli:main"
+graph-snapshot-mcp = "graph_snapshot.server:main"
+graph-snapshot = "graph_snapshot.cli:main"
 tdlp-guard = "component_belief.goals:guard_main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+graph_snapshot = ["page.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

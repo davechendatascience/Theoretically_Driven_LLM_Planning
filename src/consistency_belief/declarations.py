@@ -234,9 +234,10 @@ def git_head(root: Path) -> str:
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
-def load(root: Path) -> Declarations:
-    """Load declarations from git HEAD; report working-tree drift as pending."""
-    committed = _git_show(root, "HEAD")
+def load(root: Path, revision: str = "HEAD") -> Declarations:
+    """Load declarations from git HEAD; report working-tree drift as pending. `revision` pins
+    the commit for a reader that must take every declaration from one commit (graph-snapshot)."""
+    committed = _git_show(root, revision)
     worktree_path = root / DECLARATION_FILE
     worktree = worktree_path.read_text(encoding="utf-8") if worktree_path.exists() else None
 
@@ -259,7 +260,7 @@ def load(root: Path) -> Declarations:
             "PENDING", DECLARATION_FILE,
             "working tree differs from HEAD; the uncommitted edits are not in effect",
         ))
-    decl.components, decl.boundaries, decl.components_source = import_subjects(root)
+    decl.components, decl.boundaries, decl.components_source = import_subjects(root, revision)
     decl.issues.extend(validate_links(decl))
     decl.issues.extend(check_scored_definitions(decl))
     return decl
@@ -270,7 +271,8 @@ def load_components(root: Path) -> tuple[dict[str, ComponentRef], str]:
     return components, source
 
 
-def import_subjects(root: Path) -> tuple[dict[str, ComponentRef], dict[str, BoundaryRef], str]:
+def import_subjects(root: Path, revision: str = "HEAD",
+                    ) -> tuple[dict[str, ComponentRef], dict[str, BoundaryRef], str]:
     """Read what component-belief declares in the same repository, at git HEAD: the components,
     and the interfaces and goals a design may govern beside them.
 
@@ -283,7 +285,7 @@ def import_subjects(root: Path) -> tuple[dict[str, ComponentRef], dict[str, Boun
     except ImportError:                                     # component-belief not installed
         return {}, {}, "unavailable"
 
-    decl = components.load(root)
+    decl = components.load(root, revision)
     if decl.source == "none":
         return {}, {}, "none"
     boundaries: dict[str, BoundaryRef] = {}

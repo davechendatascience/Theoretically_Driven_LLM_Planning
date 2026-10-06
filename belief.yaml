@@ -265,6 +265,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
     remediation: graph_snapshot.snapshot (the join, the revision it pins and the gaps); graph_snapshot.page; the one tool in graph_snapshot/server.py
     goal: GOL-sound-designs
+    code:
+      - src/graph_snapshot/
 
 interfaces:
   - id: IFC-declarations__model
