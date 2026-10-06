@@ -14,6 +14,8 @@ from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarat
                            load as load_declarations)
 from .graph import ProofDAG, ProofNode
 from .ids import content_hash
+from .measurements import NOT_REVIEWED, UNPINNED, CitedMeasurement, cited_measurements, uncited_contracts
+from .measurements import adopted as adopted_pins
 from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
 from .probes import probe_text
@@ -331,6 +333,8 @@ def view_coverage(ctx: Context) -> str:
     slices = {s.target_id: s for s in ctx.slices}
     beliefs = contract_beliefs(ctx.root)
     cited = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9-]*\b")
+    measured = cited_measurements(decl)
+    review = {(m.branch, m.contract): m for m in measured}
     designs: dict[str, list[str]] = {}
     removed: list[str] = []          # subject was a component id; belief.yaml no longer declares it
     unattached: list[str] = []       # subject is prose: the design was never bound to a component
@@ -354,7 +358,10 @@ def view_coverage(ctx: Context) -> str:
         refs = sorted(set(cited.findall(node.derivation_rule or "")))
         if not refs:
             return head + "  · evidence: none cited"
-        return head + "  · " + "; ".join(f"{r} [{beliefs.get(r, 'not declared')}]" for r in refs)
+        def state(r: str) -> str:
+            m = review.get((nid, r))
+            return "" if m is None else f" ({m.state})"
+        return head + "  · " + "; ".join(f"{r} [{beliefs.get(r, 'not declared')}]{state(r)}" for r in refs)
 
     def declared_of(cid: str) -> list[str]:
         return [n for n in designs.get(cid, []) if not ctx.dag.nodes[n].staged]
@@ -424,6 +431,7 @@ def view_coverage(ctx: Context) -> str:
                             "UNKNOWN_DEFINITION", "THRESHOLD_DRIFT")]
     if issues:
         lines += [f"link issues ({len(issues)}):", bullet(i.render() for i in issues), ""]
+    lines += _measurement_lines(measured, uncited_contracts(decl))
 
     nxt = ("repoint or prune the designs whose component is gone" if removed else
            "declare or prune the undeclared designs" if undeclared else
@@ -431,6 +439,28 @@ def view_coverage(ctx: Context) -> str:
            "every implemented component has a declared design")
     return envelope("\n".join(lines).rstrip(),
                     f"basis: consistency.yaml@{decl.source} × belief.yaml@{decl.components_source} · next: {nxt}")
+
+
+def _measurement_lines(measured: list[CitedMeasurement], uncited: list[str]) -> list[str]:
+    """Cited measurements to re-read, and contracts no design cites (DEF-cited-measurement).
+
+    A pinned one whose branch was restated since is always listed; an unpinned one only once the
+    project pins any, so a project that has not taken pins up is not handed a list of every
+    branch. A contract no branch cites is listed either way: it is measured, and no design says
+    why that matters -- which may be right, for a plain regression measure."""
+    out: list[str] = []
+    stale = [m for m in measured if m.state == NOT_REVIEWED]
+    unpinned = [m for m in measured if m.state == UNPINNED] if adopted_pins(measured) else []
+    if stale or unpinned:
+        out.append(f"cited measurements to re-read against their claims ({len(stale) + len(unpinned)}):")
+        for m in stale:
+            out.append(f"  {m.branch} cites {m.contract}{'@' + m.pin if m.pin else ''}: {m.why} -- {m.fix}")
+        for m in unpinned:
+            out.append(f"  {m.branch} cites {m.contract}, never pinned -- {m.fix}")
+        out.append("")
+    if uncited:
+        out += [f"measured, cited by no design ({len(uncited)}): " + ", ".join(uncited), ""]
+    return out
 
 
 def _boundary_lines(decl: Declarations, designs: dict[str, list[str]], line: Any) -> list[str]:

@@ -546,8 +546,25 @@ def audit_change(
         lines.append("A change only to the derivation rule -- a CTR- citation, the argument's "
                      "wording -- restates nothing and sets no trial aside.")
     lines += _code_links_unpinned(root, target_id, blast, restates)
+    lines += _measurements_unreviewed(ctx, target_id, blast, restates)
 
     return envelope("\n".join(lines), basis_line(ctx.slices))
+
+
+def _measurements_unreviewed(ctx: Any, target_id: str, blast: list[str], restates: bool | None) -> list[str]:
+    """The contracts the restated branches cite (DEF-cited-measurement): a restatement leaves
+    each unreviewed until its acceptance rule and tests are read against the new claim."""
+    from .measurements import cited_measurements
+
+    reached = [m for m in cited_measurements(ctx.decl) if m.branch in {target_id, *blast}]
+    if not reached:
+        return []
+    if restates is False:
+        return [f"Cited measurements of it and its dependents ({len(reached)}): unaffected, their pins hold."]
+    when = "are left unreviewed" if restates else "are left unreviewed if its statement or premises change"
+    return [f"Cited measurements that {when} ({len(reached)}) -- re-read each contract's rule and "
+            "tests against the restated claim, then write the new pin:",
+            bullet(f"{m.branch} cites {m.contract}" for m in reached)]
 
 
 def _code_links_unpinned(root: Path, target_id: str, blast: list[str], restates: bool | None) -> list[str]:

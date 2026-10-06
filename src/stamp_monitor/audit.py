@@ -98,7 +98,39 @@ def audit(root: Path) -> list[Finding]:
             pass
     from .links import findings as link_findings
     findings.extend(link_findings(root))
+    findings.extend(_cited_measurements(root))
     return findings
+
+
+def _cited_measurements(root: Path) -> list[Finding]:
+    """A pinned cited measurement whose claim was restated since warns; unpinned ones (once the
+    project pins any) and contracts no design cites are counted as information."""
+    if not (root / "consistency.yaml").exists():
+        return []
+    try:
+        from consistency_belief.declarations import load as load_design
+        from consistency_belief.measurements import (NOT_REVIEWED, UNPINNED, adopted,
+                                                     cited_measurements, uncited_contracts)
+    except ImportError:
+        return []
+    decl = load_design(root)
+    if decl.source == "none":
+        return []
+    found = cited_measurements(decl)
+    out = [Finding("MEASUREMENT_NOT_REVIEWED", WARN, f"{m.branch} -> {m.contract}", f"{m.why}; {m.fix}")
+           for m in found if m.state == NOT_REVIEWED and (m.pin or m.expected is None)]
+    unpinned = [m for m in found if m.state == UNPINNED]
+    if unpinned and adopted(found):
+        out.append(Finding("MEASUREMENT_UNPINNED", INFO, f"{len(unpinned)} cited measurement(s)",
+                           "never read against their claims and pinned: "
+                           + ", ".join(f"{m.branch} -> {m.contract}" for m in unpinned[:4])
+                           + (" ..." if len(unpinned) > 4 else "")))
+    uncited = uncited_contracts(decl)
+    if uncited:
+        out.append(Finding("UNCITED_CONTRACT", INFO, f"{len(uncited)} contract(s)",
+                           "measured, and cited by no branch's derivation rule: "
+                           + ", ".join(uncited[:6]) + (" ..." if len(uncited) > 6 else "")))
+    return out
 
 
 def _ids_and_citations(prefix: str, records: list[dict], decisions: list[dict], cites: str,

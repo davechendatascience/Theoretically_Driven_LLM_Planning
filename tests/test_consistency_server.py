@@ -719,3 +719,128 @@ def test_decide_refuses_a_policy_it_does_not_declare(committed_repo: Path):
     out = decide("BRN-gpu-throttling", policy_id="POL-energy-gaet")
     assert "unknown policy 'POL-energy-gaet'" in out and "POL-energy-gate" in out
     assert not (committed_repo / ".consistency" / "decisions.jsonl").exists()
+
+
+
+MEASURED_DESIGN = """
+axioms:
+  - {id: AXM-reach, domain: manipulation, statement: A grasp the arm cannot reach is not a grasp., rationale: Kinematics.}
+definitions:
+  - {id: DEF-reachable, term: Reachable, meaning: IK returns a solution.}
+branches:
+  - id: BRN-grasp-reach
+    subject: CMP-grasp
+    claim_type: contract
+    statement: The planner only proposes reachable poses.
+    premises: [AXM-reach, DEF-reachable]
+    derivation_rule: "By DEF-reachable. evidence: CTR-grasp-reachable{pin}"
+    sufficiency: {n_min: 1, min_consensus: 0.8}
+"""
+
+SECOND_CONTRACT = """  - id: CTR-grasp-fast
+    subject: CMP-grasp
+    claim_type: capability
+    metrics: [{id: ik_success, unit: bool}]
+    acceptance: {rule: "ik_success == true", target_rate: 0.8}
+    evaluable_by: [TST-grasp-ik]
+
+tests:"""
+
+
+class TestCitedMeasurements:
+    """A branch's cited contract was read against the claim as it then stood; restate the claim,
+    or anything it rests on, and the measurement reads unreviewed until it is read again."""
+
+    @pytest.fixture
+    def measured(self, repo, monkeypatch):
+        (repo / "consistency.yaml").write_text(MEASURED_DESIGN.replace("{pin}", ""), encoding="utf-8")
+        belief = (repo / "belief.yaml").read_text(encoding="utf-8").replace("\ntests:", "\n" + SECOND_CONTRACT, 1)
+        (repo / "belief.yaml").write_text(belief, encoding="utf-8")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "a branch citing one of two contracts")
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(repo))
+        return repo
+
+    @staticmethod
+    def only(repo):
+        from consistency_belief.declarations import load
+        from consistency_belief.measurements import cited_measurements
+
+        [m] = cited_measurements(load(repo))
+        return m
+
+    def pin(self, repo, pin, design=MEASURED_DESIGN):
+        (repo / "consistency.yaml").write_text(design.replace("{pin}", f"@{pin}"), encoding="utf-8")
+        git(repo, "commit", "-qam", "reviewed: the contract measures the claim")
+
+    def test_an_unpinned_measurement_and_an_uncited_contract_are_shown(self, measured):
+        from consistency_belief.measurements import UNPINNED
+
+        assert self.only(measured).state == UNPINNED
+        out = status(view="coverage")
+        assert "CTR-grasp-reachable [" in out and "(unpinned)" in out
+        assert "measured, cited by no design (1): CTR-grasp-fast" in out
+        assert "cited measurements to re-read" not in out, "unpinned is listed only once a project pins"
+
+    def test_a_pin_reads_reviewed_and_restates_nothing(self, measured):
+        from consistency_belief.measurements import REVIEWED
+
+        verify_step("BRN-grasp-reach", trials=[
+            {"strategy": s, "outcome": "sound", "rationale": f"{s}: follows"}
+            for s in ("counterexample", "entailment", "negation")])
+        before = status(view="branches", subject="BRN-grasp-reach")
+        self.pin(measured, self.only(measured).expected)
+        assert self.only(measured).state == REVIEWED
+        after = status(view="branches", subject="BRN-grasp-reach")
+        assert "[PROVEN" in before and "[PROVEN" in after, "the pin set no trial aside"
+        assert "3/3 passed" in after
+
+    def test_restating_the_claim_or_a_premise_leaves_it_unreviewed_until_read_again(self, measured):
+        from consistency_belief.measurements import NOT_REVIEWED, REVIEWED
+        from stamp_monitor.audit import audit
+
+        pin = self.only(measured).expected
+        self.pin(measured, pin, MEASURED_DESIGN.replace("only proposes reachable poses",
+                                                         "only proposes reachable, collision-free poses"))
+        m = self.only(measured)
+        assert m.state == NOT_REVIEWED and m.pin == pin
+        out = status(view="coverage")
+        assert "cited measurements to re-read against their claims (1)" in out
+        assert f"write evidence: CTR-grasp-reachable@{m.expected}" in out
+        assert "MEASUREMENT_NOT_REVIEWED" in {f.code for f in audit(measured)}
+        self.pin(measured, pin, MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
+        assert self.only(measured).state == NOT_REVIEWED, "a premise restated upstream reaches it too"
+        self.pin(measured, self.only(measured).expected,
+                 MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
+        assert self.only(measured).state == REVIEWED
+
+    def test_rewording_the_derivation_rule_keeps_the_review(self, measured):
+        from consistency_belief.measurements import REVIEWED
+
+        pin = self.only(measured).expected
+        self.pin(measured, pin, MEASURED_DESIGN.replace("By DEF-reachable.", "It follows by DEF-reachable."))
+        assert self.only(measured).state == REVIEWED
+
+    def test_audit_change_names_the_measurements_a_restatement_leaves_unreviewed(self, measured):
+        out = audit_change("DEF-reachable", proposed_statement="IK returns a solution within 50 ms.")
+        assert "BRN-grasp-reach cites CTR-grasp-reachable" in out
+        same = audit_change("DEF-reachable", proposed_statement="IK returns a solution.")
+        assert "unaffected, their pins hold" in same
+
+    def test_a_branch_outside_the_declared_graph_has_no_reviewed_measurement(self, measured):
+        """It has no claim digest, so no pin reviews it -- and it is reported, not skipped."""
+        from consistency_belief.declarations import load
+        from consistency_belief.measurements import NOT_REVIEWED, cited_measurements
+
+        orphan = MEASURED_DESIGN.replace("{pin}", "") + """  - id: BRN-orphan
+    subject: CMP-grasp
+    claim_type: contract
+    statement: Poses are reachable twice over.
+    premises: [LMA-staged-only]
+    derivation_rule: "evidence: CTR-grasp-fast@0123abcd"
+"""
+        (measured / "consistency.yaml").write_text(orphan, encoding="utf-8")
+        git(measured, "commit", "-qam", "a branch resting on a lemma that is not declared")
+        [m] = [m for m in cited_measurements(load(measured)) if m.branch == "BRN-orphan"]
+        assert m.state == NOT_REVIEWED and m.expected is None
+        assert "not in the declared graph" in status(view="coverage")
