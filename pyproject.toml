@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "component-belief-mcp"
-version = "0.7.3"
+version = "0.7.4"
 description = "Component belief-update MCP: evidence-grounded belief state for a system graph"
 requires-python = ">=3.11"
 dependencies = [

@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.3" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.4" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -664,6 +664,29 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+### 0.7.4 — 2026-10-06 · tests in parallel, and "aligned" never read as "works"
+
+- **`run_test` calls made together run at once.** By default, half the cores run at once;
+  `BELIEF_MAX_RUNS` sets the number. Until now one lock covered the whole run. Only three things
+  need to be one at a time, and only those are now:
+  - taking a run id: the run makes its artifact directory with `exist_ok=False`, so two runs never
+    share an id, even from two server processes;
+  - appending to the ledger, with its evidence ids;
+  - installing the read hook, which is written atomically and only when it changed, so a run
+    starting mid-write cannot import half a hook and record no reads.
+
+  The digest cache is replaced whole rather than written in place. Two concurrent runs are shown
+  to overlap: each waits for the other to start. The suites here use 22 cores.
+- **Each link shows the measurement its claim cites:** `evidence: CTR-x [stale]` beside every link
+  in `stamp-monitor links`. "Aligned" says code was read against a claim; whether it still works
+  is the contract's to say. Two observations follow:
+  - `LINKED_EVIDENCE_NOT_SUPPORTED`: a claim whose regions read aligned while its cited evidence
+    is not supported.
+  - `UNSCOPED_ENVIRONMENT`: a test behind linked code that names no lockfile, so upgrading a
+    dependency under unchanged code stales nothing.
+- **This repository's suites now read `uv.lock`**, so a dependency bump stales their evidence.
+  The acceptance suites' `reads:` are in `goals.yaml`, which is the human's to change.
+
 ### 0.7.3 — 2026-10-06 · code links, verified and usable at scale
 
 - **`links(subject=...)` works on the cases an adopting agent hit.** These were reported from
@@ -819,7 +842,7 @@ change itself; an `evidence:` commit recording the suites' runs follows each.
   aborted by the client's idle timeout, and the server sent nothing while a test ran. The test
   now runs in a worker thread, and the tool reports progress every minute: a progress
   notification when the client sent a progress token, and a log message either way. Runs are
-  still one at a time. How long a test may run is its own `timeout_s` (default 900 seconds),
+  still one at a time (until 0.7.4). How long a test may run is its own `timeout_s` (default 900 seconds),
   declared with the test.
 - **Evidence from an earlier version of its test is stale** (design rule 3.5). A test's version
   is its run line and metrics. It was recorded on every trial and read by nothing, so a changed
