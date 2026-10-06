@@ -39,8 +39,9 @@ components:
     purpose: Load consistency.yaml from git HEAD, validate it, and join it to this file's components
     outputs: [IFC-cdeclarations__proofdag]
     testable_capability: >-
-      Reports an unknown premise, a cycle among declarations and a subject this
-      file no longer declares, and refuses to let uncommitted edits take effect
+      Reports an unknown premise, a cycle among declarations, a subject this
+      file no longer declares and a reference to a source consistency.yaml does
+      not declare, and refuses to let uncommitted edits take effect
     failure_modes:
       - {id: FM-cycle-admitted, observable: "two declarations citing each other load with no CIRCULAR_DEPENDENCY issue",
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations::test_validation_detects_circular_declarations"}
@@ -48,6 +49,10 @@ components:
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_coverage::test_a_removed_component_leaves_its_design_broken"}
       - {id: FM-worktree-leak, observable: "an uncommitted axiom edit alters a proof state",
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations::test_git_head_loading_and_pending_drift"}
+      - {id: FM-reference-weighs, observable: "adding or removing a source or a source reference changes the premise graph, a fingerprint, a proof state or a probe",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_references_change_no_graph_fingerprint_proof_state_or_probe"}
+      - {id: FM-dangling-reference-silent, observable: "a reference to an undeclared source, or a source nothing references, loads with no issue",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_a_dangling_reference_and_an_unreferenced_source_are_reported"}
     remediation: validate() and validate_links() in the consistency declarations loader
     goal: GOL-sound-designs
     code:
@@ -101,6 +106,8 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_goal_and_interface_measures_are_listed_apart_from_a_components"}
       - {id: FM-uncited-contract-silent, observable: "a contract no branch cites goes unreported",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_an_unpinned_measurement_and_an_uncited_contract_are_shown"}
+      - {id: FM-references-unlisted, observable: "status lists a source without the nodes that reference it, or an axiom without its references",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_sources_are_listed_with_the_nodes_that_reference_them"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -278,6 +285,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_page_a_declaration_names_is_not_written"}
       - {id: FM-measurements-unshown, observable: "a snapshot omits a branch's unreviewed cited measurement or a contract no design cites",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_cited_measurements_and_uncited_contracts_are_shown"}
+      - {id: FM-references-unshown, observable: "a snapshot omits a node's source references",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_source_references_are_shown_beside_their_nodes"}
       - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
     remediation: graph_snapshot.snapshot (the join, the revision it pins and the gaps); graph_snapshot.page; the one tool in graph_snapshot/server.py

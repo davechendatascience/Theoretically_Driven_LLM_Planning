@@ -13,6 +13,12 @@
 # The components these designs govern. belief.yaml owns each one -- its purpose, code paths and
 # contracts -- so this list is an import: it says which components the design ledger speaks for,
 # and every branch's subject must be one of them.
+#
+# Any declaration may reference a source -- a paper, a book, a standard -- by
+# naming an entry under `sources:` in `references: [{source: SRC-x, at: "Thm 2"}]`.
+# A reference is for the reader: it is no premise, no part of a fingerprint and
+# never shown to a verifier (AXM-references-carry-no-weight). Nothing checks
+# that the source says what the declaration states.
 
 components:
   - {id: CMP-declarations, note: "belief.yaml loaded from git HEAD and validated"}
@@ -246,6 +252,26 @@ axioms:
       reads that contract as supported; a contract no design cites measures
       something no design says why it matters. Either reads exactly like a
       design and a measurement that agree.
+
+  - id: AXM-references-carry-no-weight
+    domain: epistemic
+    goal: GOL-sound-designs
+    statement: >-
+      A source reference records where a declaration came from and carries no
+      weight in a proof: no node's place in the premise graph, no node's
+      fingerprint, no trial's standing, no proof state and nothing a verifier
+      is served depends on whether a declaration references a source, or
+      which. At every revision, every source reference naming no source
+      declared at that revision is reported, and so is every source declared
+      at that revision that no node declared there references.
+    rationale: >-
+      An agent can write a plausible reference as easily as a plausible
+      number, and a paper named beside a claim reads as support for it -- to a
+      person, and to a verifier shown it, who may defer to the name instead of
+      judging the step. A reference is worth keeping for what it is, a record a
+      person can follow back to where a root came from; it must never become a
+      way to make a claim count. A reference to nothing, or a source nothing
+      uses, is a citation that has come apart from what it cites.
 
 definitions:
   - id: DEF-proof-obligation
@@ -527,6 +553,24 @@ definitions:
       that revision, and its branch's claim digest there equals the pin. A
       derivation rule is neither a node's statement nor the premises it cites,
       so writing, changing or removing a pin changes neither.
+
+  - id: DEF-source-reference
+    term: Source reference
+    meaning: >-
+      A source is an entry under sources: in consistency.yaml at a revision,
+      with an id and a title and optionally authors, a year, identifiers and a
+      note; it is declared at that revision. A source reference is an entry in
+      the references: of an axiom, definition, lemma or branch declared at a
+      revision, naming a source by its id and optionally a place in it.
+      Neither a source nor a source reference is a node, a premise or an edge
+      of the premise graph; neither is part of any node's statement,
+      derivation rule, cited premises or declared sufficiency; and neither is a
+      trial or a record in the ledger. The probe served for a node is computed
+      from the premise graph, the derivation rules of the nodes in it and the
+      trials recorded on them, and from nothing else. A source reference is
+      dangling at a revision exactly when no source with the id it names is
+      declared at that revision. Nothing checks that a source says what a node
+      that references it states.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -1079,6 +1123,41 @@ branches:
       changes. evidence: CTR-trial-ledger-replay
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-references-carry-no-weight
+    subject: CMP-consistency-declarations
+    claim_type: contract
+    statement: >-
+      Two revisions whose declarations are alike except in their sources and
+      source references build, over the same ledger, the same premise graph,
+      give every node in it the same fingerprint and the same current trials,
+      give every lemma and branch the same proof state, and serve the same
+      probe for every node. At every revision, every dangling source reference
+      is reported, and so is every source declared at that revision that no
+      node declared there references.
+    premises: [AXM-references-carry-no-weight, DEF-source-reference, DEF-premise-graph, DEF-current-trial, DEF-proof-state]
+    derivation_rule: >-
+      By DEF-source-reference neither a source nor a source reference is a
+      node, a premise or an edge, nor part of any node's statement, derivation
+      rule, cited premises or declared sufficiency, nor a trial or a ledger
+      record. So the two revisions declare the same nodes, each with the same
+      statement, derivation rule, cited premises and sufficiency, over the same
+      ledger. By DEF-premise-graph a build's candidates, which of them it
+      admits and the edges it adds are determined by those ids, statements and
+      cited premises and by the staged proposals, so both builds are the same
+      graph. By DEF-current-trial a fingerprint is determined by a node's
+      statement and cited premises, so every fingerprint is the same; whether
+      a trial is current is determined by its validity after amendments, its
+      target being in the graph and those fingerprints, so the same trials are
+      current. By DEF-proof-state a proof state is computed from the node's
+      place in the graph, the admitted version's statement, cited premises and
+      declared sufficiency, and the trials on it, all the same, so every proof
+      state is the same. By DEF-source-reference the probe for a node is
+      computed from the graph, the derivation rules and the trials alone, all
+      the same, so it is the same. The reporting clause is
+      AXM-references-carry-no-weight's, with dangling as DEF-source-reference
+      defines it. evidence: CTR-consistency-declarations-gate
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -1097,3 +1176,4 @@ policies:
       - {target: BRN-links-stale-when-either-side-moves, require: proven, evidence: supported}
       - {target: BRN-cited-measurements-reviewed-while-the-claim-stands, require: proven, evidence: supported}
       - {target: BRN-snapshot-shows-one-revision, require: proven, evidence: supported}
+      - {target: BRN-references-carry-no-weight, require: proven, evidence: supported}
