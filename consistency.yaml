@@ -74,7 +74,7 @@ axioms:
       the premises it cites -- and counts only while that claim and those
       statements stand; no conclusion counts as proven while any step beneath it
       is unverified; and a step whose claim and cited statements are unchanged
-      keeps its trials.
+      keeps every trial that recorded those statements.
     rationale: >-
       Foundational mutations ripple through intermediate lemmas down to terminal
       contracts, and retaining belief in a conclusion whose ground moved is
@@ -482,8 +482,8 @@ definitions:
       Output a reader returns to its caller, computed from the ledger, the
       declarations and the repository. Producing a report appends no record to
       the ledger -- no trial, amendment, note, event or decision, of any
-      provenance -- and changes no declaration. Output that does either is not a
-      report.
+      provenance -- changes no declaration, makes no commit and does not move
+      the head revision. Output that does any of these is not a report.
 
   - id: DEF-snapshot
     term: Snapshot
@@ -529,24 +529,26 @@ definitions:
     term: Code link
     meaning: >-
       A scanned file at a revision is a Python source file git tracks at that
-      revision outside the ledger directories. A code link is a relation of
-      kind implements, uses or checks, declared in comments of a scanned file
-      at a revision, from a delimited region of that file to a node, carrying
-      two pins: a body pin on the region and a claim pin on the relation. A
-      relation of kind motivated-by asserts no correspondence and is not a code
-      link. A region's body digest is determined by its code with comments and
-      layout set aside, and differs whenever that code differs. The declared
-      graph at a revision is the premise graph DEF-premise-graph describes,
-      built from the declarations committed at that revision with no staged
-      proposal. A node's claim digest at a revision is determined by the
-      fingerprints, as DEF-current-trial uses them, of the node and of every
-      node it depends on in the declared graph at that revision, and differs
-      whenever any of those differs or the set of nodes it depends on differs.
-      A pin is taken by recording the digest it names for the code and the
-      claim as they stand, so it equals that digest for them. A file that
-      declares tdlp:foreign-ids names ids of the projects it builds; its
-      mentions are not mentions of this project's nodes. A code link is a
-      declared relationship: it is not a trial and not a record in the ledger.
+      revision outside the ledger directories. A code link is a relation of kind
+      implements, uses or checks, declared in comments of a scanned file at a
+      revision, from a delimited region of that file to a node, carrying two
+      pins: a body pin on the region and a claim pin on the relation. A relation
+      of kind motivated-by asserts no correspondence and is not a code link. A
+      region's body digest is determined by its code with comments and layout
+      set aside, and differs whenever that code differs. The declared graph at a
+      revision is the premise graph DEF-premise-graph describes, built from the
+      declarations committed at that revision with no staged proposal. A node's
+      claim digest at a revision is determined by the fingerprints, as
+      DEF-current-trial uses them, of the node and of every node it depends on
+      in the declared graph at that revision, and differs whenever any of those
+      differs or the set of nodes it depends on differs. A link's body pin is
+      taken by recording the body digest of the link's own region, and its claim
+      pin by recording the claim digest of the link's own node, each as it
+      stands at the revision the pin is taken at, so a pin equals that digest as
+      it stood then. A file that declares tdlp:foreign-ids names ids of the
+      projects it builds; its mentions are not mentions of this project's nodes.
+      A code link is a declared relationship: it is not a trial and not a record
+      in the ledger.
 
   - id: DEF-aligned-link
     term: Aligned link
@@ -634,8 +636,9 @@ lemmas:
       builds or the trial recorded fingerprints in place of statements; so a
       trial of a node that depends on r without citing it keeps its standing,
       and so does a trial of a node citing r that recorded statements, while r's
-      statement is unchanged. Either way, a trial of a node that depends on r in
-      neither build is current after the change exactly when it was before.
+      statement is unchanged. Either way, a trial of a node other than r that
+      depends on r in neither build is current after the change exactly when it
+      was before.
     premises: [AXM-blast-radius-invalidation, DEF-premise-graph, DEF-current-trial, DEF-restatement]
     derivation_rule: >-
       The change records no trial and appends no amendment, so every trial there
@@ -654,16 +657,19 @@ lemmas:
       target is not in the graph is not current. Now let r be in the graph
       before and after the change, and take a node e other than r. Every node
       other than r keeps a candidate with the same statement and cited premises,
-      r is admitted in both builds, and a node is admitted exactly when every
-      premise it cites is, so by induction along the paths to e, e is admitted
-      in one build exactly when in the other. If it is, its fingerprint is the
-      same in both, and so are the statement and fingerprint of each premise it
-      cites other than r; so by DEF-current-trial each of its trials holds after
-      the change exactly when before, unless e cites r and what the trial
-      recorded for r is r's in one build and not the other -- which, for a
-      recorded statement, needs r's statement to differ between the builds, and
-      for a recorded fingerprint follows from r's fingerprint differing. If e is
-      in neither build, none of its trials is current in either. A node that
+      and r is admitted in both builds. By DEF-premise-graph a build admits a
+      node once every premise it cites is in the graph, and ends only when every
+      candidate left out cites a premise that is not in it, so whatever the
+      order of admission a candidate is in a build exactly when every premise it
+      cites is; by induction along the paths to e, e is admitted in one build
+      exactly when in the other. If it is, its fingerprint is the same in both,
+      and so are the statement and fingerprint of each premise it cites other
+      than r; so by DEF-current-trial each of its trials holds after the change
+      exactly when before, unless e cites r and what the trial recorded for r is
+      r's in one build and not the other -- which, for a recorded statement,
+      needs r's statement to differ between the builds, and for a recorded
+      fingerprint follows from r's fingerprint differing. If e is in neither
+      build, none of its trials is current in either. A node other than r that
       depends on r in neither build has nothing it depends on restated or
       removed, so it is admitted in one build exactly when in the other, with
       the same fingerprint and cited premises, and its trials keep their
@@ -1231,7 +1237,8 @@ branches:
       premise is proven. When one node is restated and stays in the graph, and
       nothing else changes, every trial of a node that depends on it without
       citing it keeps its standing, and so does every trial that recorded
-      statements, of a node citing it, while its statement is unchanged.
+      statements, of a node citing it, while the restated node's statement is
+      unchanged.
     premises: [AXM-blast-radius-invalidation, DEF-proof-state, DEF-current-trial, LMA-blast-radius-propagation]
     derivation_rule: >-
       By DEF-proof-state a lemma or branch is proven exactly when its step is
