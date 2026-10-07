@@ -67,16 +67,24 @@ components:
     testable_capability: >-
       Admits a node only on declared or staged premises and without a cycle, in
       dependency order rather than file order, moves a node to REFUTED only on a
-      falsified probe, and counts independent trials by strategy and actor
+      falsified probe, counts independent trials by strategy and actor, reads a
+      node proven only while every step beneath it is verified, and on a
+      restatement sets aside only the trials of the steps that read it
     failure_modes:
       - {id: FM-file-order, observable: "a branch declared above its premise is dropped from the graph",
          observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_graph::test_declarations_join_in_dependency_order_not_file_order"}
       - {id: FM-gap-refutes, observable: "an entailment gap is reported as a counterexample",
          observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_gap_doubts_and_never_refutes"}
-      - {id: FM-stale-carried, observable: "a trial keeps counting after its target or a premise is restated",
+      - {id: FM-stale-carried, observable: "a trial keeps counting after its target, or a premise its target cites, is restated to another statement",
          observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_trial_recorded_against_another_statement_is_not_carried"}
       - {id: FM-repeat-counts, observable: "three probes of one strategy by one actor close an obligation",
          observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_model_state_transitions"}
+      - {id: FM-proven-over-unverified, observable: "a lemma or branch reads proven while a lemma or branch it depends on is refuted, doubted, stale or open",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_step_over_an_unverified_premise_is_conditional"}
+      - {id: FM-cone-reverified, observable: "restating a node sets aside a trial of a node that depends on it without citing it",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_a_restatement_sets_aside_only_the_steps_that_read_it"}
+      - {id: FM-order-decides, observable: "the order trials were recorded in changes a proof state",
+         observed_by: CTR-proof-dag-invariants, case: "tests.test_consistency_probes::test_the_order_trials_arrive_in_decides_nothing"}
     remediation: ProofDAG.from_declarations' dependency-ordered join; model.compute_consistency's fingerprints and independence count
     goal: GOL-sound-designs
     code:
@@ -114,6 +122,10 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_the_tree_of_one_node_draws_only_its_lineage"}
       - {id: FM-ignored-parameter-silent, observable: "a status view given a parameter it does not read says nothing of it",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_parameter_a_view_ignores_is_named"}
+      - {id: FM-policy-adopts-conditional, observable: "decide() adopts, under a criterion requiring proven, a branch that is conditional",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_conditional_branch_does_not_meet_a_policy_requiring_proven"}
+      - {id: FM-conditional-unnamed, observable: "a conditional node is shown without the unverified steps it waits on, or is served to a verifier as an obligation",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_conditional_node_names_what_it_waits_on"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -293,6 +305,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_cited_measurements_and_uncited_contracts_are_shown"}
       - {id: FM-references-unshown, observable: "a snapshot omits a node's source references",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_source_references_are_shown_beside_their_nodes"}
+      - {id: FM-conditional-undrawn, observable: "a snapshot draws a conditional claim with no mark, or without the steps it waits on",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_conditional_claim_is_drawn_with_what_it_waits_on"}
       - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_the_template_ships_with_the_package"}
     remediation: graph_snapshot.snapshot (the join, the revision it pins and the gaps); graph_snapshot.page; the one tool in graph_snapshot/server.py
