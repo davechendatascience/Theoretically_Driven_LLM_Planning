@@ -86,9 +86,10 @@ def test_status_views(committed_repo: Path):
 
 def test_audit_change_blast_radius(committed_repo: Path):
     audit_out = audit_change("AXM-energy-budget", proposed_statement="Total system battery power is bounded at 80W.")
-    assert "Downstream blast radius (2 nodes will become STALE):" in audit_out
-    assert "LMA-compute-cap" in audit_out
-    assert "BRN-gpu-throttling" in audit_out
+    # The step citing the axiom read its statement, so it needs a pass; the branch beyond it waits.
+    assert "Steps that cite it (1) -- they read its statement, so their trials are set aside" in audit_out
+    assert "  • LMA-compute-cap\nFurther downstream (1) -- they keep their trials and read CONDITIONAL" in audit_out
+    assert "  • BRN-gpu-throttling" in audit_out
 
 
 def test_audit_change_says_when_nothing_restates(committed_repo: Path):
@@ -101,11 +102,11 @@ def test_audit_change_says_when_nothing_restates(committed_repo: Path):
     assert "will become STALE" not in same and "BRN-gpu-throttling" in same
 
     unsaid = audit_change("LMA-compute-cap")
-    assert "become STALE if its statement or premises change" in unsaid
+    assert "their trials are set aside if its statement changes" in unsaid
     assert "a CTR- citation" in unsaid and "restates nothing" in unsaid
 
     restated = audit_change("LMA-compute-cap", proposed_statement="Compute power cannot exceed 30W.")
-    assert "(1 nodes will become STALE)" in restated and "Own trials: 0 set aside" in restated
+    assert "Steps that cite it (1)" in restated and "Own trials: 0 set aside" in restated
     assert "restates nothing" not in restated
 
 
@@ -249,14 +250,14 @@ def test_trials_carry_over_when_the_same_statement_is_declared(committed_repo: P
 
 policies:"""), "declare the fan curve")
     tree = status("tree")
-    assert "BRN-fan-curve [PROVEN 2/2]" in tree
+    assert "BRN-fan-curve [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in tree
     assert "staged" not in tree
 
 
 def test_restating_a_declared_node_sets_its_trials_aside(committed_repo: Path):
     verify_step("BRN-gpu-throttling", outcome="sound", rationale="ok")
     verify_step("BRN-gpu-throttling", strategy="entailment", outcome="sound", rationale="ok again")
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree")
 
     _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML.replace(
         "Cap GPU clock to guarantee power < 35W.", "Cap GPU clock to guarantee power < 38W."), "restate")
@@ -278,7 +279,7 @@ def test_restating_a_premise_makes_dependents_stale(committed_repo: Path):
 
     verify_step("BRN-gpu-throttling", outcome="sound", rationale="re-verified")
     verify_step("BRN-gpu-throttling", strategy="entailment", outcome="sound", rationale="re-verified again")
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree")
 
 
 def test_restating_a_staged_branch_sets_its_trials_aside(committed_repo: Path):
@@ -302,7 +303,7 @@ def test_legacy_trials_without_fingerprints_still_count(committed_repo: Path):
         store.append_trial({"target_id": "BRN-gpu-throttling", "strategy": strategy,
                             "outcome": "sound", "passed": True, "counterexample": None,
                             "reasoning": f"legacy {i}", "repro": {}, "validity": "valid"})
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree")
 
 
 # ---------- gaps and amendments ----------
@@ -656,7 +657,7 @@ def test_restating_a_node_back_restores_the_trials_that_verified_that_statement(
     verify_step("BRN-gpu-throttling", trials=[
         {"strategy": "counterexample", "outcome": "sound", "rationale": "ok"},
         {"strategy": "entailment", "outcome": "sound", "rationale": "ok"}])
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree")
 
     restated = SAMPLE_CONSISTENCY_YAML.replace(
         "Cap GPU clock to guarantee power < 35W.", "Cap GPU clock to guarantee power < 30W.")
@@ -664,7 +665,7 @@ def test_restating_a_node_back_restores_the_trials_that_verified_that_statement(
     assert "[OBLIGATION 0/2]" in status("branches", subject="BRN-gpu-throttling")
 
     _commit_yaml(committed_repo, SAMPLE_CONSISTENCY_YAML, "restate it back")
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree")
 
 
 def test_a_withdrawn_proposal_and_its_trials_stay_on_record(committed_repo: Path):
@@ -707,10 +708,15 @@ def test_a_trial_made_before_fingerprints_is_judged_by_its_build_then(committed_
         store.append_trial({"target_id": "BRN-gpu-throttling", "strategy": strategy, "outcome": "sound",
                             "passed": True, "counterexample": None, "reasoning": "legacy", "repro": {},
                             "validity": "valid", "timestamp": "2026-01-02T00:00:00+00:00"})
-    assert "BRN-gpu-throttling [PROVEN 2/2]" in status("tree"), "nothing changed since: it counts"
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on OBLIGATION LMA-compute-cap]" in status("tree"), "nothing changed since: it counts"
 
-    commit_at(SAMPLE_CONSISTENCY_YAML.replace("bounded at 100W", "bounded at 80W"), "2026-01-03T00:00:00+00:00")
-    assert "BRN-gpu-throttling [STALE]" in status("tree"), "a premise restated after it: it does not"
+    # The axiom is beneath the lemma the branch cites, and the branch's step never read it.
+    axiom_moved = SAMPLE_CONSISTENCY_YAML.replace("bounded at 100W", "bounded at 80W")
+    commit_at(axiom_moved, "2026-01-03T00:00:00+00:00")
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2" in status("tree"), "a node it does not cite restated: it counts"
+
+    commit_at(axiom_moved.replace("cannot exceed 40W", "cannot exceed 45W"), "2026-01-04T00:00:00+00:00")
+    assert "BRN-gpu-throttling [STALE]" in status("tree"), "the premise it cites restated after it: it does not"
 
 
 def test_decide_refuses_a_policy_it_does_not_declare(committed_repo: Path):
@@ -938,3 +944,37 @@ def test_a_parameter_a_view_ignores_is_named(committed_repo: Path):
     assert json.loads(status(view="cycle", subject="X"))["ignored"] == ["subject='X'"]
     # A parameter the view reads draws no note.
     assert not status(view="probe", subject="LMA-compute-cap").startswith("note:")
+
+
+def test_a_conditional_branch_does_not_meet_a_policy_requiring_proven(committed_repo: Path):
+    """The risky case in the report from embodied_ai: a policy requiring proven passing a branch
+    whose ground is refuted. Proven is the whole proof, not the step."""
+    verify_step("BRN-gpu-throttling", trials=[{"strategy": "counterexample", "outcome": "sound", "rationale": "ok"},
+                                              {"strategy": "entailment", "outcome": "sound", "rationale": "ok"}])
+    out = decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
+    assert "BRN-gpu-throttling is CONDITIONAL: its own step is verified, and it rests on LMA-compute-cap (obligation)" in out
+    assert "ADOPT" not in out.split("\n")[0]
+
+    verify_step("LMA-compute-cap", trials=[{"strategy": "counterexample", "outcome": "falsified", "rationale": "no",
+                                            "counterexample": "the motors draw 70W at stall"}])
+    assert "rests on LMA-compute-cap (refuted)" in decide("BRN-gpu-throttling", policy_id="POL-energy-gate")
+
+
+def test_a_conditional_node_names_what_it_waits_on(committed_repo: Path):
+    verify_step("BRN-gpu-throttling", trials=[{"strategy": "counterexample", "outcome": "sound", "rationale": "ok"},
+                                              {"strategy": "entailment", "outcome": "sound", "rationale": "ok"}])
+    reply = verify_step("LMA-compute-cap", trials=[{"strategy": "counterexample", "outcome": "falsified",
+                                                    "rationale": "no", "counterexample": "the motors draw 70W at stall"}])
+    assert "LMA-compute-cap [REFUTED]" in reply
+
+    assert "BRN-gpu-throttling [CONDITIONAL 2/2 · rests on REFUTED LMA-compute-cap]" in status("tree")
+    assert "conditional=1" in status("tree")
+    contradictions = status("contradictions")
+    assert "Resting on a Refuted or Ungrounded Premise -- own step verified, not proven (1):" in contradictions
+    assert "RESTS ON: LMA-compute-cap (refuted)" in contradictions
+    obligations = status("obligations")
+    assert "Conditional (1)" in obligations and "BRN-gpu-throttling: waits on LMA-compute-cap (refuted)" in obligations
+    # Nothing to probe on it: the work is on the premise, and restating that is the author's move.
+    assert "PROBE BRN-gpu-throttling" not in status("probe")
+    one = status("probe", subject="BRN-gpu-throttling")
+    assert "its own step is verified; it waits on LMA-compute-cap (refuted)" in one

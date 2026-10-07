@@ -382,3 +382,21 @@ def test_source_references_are_shown_beside_their_nodes(project):
     assert {n: v.get("state") for n, v in snap["nodes"].items()} == {n: v.get("state") for n, v in before["nodes"].items()}
     issues = {(i["code"], i["subject"], i["source"]) for i in snap["issues"]}
     assert ("DANGLING_REFERENCE", "BRN-motion-gate", "consistency.yaml") in issues
+
+
+def test_a_conditional_claim_is_drawn_with_what_it_waits_on(project):
+    """A branch verified over a premise later refuted reads conditional, with the premise named --
+    reported from embodied_ai on 0.7.7, where such branches read PROVEN 3/3 here too."""
+    from consistency_belief.server import verify_step
+    from graph_snapshot.snapshot import summary, take
+
+    verify_step("BRN-motion-gate", trials=PASS)
+    verify_step("LMA-clear-means-safe", trials=[{"strategy": "counterexample", "outcome": "falsified",
+                                                 "rationale": "no", "counterexample": "a sensor that reads zero"}])
+    snap = take(project)
+    gate = snap["nodes"]["BRN-motion-gate"]
+    assert gate["state"] == "conditional" and gate["waiting"] == [["LMA-clear-means-safe", "refuted"]]
+    assert "rests on 1 step(s) that are not: LMA-clear-means-safe (refuted)" in gate["why"]
+    assert "1 conditional" in " ".join(summary(snap))
+    page = (REPO / "src" / "graph_snapshot" / "page.html").read_text(encoding="utf-8")
+    assert 'conditional: ["cond", "Conditional"]' in page and "Waits on" in page

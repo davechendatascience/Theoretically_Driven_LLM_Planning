@@ -18,7 +18,7 @@ from typing import Any
 
 from .declarations import Declarations, Policy
 from .graph import ProofDAG
-from .model import PROVEN, REFUTED, UNGROUNDED, ConsistencySlice
+from .model import CONDITIONAL, PROVEN, REFUTED, UNGROUNDED, ConsistencySlice
 
 ADOPT = "adopt"
 REJECT = "reject"
@@ -93,6 +93,10 @@ def evaluate_consistency_policy(
         elif s.staged:
             obligations.append(f"{s.target_id} is STAGED ({s.state.upper()}, {s.n_trials}/{s.n_min} trials): "
                                "declare it in consistency.yaml and commit before it can support a decision")
+        elif s.state == CONDITIONAL:
+            # Its own step holds; its ground does not yet. Proven is the whole proof, not the step.
+            obligations.append(f"{s.target_id} is CONDITIONAL: its own step is verified, and it rests on "
+                               + ", ".join(f"{a} ({state})" for a, state in s.waiting_on))
         elif s.state != PROVEN:
             obligations.append(f"{s.target_id} is {s.state.upper()} ({s.n_independent}/{s.n_min} independent trials)")
 

@@ -6,7 +6,7 @@ from typing import Iterable
 
 from .graph import ProofDAG
 from .ids import set_hash
-from .model import PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice
+from .model import CONDITIONAL, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice
 
 
 def bullet(lines: Iterable[str], indent: int = 2) -> str:
@@ -20,6 +20,7 @@ def basis_line(slices: Iterable[ConsistencySlice]) -> str:
     proven_count = 0
     obligation_count = 0
     refuted_count = 0
+    conditional_count = 0
 
     for s in slice_list:
         all_trials.extend(s.trial_ids)
@@ -27,11 +28,15 @@ def basis_line(slices: Iterable[ConsistencySlice]) -> str:
             proven_count += 1
         elif s.state == REFUTED:
             refuted_count += 1
+        elif s.state == CONDITIONAL:
+            conditional_count += 1          # its own step needs no verifier; it waits on another
         else:
             obligation_count += 1
 
     handle = set_hash(all_trials)
     summary = f"proven={proven_count} obligations={obligation_count} refuted={refuted_count}"
+    if conditional_count:
+        summary += f" conditional={conditional_count}"
     return f"basis: verification_trials×{len(all_trials)} set={handle} · {summary}"
 
 
@@ -61,6 +66,11 @@ def _state_badge(s: ConsistencySlice) -> str:
         return "[STALE]"
     if s.state == UNGROUNDED:
         return "[UNGROUNDED]"
+    if s.state == CONDITIONAL:
+        # The proof is modulo the steps beneath it that are not verified; the worst one is named.
+        first, state = s.waiting_on[0] if s.waiting_on else ("?", "?")
+        more = f" +{len(s.waiting_on) - 1}" if len(s.waiting_on) > 1 else ""
+        return f"[CONDITIONAL {s.n_passed}/{s.n_trials} · rests on {state.upper()} {first}{more}]"
     return f"[{s.state.upper()}]"
 
 

@@ -33,6 +33,10 @@ class ProofNode:
         """What a verification trial vouches for: the statement and the premises it rests on."""
         return content_hash({"statement": self.statement, "premises": sorted(self.premises)})
 
+    def statement_digest(self) -> str:
+        """The statement alone, as a probe serves it to the steps that cite this node."""
+        return content_hash({"statement": self.statement})
+
 
 class ProofDAG:
     def __init__(self) -> None:
@@ -138,6 +142,13 @@ class ProofDAG:
         """Fingerprint of every transitive premise: a trial recorded under one basis stops
         vouching for the node once any premise upstream is restated (rule 3)."""
         return {aid: self.nodes[aid].fingerprint() for aid in sorted(self.ancestors(node_id))}
+
+    def premise_statements(self, node_id: str) -> dict[str, str]:
+        """The statement digest of each premise a node cites: what its probe served, and so all a
+        trial of it was judged from besides its own claim (DEF-current-trial)."""
+        node = self.nodes.get(node_id)
+        return {} if node is None else {pid: self.nodes[pid].statement_digest()
+                                        for pid in sorted(node.premises) if pid in self.nodes}
 
     def axiomatic_basis(self, node_id: str) -> set[str]:
         """All ancestor nodes that are declared axioms."""

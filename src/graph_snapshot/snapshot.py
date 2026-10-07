@@ -35,7 +35,7 @@ from code_links import ERROR, REVIEW, CodeIndex, link_state
 from consistency_belief.declarations import DECLARATION_FILE as CONSISTENCY_FILE
 from consistency_belief.links import scan as scan_links
 from consistency_belief.measurements import REVIEWED, UNPINNED, cited_measurements, uncited_by_kind
-from consistency_belief.model import PROVEN
+from consistency_belief.model import CONDITIONAL, PROVEN
 from consistency_belief.views import Context
 
 from .page import PAGE_PATHS
@@ -51,7 +51,7 @@ CODE_LINKS = "code links"
 MEASUREMENTS = "cited measurements"
 
 #: Order of the per-kind tallies in the summary: worst first, as the page lists them.
-_CLAIM_ORDER = ("refuted", "ungrounded", "doubted", "stale", "obligation", PROVEN)
+_CLAIM_ORDER = ("refuted", "ungrounded", "doubted", "stale", "obligation", CONDITIONAL, PROVEN)
 _COVER_ORDER = ("undeclared design", "planned", "governed", "declared only", "no design claim")
 
 
@@ -110,6 +110,7 @@ def take(root: Path) -> dict[str, Any]:
             state=s.state if s else None,
             count=f"{s.n_independent}/{s.n_min}" if s else "",
             why=s.issues[0] if s and s.issues else "",
+            waiting=[list(w) for w in s.waiting_on] if s else [],
             cites=sorted(set(_CONTRACT.findall(node.derivation_rule or ""))),
             references=[] if node.staged else references(ctx.decl, nid))
         edges.update(dict.fromkeys((nid, p) for p in node.premises))

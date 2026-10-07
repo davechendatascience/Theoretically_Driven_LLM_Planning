@@ -18,8 +18,14 @@ OBLIGATION = "obligation"
 STALE = "stale"
 UNGROUNDED = "ungrounded"
 DOUBTED = "doubted"
+#: Its own step is verified and a step beneath it is not: a proof modulo an open or refuted premise,
+#: as a Lean theorem that uses a lemma proved by sorry. It keeps its trials and is never proven.
+CONDITIONAL = "conditional"
 
-STATES = (PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, DOUBTED)
+STATES = (PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, DOUBTED, CONDITIONAL)
+
+#: The order a conditional node names what it waits on: worst first, so a refuted premise leads.
+_WAIT_ORDER = (REFUTED, UNGROUNDED, DOUBTED, STALE, OBLIGATION)
 
 #: The probes one verification pass runs; listed here so an obligation can say which are untried.
 PASS_STRATEGIES = ("counterexample", "entailment", "negation")
@@ -48,6 +54,9 @@ class ConsistencySlice:
     n_stale: int = 0                # trials recorded before a premise upstream was restated
     n_independent: int = 0          # distinct (strategy, actor) pairs among the counted trials
     strategies_tried: list[str] = field(default_factory=list)
+    # The lemmas and branches beneath it whose step is not verified, with their states: what a
+    # conditional node waits on. Empty for any other state.
+    waiting_on: list[tuple[str, str]] = field(default_factory=list)
 
     @property
     def is_sound(self) -> bool:
@@ -81,7 +90,13 @@ def compute_consistency(
     stale_ancestors: set[str] | None = None,
     legacy: Callable[[str, str], tuple[str, dict[str, str]] | None] | None = None,
 ) -> list[ConsistencySlice]:
-    """Compute verification status slices for all targetable nodes."""
+    """Compute verification status slices for the targetable nodes.
+
+    Two passes. The first judges each lemma and branch's own step from its trials. The second reads
+    a node whose step is verified as proven only when every lemma and branch beneath it has a
+    verified step too, and as conditional otherwise (DEF-proof-state) -- so a premise refuted after
+    its dependents were verified reaches them on the next read, whatever order the trials came in.
+    """
     stale_set = stale_ancestors or set()
     valid_trials = [t for t in trials if t.get("validity") == "valid"]
 
@@ -92,10 +107,11 @@ def compute_consistency(
         if target:
             by_target.setdefault(target, []).append(t)
 
-    candidate_ids = targets or [
-        nid for nid, node in dag.nodes.items()
-        if node.kind in ("lemma", "branch", "change")
-    ]
+    derived = [nid for nid, node in dag.nodes.items() if node.kind in ("lemma", "branch", "change")]
+    candidate_ids = targets or derived
+    # Every step beneath a target is judged too: whether the target is proven turns on them.
+    judged = set(candidate_ids) | {a for t in candidate_ids if dag.get(t) for a in dag.ancestors(t)}
+    candidate_ids = [nid for nid in derived if nid in judged] + [t for t in candidate_ids if t not in derived]
 
     slices: list[ConsistencySlice] = []
 
@@ -197,7 +213,20 @@ def compute_consistency(
             strategies_tried=strategies,
         ))
 
-    return slices
+    # Second pass: a verified step over an unverified one is a proof modulo that premise.
+    step = {s.target_id: s.state for s in slices}
+    for s in slices:
+        if s.state != PROVEN:
+            continue
+        waiting = sorted(((a, step[a]) for a in dag.ancestors(s.target_id) if a in step and step[a] != PROVEN),
+                         key=lambda w: (_WAIT_ORDER.index(w[1]) if w[1] in _WAIT_ORDER else len(_WAIT_ORDER), w[0]))
+        if waiting:
+            s.state = CONDITIONAL
+            s.waiting_on = waiting
+            s.issues = [f"its own step is verified; it rests on {len(waiting)} step(s) that are not: "
+                        + ", ".join(f"{a} ({state})" for a, state in waiting)]
+    wanted = set(targets) if targets else None
+    return [s for s in slices if wanted is None or s.target_id in wanted]
 
 
 def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]],
@@ -213,7 +242,8 @@ def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]],
     that cannot be recovered, and is set aside like a superseded one. Without `legacy` -- no
     history to read -- such a trial counts as current, as it always had."""
     current_statement = node.fingerprint()
-    current_basis = dag.basis_fingerprints(node.id)
+    current_read = dag.premise_statements(node.id)
+    current_premises = {pid: dag.nodes[pid].fingerprint() for pid in node.premises if pid in dag.nodes}
     current, superseded, stale = [], 0, []
     for t in trials:
         if "statement_sha" not in t:
@@ -227,17 +257,32 @@ def _partition(dag: ProofDAG, node, trials: list[dict[str, Any]],
             t = {**t, "statement_sha": then[0], "basis": then[1]}
         if t["statement_sha"] != current_statement:
             superseded += 1
-        elif t.get("basis") is not None and t["basis"] != current_basis:
+        elif _premises_moved(t, current_read, current_premises):
             stale.append(t)
         else:
             current.append(t)
     return current, superseded, stale
 
 
+def _premises_moved(trial: dict[str, Any], read: dict[str, str], premises: dict[str, str]) -> list[str]:
+    """The premises the target cites whose statement is no longer the one the trial was judged
+    from (DEF-current-trial). A trial that recorded statements is compared on them; one that
+    recorded fingerprints, on its cited premises' fingerprints, which change with any restatement.
+    Nothing further upstream is compared: the step never read it."""
+    if trial.get("read") is not None:
+        recorded = trial["read"]
+        return sorted(pid for pid in read if recorded.get(pid) != read[pid])
+    if trial.get("basis") is not None:
+        recorded = trial["basis"]
+        return sorted(pid for pid in premises if recorded.get(pid) != premises[pid])
+    return []
+
+
 def _restated_premises(dag: ProofDAG, node_id: str, stale_trials: list[dict[str, Any]]) -> list[str]:
-    current = dag.basis_fingerprints(node_id)
+    node = dag.nodes[node_id]
+    read = dag.premise_statements(node_id)
+    premises = {pid: dag.nodes[pid].fingerprint() for pid in node.premises if pid in dag.nodes}
     changed: set[str] = set()
     for t in stale_trials:
-        recorded = t.get("basis") or {}
-        changed |= {k for k in set(recorded) | set(current) if recorded.get(k) != current.get(k)}
+        changed |= set(_premises_moved(t, read, premises))
     return sorted(changed)

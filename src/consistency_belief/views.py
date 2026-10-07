@@ -16,7 +16,7 @@ from .graph import ProofDAG, ProofNode
 from .ids import content_hash
 from .measurements import NOT_REVIEWED, UNPINNED, CitedMeasurement, cited_measurements, uncited_by_kind
 from .measurements import adopted as adopted_pins
-from .model import (DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
+from .model import (CONDITIONAL, DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
 from .probes import probe_text
 from .render import basis_line, bullet, envelope, render_ascii_dag, render_lineage, slice_badge
@@ -276,8 +276,12 @@ def view_obligations(ctx: Context) -> str:
     # DOUBTED is open too: enough trials, too little consensus. Leaving it out made this list
     # shorter than the obligation count in its own basis line.
     open_obs = [s for s in ctx.slices if s.state in (OBLIGATION, UNGROUNDED, STALE, DOUBTED)]
+    waiting = conditional_lines(ctx)
     if not open_obs:
-        return envelope("No open proof obligations. All derived branches are verified or axiomatic.", basis_line(ctx.slices))
+        head = "No open proof obligations." + (" Nothing to probe; the conditional claims below wait on refuted "
+                                               "premises, which only restating them can mend." if waiting else
+                                               " All derived branches are verified or axiomatic.")
+        return envelope("\n".join([head, *waiting]), basis_line(ctx.slices))
 
     lines = [f"Open Proof Obligations ({len(open_obs)}):", ""]
     for s in open_obs:
@@ -291,7 +295,22 @@ def view_obligations(ctx: Context) -> str:
         lines.append("")
     lines.append('probe: status(view="probe") serves each obligation with its premises in full; '
                  'status(view="probe", subject=<id>) serves one.')
+    lines += waiting
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
+def conditional_lines(ctx: Context) -> list[str]:
+    """The claims whose own step is verified over a step that is not: proofs modulo a premise, as
+    a Lean theorem over a lemma proved by sorry. None needs a probe of its own; each is proven
+    again, with no new trial, once what it waits on is verified at the statement it read."""
+    conditional = [s for s in ctx.slices if s.state == CONDITIONAL]
+    if not conditional:
+        return []
+    lines = ["", f"Conditional ({len(conditional)}) -- own step verified, waiting on a step beneath it; "
+                 "nothing to probe here:"]
+    for s in conditional:
+        lines.append(f"• {s.target_id}: waits on " + ", ".join(f"{a} ({state})" for a, state in s.waiting_on))
+    return lines
 
 
 def view_probe(ctx: Context, subject: str | None = None) -> str:
@@ -323,6 +342,8 @@ def view_probe(ctx: Context, subject: str | None = None) -> str:
         status = slice_badge(s) if s else ""
         if s and s.state not in OPEN_STATES:
             status += (" -- already proven; a new pass re-verifies it" if s.state == PROVEN else
+                       " -- its own step is verified; it waits on "
+                       + ", ".join(f"{a} ({state})" for a, state in s.waiting_on) if s.state == CONDITIONAL else
                        " -- refuted; amend the trial or restate the claim before re-probing" if s.state == REFUTED
                        else " -- ungrounded; its premises must be declared first")
         elif s and s.untried:
@@ -336,8 +357,11 @@ def view_contradictions(ctx: Context) -> str:
     refuted = [s for s in ctx.slices if s.state == REFUTED]
     ungrounded = [s for s in ctx.slices if s.state == UNGROUNDED]
     gapped = [s for s in ctx.slices if s.gaps and s.state not in (REFUTED, UNGROUNDED, PROVEN)]
+    # A verified step over a refuted or ungrounded premise: the step holds, and its ground does not.
+    resting = [s for s in ctx.slices if s.state == CONDITIONAL
+               and any(state in (REFUTED, UNGROUNDED) for _a, state in s.waiting_on)]
 
-    if not refuted and not ungrounded and not gapped:
+    if not refuted and not ungrounded and not gapped and not resting:
         return envelope("Zero contradictions, entailment gaps or ungrounded branches detected.",
                         basis_line(ctx.slices))
 
@@ -356,6 +380,14 @@ def view_contradictions(ctx: Context) -> str:
             lines.append(f"• {s.target_id} [{s.state.upper()}]: {s.statement}")
             for gap in s.gaps:
                 lines.append(f"    GAP: {gap}")
+        lines.append("")
+
+    if resting:
+        lines.append(f"Resting on a Refuted or Ungrounded Premise -- own step verified, not proven ({len(resting)}):")
+        for s in resting:
+            lines.append(f"• {s.target_id}: {s.statement}")
+            lines.append("    RESTS ON: " + ", ".join(f"{a} ({state})" for a, state in s.waiting_on
+                                                       if state in (REFUTED, UNGROUNDED)))
         lines.append("")
 
     if ungrounded:
@@ -697,10 +729,12 @@ def view_cycle(ctx: Context) -> dict[str, Any]:
                 "staged": s.staged,
                 "n_superseded": s.n_superseded,
                 "n_stale": s.n_stale,
+                "waiting_on": [list(w) for w in s.waiting_on],
             }
             for s in ctx.slices
         ],
         "open_obligations_count": sum(1 for s in ctx.slices if s.state == OBLIGATION),
         "refuted_count": sum(1 for s in ctx.slices if s.state == REFUTED),
         "proven_count": sum(1 for s in ctx.slices if s.state == PROVEN),
+        "conditional_count": sum(1 for s in ctx.slices if s.state == CONDITIONAL),
     }

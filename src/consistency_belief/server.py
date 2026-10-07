@@ -74,7 +74,10 @@ Five rules:
    names a source file is refused, because that is an audit of the code and not a judgement of the
    claim. A branch written as a description of what a function returns invites exactly that, so
    propose_branch warns when a claim names one.
-4. Mutating an upstream node invalidates its downstream blast radius as STALE until re-verified.
+4. A trial vouches for one step: its claim from the statements of the premises it cites. Restating
+   a node sets aside the trials of the steps that read it -- the node and those citing it -- and
+   everything further down keeps its trials and reads CONDITIONAL until those are proven again,
+   as a Lean theorem over a lemma proved by sorry. PROVEN means every step beneath is verified.
 5. Escalate to the human for decide(), never approve on their behalf.
 
 Implementation fidelity is the implementer's duty, not the verifier's. Whether the code does what a
@@ -441,6 +444,8 @@ def verify_step(
             "validity": "valid",
             "statement_sha": node.fingerprint(),
             "basis": ctx.dag.basis_fingerprints(target_id),
+            # What the probe served of each cited premise: the trial holds while these stand.
+            "read": ctx.dag.premise_statements(target_id),
             "staged": node.staged,
         }
         trial_id = ctx.store.append_trial(trial_record)
@@ -469,6 +474,9 @@ def verify_step(
                       f"{s.n_independent}/{s.n_min} independent")
         if s.untried and s.state == "obligation":
             slice_line += f" (untried: {', '.join(s.untried)})"
+        if s.waiting_on:
+            slice_line += " -- its own step is verified; it waits on " + ", ".join(
+                f"{a} ({state})" for a, state in s.waiting_on)
     else:
         slice_line = target_id
     lines.append(f"Updated status: {slice_line}")
@@ -525,11 +533,13 @@ def audit_change(
 ) -> str:
     """Calculate the blast radius of modifying or invalidating an axiom or branch.
 
-    A trial vouches for a node's statement and its premises (its fingerprint), so only a change to
-    either restates it: its own trials are set aside and every downstream node turns STALE until
-    re-verified. A change only to the derivation rule -- a CTR- citation, the argument's wording --
-    restates nothing. Pass the proposal to be told which; without one, the radius is what a
-    restatement would cost.
+    A trial vouches for one step: its node's statement and premises (its fingerprint), and the
+    statement of each premise it cites. So a change to the statement or premises restates the
+    node and sets its own trials aside; a change to the statement also sets aside the trials of
+    the steps citing it, which need a verifier pass. Everything further down keeps its trials and
+    reads CONDITIONAL until those steps are proven again. A change only to the derivation rule --
+    a CTR- citation, the argument's wording -- restates nothing. Pass the proposal to be told
+    which; without one, the radius is what a restatement would cost.
     """
     root = project_root()
     ctx = Context.build(root)
@@ -538,8 +548,11 @@ def audit_change(
         return f"unknown node {target_id!r}"
 
     blast = ctx.dag.blast_radius(target_id)
+    citers = sorted(ctx.dag.children.get(target_id, set()))
+    further = [b for b in blast if b not in citers]
     anc = sorted(ctx.dag.ancestors(target_id))
     restates = _restates(node, proposed_statement, proposed_premises)
+    rewords = None if not proposed_statement else _restates(node, proposed_statement, None)
     own = next((s for s in ctx.slices if s.target_id == target_id), None)
     # An impact analysis is the first step of a change; it is recorded so the chain from impact
     # to approval to re-verification is in the ledger, not in someone's memory.
@@ -549,6 +562,7 @@ def audit_change(
         "proposed_premises": list(proposed_premises or []),
         "reason": reason,
         "blast_radius": list(blast),
+        "reverify": citers if rewords is not False else [],
         "restates": restates,
     }, actor=_actor())
 
@@ -566,10 +580,20 @@ def audit_change(
         lines.append("Fingerprint unchanged: the proposal keeps its statement and premises, so "
                      "nothing restates. Own trials: kept. No downstream node becomes STALE.")
         lines.append(f"Downstream dependents ({len(blast)}), unaffected:")
+        lines.append(bullet(blast) if blast else "  (Zero downstream dependents)")
     else:
-        when = "will become STALE" if restates else "become STALE if its statement or premises change"
-        lines.append(f"Downstream blast radius ({len(blast)} nodes {when}):")
-    lines.append(bullet(blast) if blast else "  (Zero downstream dependents)")
+        if rewords is False:
+            lines.append(f"Steps that cite it ({len(citers)}) -- its statement is unchanged, so their trials "
+                         "that recorded it keep their standing; a trial that recorded fingerprints only, "
+                         "made before trials carried statements, is set aside:")
+        else:
+            when = "are set aside" if rewords else "are set aside if its statement changes"
+            lines.append(f"Steps that cite it ({len(citers)}) -- they read its statement, so their trials {when} "
+                         "and each needs a verifier pass:")
+        lines.append(bullet(citers) if citers else "  (none)")
+        lines.append(f"Further downstream ({len(further)}) -- they keep their trials and read CONDITIONAL "
+                     "until the steps above are proven again; no verifier pass is needed for them:")
+        lines.append(bullet(further) if further else "  (none)")
     if own is not None and restates is not False:
         lines.append(f"Own trials: {own.n_trials} set aside -- they verified the current statement "
                      "and premises" if restates else

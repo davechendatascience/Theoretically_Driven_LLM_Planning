@@ -78,13 +78,14 @@ button { font: inherit; color: inherit; }
 /* ---------- marks: state in form as well as color ---------- */
 .mark { display: inline-block; flex: none; width: 9px; height: 9px; border-radius: 50%; }
 .m-ok { background: var(--ok); }
+.m-cond { border: 1.5px solid var(--ok); }
 .m-open { border: 1.5px solid var(--open); }
 .m-doubt { border: 1.5px solid var(--open); background: linear-gradient(90deg, var(--open) 50%, transparent 50%); }
 .m-stale { border: 1.5px dashed var(--stale); }
 .m-bad { background: var(--bad); border-radius: 1px; width: 8px; height: 8px; transform: rotate(45deg); }
 .m-none { border: 1.5px solid var(--rule-strong); }
 .m-decl { background: var(--ink-3); border-radius: 1px; width: 7px; height: 7px; }
-.c-ok { background: var(--ok); } .c-open { background: var(--open); } .c-doubt { background: var(--open); opacity: .6; }
+.c-ok { background: var(--ok); } .c-cond { background: var(--ok); opacity: .45; } .c-open { background: var(--open); } .c-doubt { background: var(--open); opacity: .6; }
 .c-stale { background: var(--stale); } .c-bad { background: var(--bad); } .c-none { background: var(--rule-strong); }
 
 /* ---------- workspace ---------- */
@@ -249,11 +250,12 @@ button { font: inherit; color: inherit; }
   };
   const STATE = {
     refuted: ["bad", "Refuted"], ungrounded: ["bad", "Ungrounded"], doubted: ["doubt", "Doubted"],
-    stale: ["stale", "Stale"], obligation: ["open", "Open obligation"], proven: ["ok", "Proven"],
+    stale: ["stale", "Stale"], obligation: ["open", "Open obligation"], conditional: ["cond", "Conditional"],
+    proven: ["ok", "Proven"],
     "undeclared design": ["open", "Undeclared design"], planned: ["open", "Planned"],
     governed: ["ok", "Governed"], "no design claim": ["none", "No design claim"], "declared only": ["none", "Declared only"],
   };
-  const CLAIM_ORDER = ["refuted", "ungrounded", "doubted", "stale", "obligation", "proven"];
+  const CLAIM_ORDER = ["refuted", "ungrounded", "doubted", "stale", "obligation", "conditional", "proven"];
   const COVER_ORDER = ["undeclared design", "planned", "governed", "declared only", "no design claim"];
   const COVER_WORDS = {
     governed: "Code exists, and a declared branch says why.",
@@ -679,6 +681,10 @@ button { font: inherit; color: inherit; }
     const parts = [];
     if (isClaim(n)) {
       parts.push(section("Claim", prose(n.text)));
+      // A proof modulo a premise: its own step holds, and these steps beneath it do not yet.
+      if (n.waiting && n.waiting.length) parts.push(section(`Waits on · ${n.waiting.length}`, el("div", { class: "reach" },
+        n.waiting.map(([id, state]) => el("div", {}, el("span", { class: "item refs" }, N[id] ? mark(N[id]) : null, refBtn(id)),
+          el("span", { class: "why", text: ` ${(STATE[state] || [, state])[1].toLowerCase()}` }))))));
       if (n.kind === "branch" && n.subject) parts.push(section("Governs", refs([n.subject])));
       parts.push(section(`Proof tree · ${n.premises.length} premise${n.premises.length === 1 ? "" : "s"}`, proofTree(n.id, 0)));
       if (n.rule) parts.push(section("Derivation", prose(n.rule, true)));
