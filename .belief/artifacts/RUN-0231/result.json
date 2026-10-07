@@ -1,0 +1,490 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestResolution::test_a_tagged_region_resolves_and_its_claim_finds_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestResolution::test_a_region_relates_to_several_claims_and_a_claim_to_several_regions"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestResolution::test_one_id_in_two_files_is_reported_and_neither_counts"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestResolution::test_unknown_claims_and_unknown_relation_kinds_are_errors"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestResolution::test_definitions_and_axioms_can_be_implemented"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_marker_text_in_strings_and_docstrings_is_not_a_marker"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:implements BRN-x\\nx = 1\\n-UNMATCHED_BEGIN]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[x = 1\\n# tdlp:end CODE-a\\n-UNMATCHED_END]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:implements BRN-x\\nx = 1\\n# tdlp:end CODE-b\\n-MISMATCHED_END]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:implements BRN-x\\n# tdlp:begin CODE-b\\nx = 1\\n# tdlp:end CODE-b\\n# tdlp:end CODE-a\\n-NESTED_BLOCK]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:implements BRN-x\\n# tdlp:end CODE-a\\n-EMPTY_BLOCK]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\nx = 1\\n# tdlp:end CODE-a\\n-NO_RELATIONS]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\nx = 1\\n# tdlp:implements BRN-x\\n# tdlp:end CODE-a\\n-MISPLACED_RELATION]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:implements BRN-x\\nx = 1\\n-MISPLACED_RELATION]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:implements CTR-x\\nx = 1\\n# tdlp:end CODE-a\\n-MALFORMED_MARKER]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_malformed_region_is_reported_never_dropped[# tdlp:begin CODE-a\\n# tdlp:uses BRN-x\\n# tdlp:uses BRN-x\\nx = 1\\n# tdlp:end CODE-a\\n-DUPLICATE_RELATION]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_a_region_cannot_cross_files"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_hostile_tag_text_is_shown_escaped"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMarkers::test_an_f_string_is_one_token_whatever_the_tokenizer"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_an_unreviewed_link_prints_the_lines_that_align_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_written_pins_align_every_link"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_a_formatter_run_or_a_comment_edit_keeps_the_pin"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_a_code_edit_stays_reported_at_every_later_commit_until_repinned"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_moving_a_statement_into_a_branch_is_a_change"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_restating_a_premise_upstream_stales_every_link_resting_on_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_restating_the_claim_itself_says_so"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_a_derivation_rule_edit_restates_nothing_and_keeps_the_pins"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestAlignment::test_a_removed_claim_leaves_its_tag_and_its_mentions_dangling"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMentions::test_a_mention_outside_any_region_is_untracked"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMentions::test_a_mention_a_region_covers_is_tracked_premises_included"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMentions::test_a_foreign_ids_file_sets_its_mentions_aside_and_says_so"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMentions::test_an_unlinked_branch_names_the_files_its_subject_claims"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestRevisions::test_reads_are_pinned_to_one_revision_while_head_moves"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestRevisions::test_working_tree_edits_are_reported_and_never_indexed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestRevisions::test_a_region_is_tagged_and_pinned_in_one_commit"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestChanges::test_identity_survives_movement_and_inserted_lines"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestChanges::test_a_body_change_and_a_relation_change_are_told_apart"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestChanges::test_a_repin_is_visible_as_a_review_asserted"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestChanges::test_a_deleted_region_orphans_its_claim_and_a_rename_is_recognised"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestScope::test_unsupported_languages_and_unreadable_files_are_explicit"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestScope::test_ledger_files_are_never_scanned"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_links_move_no_proof_state_and_enter_no_premise_graph"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_the_probe_carries_no_code"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_audit_change_names_the_links_a_restatement_unpins_by_id_only"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_the_monitor_reports_and_writes_nothing"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_impact_reports_what_the_range_did_beside_the_chain"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestBoundaries::test_strict_links_exits_one_until_every_link_is_aligned"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links::test_an_unpinned_motivated_by_is_explanatory_never_aligned"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestReportBySubject::test_a_scanned_file_with_no_region_resolves"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestReportBySubject::test_an_uncommitted_region_is_found_by_id_claim_or_path_with_its_pins"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestReportBySubject::test_a_long_report_counts_what_it_cannot_list_and_puts_the_pins_first"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMeasurementBesideLinks::test_each_link_shows_the_state_of_the_evidence_its_claim_cites"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMeasurementBesideLinks::test_a_test_that_names_no_environment_file_is_reported_until_it_does"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_code_links.TestMeasurementBesideLinks::test_names_environment_reads_run_lines_and_reads"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

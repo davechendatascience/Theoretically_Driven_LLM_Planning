@@ -1,0 +1,148 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_every_proof_state_is_the_one_the_server_computes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_commit_during_a_snapshot_does_not_mix_revisions"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_proposal_shows_as_the_ledger_stages_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_uncommitted_edits_are_named_and_not_shown"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_the_joined_graph_lists_its_gaps"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_snapshot_writes_only_its_page"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_snapshot_reads_no_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_git_does_not_see_the_page"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_page_a_declaration_names_is_not_written"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_the_template_ships_with_the_package"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_statement_cannot_end_the_page_early"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_the_cli_says_what_the_tool_says"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_tagged_code_is_listed_on_its_claim_and_is_never_an_edge"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_cited_measurements_and_uncited_contracts_are_shown"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_source_references_are_shown_beside_their_nodes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_graph_snapshot::test_a_conditional_claim_is_drawn_with_what_it_waits_on"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

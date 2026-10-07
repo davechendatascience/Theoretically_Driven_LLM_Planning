@@ -1,0 +1,202 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals::test_the_goal_set_is_goals_yaml_and_every_file_its_tests_name"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestCheck::test_an_agent_commit_to_the_goal_set_is_refused"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestCheck::test_the_same_commit_by_the_human_passes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestCheck::test_an_agent_commit_below_the_goals_passes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestCheck::test_dropping_a_test_from_goals_yaml_does_not_free_its_file"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestCheck::test_creating_goals_yaml_is_the_humans_too"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHook::test_a_real_agent_commit_is_refused_and_yours_goes_through"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHook::test_it_is_reported_as_installed"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHook::test_a_guard_from_an_earlier_release_says_so"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHook::test_another_hook_is_not_overwritten_unasked"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHistory::test_an_agent_commit_that_got_through_is_recorded"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHistory::test_your_next_commit_to_the_goal_set_takes_them_in"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestHistory::test_agent_commits_below_the_goals_are_not_in_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestRatification::test_your_commit_approves_the_goals_policy"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestRatification::test_an_agent_change_to_the_goal_set_withdraws_that"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestRatification::test_a_policy_in_belief_yaml_is_never_approved_by_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestAdoption::test_before_any_goals_the_view_lists_what_could_measure_one"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestAdoption::test_a_draft_is_checked_without_taking_effect"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestAdoption::test_a_promoted_measure_keeps_its_evidence"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestWhatTheGoalsPolicyReads::test_a_prior_on_a_goal_measure_is_the_agents"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestWhatTheGoalsPolicyReads::test_safety_gates_read_the_agents_mandatory_flags"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_goals.TestWhatTheGoalsPolicyReads::test_a_file_moved_out_of_a_goal_directory_is_refused_and_recorded"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

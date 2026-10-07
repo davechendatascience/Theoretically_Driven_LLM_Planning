@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0236/result.json -- acceptance/test_honest_evidence.py -q -p no:asyncio
+exit=0
+test=TST-acceptance-evidence@16f4d204
+at=2026-10-07T00:24:55+00:00
