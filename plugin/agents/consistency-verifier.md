@@ -44,7 +44,7 @@ component-belief; whether the design follows from its premises is yours.
 ## Report
 
 ```
-VERIFIED: <n> node(s) -- PROVEN <ids> · OBLIGATION <ids> · REFUTED <ids> · DOUBTED <ids>
+VERIFIED: <n> node(s) -- PROVEN <ids> · CONDITIONAL <ids> · OBLIGATION <ids> · REFUTED <ids> · DOUBTED <ids>
 STRONGEST ATTACK: <one line per node: what you tried, and why it failed or succeeded>
 GAPS: <per node, the premise the claim would need; or none>
 basis: <the basis line from your last call>

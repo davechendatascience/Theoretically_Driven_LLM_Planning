@@ -55,9 +55,13 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
    governed, planned or built with no design, and which goals no axiom traces to.
 
 4. **Audit before you edit an axiom or lemma.** `audit_change(target_id, ...)` records the
-   blast radius: every downstream node that becomes `STALE` and must be re-verified. Tell
-   the user before the edit; never re-verify a stale branch by re-recording the old outcome.
-   A trial vouches for a node's statement and its premises, not its derivation rule.
+   blast radius. The steps citing the node read its statement, so they turn `STALE` and need a
+   verifier pass. Everything further down keeps its trials and reads `CONDITIONAL` until those
+   steps are proven again; it needs no pass of its own. Tell the user before the edit; never
+   re-verify a stale branch by re-recording the old outcome. A trial vouches for one step --
+   its node's statement and premises and its cited premises' statements -- not its derivation
+   rule. `PROVEN` means every step beneath is verified; a `CONDITIONAL` node waits on the one
+   it names, which is where the work is.
    Re-citing a `CTR-` or rewording the argument restates nothing and sets no trial aside.
    Pass the proposal to `audit_change` and it says which kind of change it is. When you
    wrap a folded YAML scalar, never break a line inside an id: the break folds into a

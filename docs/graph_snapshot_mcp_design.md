@@ -115,7 +115,9 @@ columns.
      of claims not proven, linking to the Claims tab. Each issue links to its node, and the
      inspector lists a node's own issues. The inspector also shows a branch's cited measurements
      with their review state, any node's tagged code regions with their link state, and (0.7.7)
-     the sources a node references, as a list and never an edge, since a reference is no premise. Both are
+     the sources a node references, as a list and never an edge, since a reference is no premise.
+     From 0.7.8 a conditional claim -- its own step verified over a step that is not -- is drawn
+     as a ring between open and proven, and its inspector names the steps it waits on. Both are
      judged from the declarations and code at the snapshot's commit, so no evidence is read.
 2. **Lineage.** The selected node, everything it rests on and everything that rests on it, drawn
    left to right as "rests on":

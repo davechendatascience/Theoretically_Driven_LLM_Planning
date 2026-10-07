@@ -27,9 +27,12 @@
    - Its consensus pass rate meets or exceeds the declared threshold.
    - Zero unresolved counterexamples or active contradictions exist.
 
-## 5. Calculate Topological Blast Radii on Mutation
-1. When an upstream axiom, definition, or lemma is modified, amended, or refuted, the kernel computes its topological blast radius.
-2. All downstream derived branches and contracts are immediately marked `STALE` and their proven status revoked until re-verified against the new premise.
+## 5. A Proof Rests on Its Steps
+1. A trial vouches for one step: its target's claim from the statements of the premises it cites, which is all its probe served. It records the target's fingerprint and each cited premise's statement, and counts while those stand (`DEF-current-trial`).
+2. A lemma or branch is proven only when its own step and every step beneath it are verified. One whose own step is verified over a step that is not -- open, stale, doubted or refuted -- is `CONDITIONAL`, like a Lean theorem over a lemma proved by `sorry`: it keeps its trials and names what it waits on, and no policy requiring `proven` passes it (`DEF-proof-state`, `BRN-proven-rests-on-proven`).
+3. When a node is modified, the kernel computes its blast radius in two parts. The node and the steps citing it read what changed, so their trials are set aside (the citers' only if its statement changed) and they need a verifier pass. Everything further down keeps its trials and waits (`LMA-blast-radius-propagation`).
+4. A premise proven again at a new statement discharges nothing: the steps verified against its old statement stay set aside until they are verified against the new one.
+5. Trials made before trials recorded statements recorded fingerprints; they are compared on their cited premises' fingerprints only, so a change to such a premise's own premises sets them aside too.
 
 ## 6. Preserve Trial-Level Evidence and Provenance
 1. Store individual verification trials; never collapse raw probe outputs into un-auditable aggregates.

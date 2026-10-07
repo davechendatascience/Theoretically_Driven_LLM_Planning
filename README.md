@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.7" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.8" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -281,8 +281,10 @@ anything below the goals; only the human changes what a goal is and how it is me
 
 A result stops counting the moment the thing it measured changes — and not before.
 
-* A **proof trial** records a fingerprint of its target's statement, its premises, and every premise
-  upstream. Restating a node sets its trials aside; restating anything upstream marks it `STALE`.
+* A **proof trial** records its target's fingerprint (statement and premises) and the statement of
+  each premise it cites: what its probe showed. Restating a node sets its trials aside, and so does
+  restating the statement of a premise it cites. Nothing further upstream does, because the step
+  never read it.
 * A **test run** writes a content stamp: the git blob id of every file its evidence rests on, as the
   working tree actually stood. Once one of those files differs at HEAD, its trials are `stale`.
 
@@ -315,7 +317,20 @@ declarations in [`consistency.yaml`](consistency.yaml).
 * **Mechanical DAG kernel.** Acyclicity is enforced before any semantic reasoning; a cycle ($A \implies B \implies A$) is rejected with its trace.
 * **Open obligations (`sorry`).** A lemma or branch with fewer than $n_{\min}$ independent trials is an open `OBLIGATION`.
 * **Only a counterexample refutes.** A probe with outcome `falsified` makes a node `REFUTED`. A `gap` — a missing premise, an unproven step — leaves it unproven, counts against consensus (so the node reads `DOUBTED` once it has enough trials), and is listed under *Entailment Gaps* in `status(view="contradictions")`.
-* **Blast radius.** Restating an upstream axiom or lemma marks every dependent `STALE` until re-verified. A revised claim keeps its id rather than needing a new one to escape old verdicts.
+* **A proof rests on its steps, like Lean's `sorry`.**
+  - A trial vouches for one step: a claim from the statements of the premises it cites.
+  - A lemma or branch is `PROVEN` only when its own step and every step beneath it are verified.
+    One whose own step is verified over a step that is not reads `CONDITIONAL`. It keeps its
+    trials, names what it waits on (`[CONDITIONAL 3/3 · rests on REFUTED BRN-x]`), and no policy
+    requiring `proven` passes it.
+  - Restating a node sets aside only the steps that read it: the node, and the nodes citing it
+    when its statement changed. Everything further down waits, `CONDITIONAL`, and is proven again
+    with no new trial once those steps are. A premise restated in its premises alone, with its
+    statement kept, leaves the steps citing it untouched.
+  - A premise proven again at a *new* statement discharges nothing: the steps verified against
+    the old one are `STALE` until re-verified. `audit_change` says which steps need a verifier
+    pass and which only wait.
+  - A revised claim keeps its id rather than needing a new one to escape old verdicts.
 * **Staged proposals.** `propose_branch` stages a branch that persists, can be verified, and can be cited at once; it shows as `· STAGED`. It supports `decide()` only once declared at HEAD, and trials recorded while staged carry over if the declared statement is the same.
 * **Cited measurements are pinned.**
   - A branch's citation can carry a pin: `evidence: CTR-x@<pin>`, the claim's digest when the
@@ -371,7 +386,7 @@ hand it work.
 | `verify_step` | records one pass of falsification trials, each bound to the statement it verified |
 | `amend` | reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending; the original and the reason stay |
 | `withdraw` | retires a staged proposal; refused for a declaration or anything a declared node cites |
-| `audit_change` | computes the blast radius of changing an axiom or lemma, and records the audit so impact, approval and re-verification form one chain. It also names, by id, the tagged code regions and cited measurements the change would leave unreviewed |
+| `audit_change` | computes the blast radius of changing an axiom or lemma -- the steps citing it, which need a verifier pass, apart from those further down, which only wait -- and records the audit so impact, approval and re-verification form one chain. It also names, by id, the tagged code regions and cited measurements the change would leave unreviewed |
 | `note` | qualitative annotation; zero weight |
 | `decide` | evaluates a policy; `evidence: supported` also requires each cited contract supported in component-belief; human approval for `ADOPT`; records the revision |
 
@@ -649,7 +664,7 @@ src/
   consistency_belief/                deductive server (8 tools)
     declarations.py                  git-HEAD loader, validation, the component join
     graph.py                         proof DAG kernel: acyclicity, grounding, blast radius
-    model.py                         verification state (PROVEN, REFUTED, OBLIGATION, STALE)
+    model.py                         verification state (PROVEN, CONDITIONAL, REFUTED, OBLIGATION, STALE)
     probes.py                        falsification probe generators and parsers
     decide.py                        policy evaluation and the human approval gate
     views.py / render.py             proof tree, status and coverage views
@@ -707,7 +722,7 @@ The suites assert the invariants above, not the implementation:
 1. Asserted notes cannot move a posterior or close a proof obligation.
 2. Uncommitted threshold or axiom edits cannot alter a verdict.
 3. The DAG kernel detects and rejects circular dependencies.
-4. An upstream restatement invalidates exactly its topological blast radius.
+4. A restatement sets aside exactly the trials of the steps that read it, and a node over an unverified step reads conditional, never proven.
 5. A probe that captures a counterexample makes its claim `REFUTED`.
 6. An adoption cannot be recorded without a human approver.
 7. A component removed from `belief.yaml` leaves its designs reported as broken, not proven.
@@ -728,6 +743,7 @@ The suites assert the invariants above, not the implementation:
 22. Staleness gives every trial the verdict it would get alone, judged once per run.
 23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
 24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
+25. The order trials were recorded in decides no proof state, and no policy requiring proven passes a conditional branch.
 
 ---
 
@@ -736,6 +752,46 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.7.8 — 2026-10-07 · a proof rests on its steps
+
+Reported from embodied_ai on 0.7.7: `BRN-chain-is-the-models` was refuted, and two branches
+resting on it still read `PROVEN 3/3`.
+
+- **`PROVEN` now means the whole proof.**
+  - A lemma or branch is proven only when its own step and every step beneath it are verified.
+    One whose own step is verified over a step that is not reads `CONDITIONAL`, like a Lean
+    theorem over a lemma proved by `sorry`.
+  - It keeps its trials and names what it waits on, worst first:
+    `[CONDITIONAL 3/3 · rests on REFUTED BRN-x]`.
+  - `contradictions` lists the ones resting on a refuted or ungrounded premise. `obligations`
+    lists them as nothing to probe. `decide()` passes none under a criterion requiring `proven`.
+    The basis line counts them as `conditional=N`.
+  - The state is computed at every read from the trials taken as a set, so the order the trials
+    came in decides nothing.
+- **A trial vouches for one step, so a restatement re-opens only the steps that read it.**
+  - A trial records the statement of each premise its target cites, which is what its probe
+    showed, and counts while those stand.
+  - Restating a node sets aside its own trials, and those of the steps citing it if its statement
+    changed. Everything further down keeps its trials and is proven again, with no verifier pass
+    of its own, once those steps are.
+  - A premise proven again at a *new* statement discharges nothing: the steps verified against
+    the old one stay set aside.
+  - Trials from before 0.7.8 recorded fingerprints. They are compared on their cited premises'
+    fingerprints only, no longer on every node upstream.
+  - `audit_change` reports the steps that need a pass apart from those that only wait.
+- **On embodied_ai's ledger** (2026-10-07, before and after):
+  - 35 claims that read `PROVEN` now read `CONDITIONAL`.
+  - 3 that read `STALE` keep their trials and read `CONDITIONAL`, so `STALE` falls from 4 to 1.
+  - 2 read `DOUBTED`: entailment gaps recorded against exactly their current claim and premises
+    had been set aside only by a change deeper down, and count again.
+- **The theory here was restated to match.** `AXM-blast-radius-invalidation`,
+  `DEF-current-trial`, `DEF-proof-state` and `LMA-blast-radius-propagation` were restated, and
+  `BRN-proven-rests-on-proven` is new. The verifier rounds falsified the lemma once and found
+  gaps in `DEF-code-link`, `DEF-report` and the declarations gate. Each was fixed by saying what
+  the code already did.
+- graph-snapshot draws a conditional claim as a ring, between open and proven, and its inspector
+  names the steps it waits on.
 
 ### 0.7.7 — 2026-10-07 · sources cited like a paper's references, and one node's tree
 
