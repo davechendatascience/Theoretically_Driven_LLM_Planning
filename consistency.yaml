@@ -804,12 +804,14 @@ branches:
     subject: CMP-consistency-declarations
     claim_type: contract
     statement: >-
-      Only the declarations at the head revision and the proposals staged in
-      the ledger enter the premise graph, and a staged proposal takes no effect
-      as a declaration. A declared or staged node that no build admits is
-      reported, never dropped in silence, and so is a declared or staged branch
-      whose subject belief.yaml no longer declares; that branch keeps its proof
-      state.
+      Only the declarations at the head revision and the proposals staged in the
+      ledger enter the premise graph, and a staged proposal takes no effect as a
+      declaration. A declared or staged node that no build admits is reported,
+      never dropped in silence, and so is a declared or staged branch whose
+      subject belief.yaml no longer declares; a change that removes a branch's
+      subject from belief.yaml and changes nothing else leaves that branch's
+      place in the premise graph, its current trials and its proof state as they
+      were.
     premises: [AXM-commit-is-approval, AXM-no-silent-failure, DEF-premise-graph, DEF-current-trial, DEF-proof-state]
     derivation_rule: >-
       By DEF-premise-graph a build admits nothing but the head revision's
