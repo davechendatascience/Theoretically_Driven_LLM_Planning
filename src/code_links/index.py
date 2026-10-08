@@ -130,7 +130,8 @@ def build_index(root: Path, revision: str, claims: Mapping[str, ClaimRef] | None
                 explain_claim: Callable[[str, str], str | None] | None = None,
                 explain_body: bool = True,
                 reviews: Mapping[tuple[str, str], dict] | None = None,
-                explain_since: Callable[[str, str], str | None] | None = None) -> CodeIndex:
+                explain_since: Callable[[str, str], str | None] | None = None,
+                translate_claim: Callable[[str, str], str] | None = None) -> CodeIndex:
     """Scan the tracked files at `revision` (a full SHA the caller resolved) and, when `claims`
     is given, check every reference and pin against it. `paths` limits the scan to those files,
     for a comparison that only needs what changed; coverage is then not judged."""
@@ -195,7 +196,7 @@ def build_index(root: Path, revision: str, claims: Mapping[str, ClaimRef] | None
 
     body = BodyHistory(root, revision).explain if explain_body else None
     validate(index, claims, explain_claim=explain_claim, explain_body=body, reviews=reviews,
-             explain_since=explain_since)
+             explain_since=explain_since, translate_claim=translate_claim)
     return index
 
 

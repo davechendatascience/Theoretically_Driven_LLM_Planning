@@ -154,6 +154,7 @@ class ClaimRef:
     candidates: tuple[str, ...] = ()
     cites: tuple[str, ...] = ()
     statement: str = ""                         # as it stands, for a reviewer's bundle
+    pin_v1: str = ""                            # the earlier, transitive claim digest
 
 
 @dataclass

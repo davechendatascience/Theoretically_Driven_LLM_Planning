@@ -23,7 +23,7 @@ from dataclasses import dataclass
 
 from .declarations import Declarations
 from .graph import ProofDAG
-from .links import claim_pin
+from .links import CLAIM_SCHEME, claim_pin, claim_pin_v1
 
 #: A contract id in a derivation rule, with the pin written directly after it, if any.
 CITED = re.compile(r"\b(CTR-[A-Za-z0-9][A-Za-z0-9_-]*)(?:@([0-9a-f]{8})\b)?")
@@ -41,14 +41,15 @@ class CitedMeasurement:
     contract: str
     pin: str | None
     expected: str | None
-    review: dict | None = None          # its latest review in the ledger
+    review: dict | None = None          # its latest review in the ledger, claim under the current rule
+    pin_claim: str | None = None        # the derivation-rule pin's claim digest, under the current rule
 
     @property
     def latest(self) -> dict | None:
         """Its review: the latest in the ledger, or else the pin its derivation rule carries."""
         if self.review is not None:
             return self.review
-        return {"claim": self.pin, "outcome": "aligned", "legacy": True} if self.pin else None
+        return {"claim": self.pin_claim or self.pin, "outcome": "aligned", "legacy": True} if self.pin else None
 
     @property
     def state(self) -> str:
@@ -85,21 +86,40 @@ class CitedMeasurement:
                 f'as it now stands, record review("{self.branch}", target="{self.contract}", note=...)')
 
 
-def cited_measurements(decl: Declarations, reviews: dict | None = None) -> list[CitedMeasurement]:
+def cited_measurements(decl: Declarations, reviews: dict | None = None,
+                       translate=None) -> list[CitedMeasurement]:
     """Every contract each declared branch cites, judged against the declared graph -- the one
     DEF-code-link names: the declarations at the head revision, no staged proposal -- and the
-    latest review of each pair in the ledger (`reviews`, keyed (branch, contract))."""
+    latest review of each pair in the ledger (`reviews`, keyed (branch, contract)).
+
+    A derivation-rule pin, and a review from before claim digests read one layer, recorded the
+    earlier digest; `translate(branch, earlier)` gives the current-rule digest it counts as
+    (DEF-review). Without it, one is still read as current exactly when nothing it covered moved."""
     dag = ProofDAG.from_declarations(decl)
     out: list[CitedMeasurement] = []
     for bid in sorted(decl.branches):
         # a branch the declared graph does not admit has no claim digest: its measurements are
         # reported, not reviewed -- never skipped
         expected = claim_pin(dag, bid) if bid in dag.nodes else None
+        earlier = claim_pin_v1(dag, bid) if bid in dag.nodes else None
+
+        def current(digest: str | None, bid: str = bid, expected: str | None = expected,
+                    earlier: str | None = earlier) -> str | None:
+            if digest is None or expected is None:
+                return digest
+            if digest == earlier:
+                return expected                 # nothing the earlier digest covered has moved
+            return translate(bid, digest) if translate else f"v1:{digest}"
+
         pins: dict[str, str | None] = {}
         for m in CITED.finditer(decl.branches[bid].derivation_rule or ""):
             pins[m.group(1)] = pins.get(m.group(1)) or m.group(2)   # any mention may carry it
-        out += [CitedMeasurement(bid, cid, pin, expected, (reviews or {}).get((bid, cid)))
-                for cid, pin in sorted(pins.items())]
+        for cid, pin in sorted(pins.items()):
+            review = (reviews or {}).get((bid, cid))
+            if review is not None and int(review.get("claim_scheme", 1)) < CLAIM_SCHEME:
+                review = {**review, "claim": current(review.get("claim")), "claim_scheme": CLAIM_SCHEME,
+                          "claim_v1": review.get("claim")}
+            out.append(CitedMeasurement(bid, cid, pin, expected, review, current(pin)))
     return out
 
 

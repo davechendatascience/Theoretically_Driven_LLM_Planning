@@ -118,7 +118,8 @@ def _cited_measurements(root: Path) -> list[Finding]:
     decl = load_design(root)
     if decl.source == "none":
         return []
-    found = cited_measurements(decl, Store(root).measurement_reviews())
+    from consistency_belief.links import PinHistory
+    found = cited_measurements(decl, Store(root).measurement_reviews(), PinHistory(root, "HEAD").translate)
     out = [Finding("MEASUREMENT_" + m.state.upper().replace(" ", "_"), WARN, f"{m.branch} -> {m.contract}",
                    f"{m.why}; {m.fix}")
            for m in found if (m.state == NOT_REVIEWED and (m.latest or m.expected is None))

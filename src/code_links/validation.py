@@ -39,8 +39,8 @@ EXPLANATORY = "explanatory"
 
 
 def review_of(block: Block, relation: Relation) -> dict | None:
-    """The link's review: its latest in the ledger, or else the pins its header carries, read as
-    an aligned review under grammar 1 (DEF-review). None: never reviewed."""
+    """The link's review: its latest in the ledger, a moved region's, or else the pins its header
+    carries, read as an aligned review under grammar 1 (DEF-review). None: never reviewed."""
     found = block.reviews.get(relation.target)
     if found is not None:
         return found
@@ -89,13 +89,37 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
              explain_claim: Callable[[str, str], str | None] | None = None,
              explain_body: Callable[[str, str, str], str | None] | None = None,
              reviews: Mapping[tuple[str, str], dict] | None = None,
-             explain_since: Callable[[str, str], str | None] | None = None) -> None:
-    """`reviews` maps (region, node) to its latest review in the ledger. `explain_claim` says why a
-    header pin no longer matches; `explain_since` why a claim moved since a review's commit."""
+             explain_since: Callable[[str, str], str | None] | None = None,
+             translate_claim: Callable[[str, str], str] | None = None) -> None:
+    """`reviews` maps (region, node) to its latest review in the ledger, its claim digest already
+    under the current rule. `explain_claim` says why a header pin no longer matches;
+    `explain_since` why a claim moved since a review's commit; `translate_claim` turns a header
+    pin's earlier-rule claim digest into the current rule's at the revision it held (DEF-review)."""
     out = index.diagnostics
+    reviews = reviews or {}
+    present = {b.block_id for b in index.blocks}
     for block in index.blocks:
-        block.reviews = {t: reviews[(block.block_id, t)] for t in block.targets()
-                         if reviews and (block.block_id, t) in reviews}
+        block.reviews = {t: reviews[(block.block_id, t)] for t in block.targets() if (block.block_id, t) in reviews}
+        for r in block.relations:
+            if r.target in block.reviews or block.pin is None or r.pin is None:
+                continue
+            # A header pin is a review under grammar 1 and the earlier claim rule.
+            known = claims.get(r.target) if claims else None
+            claim = (known.pin if known and r.pin == known.pin_v1 else
+                     translate_claim(r.target, r.pin) if translate_claim else r.pin)
+            block.reviews[r.target] = {"body": block.pin, "claim": claim, "grammar": 1, "outcome": "aligned",
+                                       "legacy": True, "pin": r.pin}
+        # A region no longer carried, reviewed for the same node with this body, follows its code.
+        if index.scope.paths is None:
+            for r in block.relations:
+                if r.target in block.reviews:
+                    continue
+                moved = [(region, rv) for (region, target), rv in reviews.items()
+                         if target == r.target and region not in present and int(rv.get("grammar", 2)) >= 2
+                         and rv.get("body") == block.body_pin]
+                if len(moved) == 1:
+                    region, rv = moved[0]
+                    block.reviews[r.target] = {**rv, "relocated_from": region}
     by_id: dict[str, list[Block]] = {}
     for block in index.blocks:
         by_id.setdefault(block.block_id, []).append(block)
@@ -171,6 +195,17 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
                     f"{r.kind} {r.target} not aligned: {rv.get('note') or '(no note)'}; fix the code or "
                     "restate the claim, then review again", block.path, r.line,
                     (review_call(block, [r.target]),)))
+
+        # Both kinds of review on one region: say which decides, so a header pin is not read as
+        # the state, and suggest dropping it.
+        pinned = [r for r in known if r.pin is not None]
+        if block.pin is not None and pinned and all(not block.reviews.get(r.target, {}).get("legacy")
+                                                    for r in pinned):
+            out.append(Diagnostic(
+                "HEADER_PIN_SUPERSEDED", OBSERVATION, block.block_id,
+                f"its header pins (@{block.pin}) are no longer read: a review in the ledger decides each "
+                "of its links -- drop the @digests from its begin and relation lines when the file is next "
+                "touched", block.path, block.start_line))
 
     code_ids = {b.block_id for b in index.blocks}
     blocks = {b.block_id: b for b in index.blocks if b.valid}

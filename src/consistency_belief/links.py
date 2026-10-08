@@ -1,8 +1,12 @@
 """The design ledger's side of code links: the claim digest a review of a link records, and the
 reviews themselves, which live in this ledger (DEF-review).
 
-A claim digest binds a review to the node's fingerprint -- its statement and the premises it
-cites -- and the fingerprint of every node it depends on. So "stale" has one meaning across the harness: a link goes stale exactly when
+A claim digest binds a review to what the claim's own step reads (DEF-code-link): the node's
+fingerprint -- its statement and the premises it cites -- and the statement of each premise it
+cites, as a verification trial has bound since 0.7.8. A restatement two citations up changes what
+the claim rests on, not what it says, and stales no link. Reviews and pins taken under the
+earlier rule, over every node upstream, are judged at the latest revision where the node had
+that earlier digest (DEF-review): the change of rule stales nothing whose claim reads the same. So "stale" has one meaning across the harness: a link goes stale exactly when
 a trial of its claim would, and restating a definition three levels up reaches the code that
 implements a branch resting on it, as it reaches the branch's trials.
 
@@ -27,7 +31,19 @@ from .store import Store
 _CONTRACT = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9_-]*\b")
 
 
+#: The claim-digest rule a review is taken under. Rule 1 covered every node upstream; rule 2 the
+#: node and the statements of the premises it cites (DEF-code-link).
+CLAIM_SCHEME = 2
+
+
 def claim_pin(dag: ProofDAG, node_id: str) -> str:
+    """A node's claim digest: its fingerprint and the statement of each premise it cites."""
+    return content_hash({"node": dag.nodes[node_id].fingerprint(),
+                         "read": dag.premise_statements(node_id)}, 8)
+
+
+def claim_pin_v1(dag: ProofDAG, node_id: str) -> str:
+    """The earlier rule, over every node upstream: what header pins and 0.8.0 reviews recorded."""
     return content_hash({"node": dag.nodes[node_id].fingerprint(),
                          "basis": dag.basis_fingerprints(node_id)}, 8)
 
@@ -49,7 +65,7 @@ def claim_refs(root: Path, revision: str) -> dict[str, ClaimRef] | None:
     refs = {}
     for nid, node in dag.nodes.items():
         comp = components.get(node.subject)
-        refs[nid] = ClaimRef(pin=claim_pin(dag, nid), kind=node.kind,
+        refs[nid] = ClaimRef(pin=claim_pin(dag, nid), pin_v1=claim_pin_v1(dag, nid), kind=node.kind,
                              basis=frozenset(dag.ancestors(nid)), subject=node.subject,
                              candidates=tuple(comp.code) if comp else (),
                              cites=tuple(sorted(set(_CONTRACT.findall(node.derivation_rule or "")))),
@@ -64,14 +80,23 @@ def claim_changes(root: Path, since: str, revision: str, node_id: str) -> list[t
     then, now = _dag_at(root, since), _dag_at(root, revision)
     if now is None or node_id not in now.nodes:
         return []
-    was = ({i: then.nodes[i] for i in {node_id} | then.ancestors(node_id)}
-           if then is not None and node_id in then.nodes else {})
-    is_ = {i: now.nodes[i] for i in {node_id} | now.ancestors(node_id)}
+    return _one_layer_moves(then, now, node_id)
+
+
+def _one_layer_moves(then: ProofDAG | None, now: ProofDAG, node_id: str) -> list[tuple[str, str | None, str | None]]:
+    """What a claim digest reads that moved: the node itself (its statement or cited premises), and
+    each premise it cites, then or now, whose statement differs."""
+    node_then = then.nodes.get(node_id) if then is not None else None
+    node_now = now.nodes[node_id]
     out = []
-    for i in sorted(set(was) | set(is_), key=lambda i: (i != node_id, i)):
-        a, b = was.get(i), is_.get(i)
-        if a is None or b is None or a.fingerprint() != b.fingerprint():
-            out.append((i, a.statement if a else None, b.statement if b else None))
+    if node_then is None or node_then.fingerprint() != node_now.fingerprint():
+        out.append((node_id, node_then.statement if node_then else None, node_now.statement))
+    cited = sorted(set(node_now.premises) | set(node_then.premises if node_then else []))
+    for pid in cited:
+        a = then.nodes.get(pid) if then is not None and node_then and pid in node_then.premises else None
+        b = now.nodes.get(pid) if pid in node_now.premises else None
+        if (a.statement if a else None) != (b.statement if b else None):
+            out.append((pid, a.statement if a else None, b.statement if b else None))
     return out
 
 
@@ -80,7 +105,7 @@ class PinHistory:
     pinned that way, and which nodes were restated since -- the node itself, or which premises
     upstream."""
 
-    LIMIT = 100
+    LIMIT = 200
 
     def __init__(self, root: Path, revision: str) -> None:
         self.root, self.revision = root, revision
@@ -110,24 +135,35 @@ class PinHistory:
             return "it was not in the declared graph then"
         if now is None or node_id not in now.nodes:
             return "it is not in the declared graph now"
-        # A node counts on a side only where the claim depended on it there: one cited now
-        # and not then is a change as much as one restated.
-        was = {i: then.nodes[i].fingerprint() for i in {node_id} | then.ancestors(node_id)}
-        is_ = {i: now.nodes[i].fingerprint() for i in {node_id} | now.ancestors(node_id)}
-        moved = sorted(i for i in set(was) | set(is_) if was.get(i) != is_.get(i))
-        upstream = [i for i in moved if i != node_id]
+        moved = [i for i, _then, _now in _one_layer_moves(then, now, node_id)]
+        cited = [i for i in moved if i != node_id]
         parts = ([f"{node_id} itself"] if node_id in moved else []) + (
-            [f"upstream {', '.join(upstream[:5])}" + (" ..." if len(upstream) > 5 else "")]
-            if upstream else [])
-        return f"restated since: {'; '.join(parts) or 'nothing it cites'}"
+            [f"the premise{'s' if len(cited) > 1 else ''} it cites {', '.join(cited[:5])}"
+             + (" ..." if len(cited) > 5 else "")] if cited else [])
+        return f"restated since: {'; '.join(parts) or 'nothing it reads'}"
 
     def pinned_at(self, node_id: str, pin: str) -> str | None:
-        """The latest revision of consistency.yaml at which the node had that claim digest."""
+        """The latest revision of consistency.yaml at which the node had that claim digest, under
+        either rule: a header pin or a 0.8.0 review recorded the earlier one."""
         for rev in self._revisions():
             then = self._dag(rev)
-            if then is not None and node_id in then.nodes and claim_pin(then, node_id) == pin:
+            if then is not None and node_id in then.nodes and pin in (claim_pin(then, node_id),
+                                                                      claim_pin_v1(then, node_id)):
                 return rev
         return None
+
+    def translate(self, node_id: str, old: str) -> str:
+        """An earlier-rule claim digest as the digest DEF-review counts it as recording: the
+        current-rule digest the node had at the latest revision with that earlier digest. One no
+        revision gives is a digest no node has -- it reads restated, as it did."""
+        now = self._dag(self.revision)
+        if now is not None and node_id in now.nodes and claim_pin_v1(now, node_id) == old:
+            return claim_pin(now, node_id)          # nothing moved at all: no history to read
+        for rev in self._revisions():
+            then = self._dag(rev)
+            if then is not None and node_id in then.nodes and claim_pin_v1(then, node_id) == old:
+                return claim_pin(then, node_id)
+        return f"v1:{old}"
 
     def explain(self, node_id: str, pin: str) -> str | None:
         """Why a header pin no longer matches: the revision it matched, and what moved since."""
@@ -151,11 +187,22 @@ def scan(root: Path, revision: str = "HEAD", *, paths: list[str] | None = None,
     if sha is None:
         return None
     claims = claim_refs(root, sha)
-    history = PinHistory(root, sha) if explain and claims else None
+    history = PinHistory(root, sha) if claims else None
+    reviews = {key: current_scheme(r, history, key[1]) for key, r in Store(root).link_reviews().items()}
     return build_index(root, sha, claims, paths=paths,
-                       explain_claim=history.explain if history else None,
-                       explain_body=explain, reviews=Store(root).link_reviews(),
-                       explain_since=history.since if history else None)
+                       explain_claim=history.explain if explain and history else None,
+                       explain_body=explain, reviews=reviews,
+                       explain_since=history.since if explain and history else None,
+                       translate_claim=history.translate if history else None)
+
+
+def current_scheme(review: dict, history: PinHistory | None, node_id: str) -> dict:
+    """A review as DEF-review counts it: one taken under the earlier claim rule carries the digest
+    its node had, under the current rule, at the latest revision with its earlier digest."""
+    if int(review.get("claim_scheme", 1)) >= CLAIM_SCHEME or history is None or not review.get("claim"):
+        return review
+    return {**review, "claim": history.translate(node_id, review["claim"]), "claim_scheme": CLAIM_SCHEME,
+            "claim_v1": review["claim"]}
 
 
 def links_reached(index: CodeIndex, node_ids: set[str]) -> list[tuple[str, str, str]]:

@@ -775,6 +775,15 @@ class TestCitedMeasurements:
         [m] = cited_measurements(load(repo))
         return m
 
+    @staticmethod
+    def earlier(design=MEASURED_DESIGN):
+        """The branch's claim digest under the earlier rule, as a derivation-rule pin recorded it."""
+        from consistency_belief.declarations import _parse
+        from consistency_belief.graph import ProofDAG
+        from consistency_belief.links import claim_pin_v1
+
+        return claim_pin_v1(ProofDAG.from_declarations(_parse(design.replace("{pin}", ""))), "BRN-grasp-reach")
+
     def pin(self, repo, pin, design=MEASURED_DESIGN):
         (repo / "consistency.yaml").write_text(design.replace("{pin}", f"@{pin}"), encoding="utf-8")
         git(repo, "commit", "-qam", "reviewed: the contract measures the claim")
@@ -797,7 +806,7 @@ class TestCitedMeasurements:
             {"strategy": s, "outcome": "sound", "rationale": f"{s}: follows"}
             for s in ("counterexample", "entailment", "negation")])
         before = status(view="branches", subject="BRN-grasp-reach")
-        self.pin(measured, self.only(measured).expected)
+        self.pin(measured, self.earlier())
         assert self.only(measured).state == REVIEWED
         after = status(view="branches", subject="BRN-grasp-reach")
         assert "[PROVEN" in before and "[PROVEN" in after, "the pin set no trial aside"
@@ -807,7 +816,7 @@ class TestCitedMeasurements:
         from consistency_belief.measurements import NOT_REVIEWED, REVIEWED
         from stamp_monitor.audit import audit
 
-        pin = self.only(measured).expected
+        pin = self.earlier()
         self.pin(measured, pin, MEASURED_DESIGN.replace("only proposes reachable poses",
                                                          "only proposes reachable, collision-free poses"))
         m = self.only(measured)
@@ -818,8 +827,8 @@ class TestCitedMeasurements:
         assert "MEASUREMENT_NOT_REVIEWED" in {f.code for f in audit(measured)}
         self.pin(measured, pin, MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
         assert self.only(measured).state == NOT_REVIEWED, "a premise restated upstream reaches it too"
-        self.pin(measured, self.only(measured).expected,
-                 MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
+        restated = MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms.")
+        self.pin(measured, self.earlier(restated), restated)
         assert self.only(measured).state == REVIEWED
 
     def test_a_measurement_review_reads_reviewed_until_the_claim_moves(self, measured):
@@ -847,7 +856,7 @@ class TestCitedMeasurements:
     def test_rewording_the_derivation_rule_keeps_the_review(self, measured):
         from consistency_belief.measurements import REVIEWED
 
-        pin = self.only(measured).expected
+        pin = self.earlier()
         self.pin(measured, pin, MEASURED_DESIGN.replace("By DEF-reachable.", "It follows by DEF-reachable."))
         assert self.only(measured).state == REVIEWED
 
@@ -1000,3 +1009,22 @@ def test_a_conditional_node_names_what_it_waits_on(committed_repo: Path):
     assert "PROBE BRN-gpu-throttling" not in status("probe")
     one = status("probe", subject="BRN-gpu-throttling")
     assert "its own step is verified; it waits on LMA-compute-cap (refuted)" in one
+
+
+def test_the_reviews_view_lists_every_review_newest_first(repo, monkeypatch):
+    from consistency_belief.server import review
+
+    (repo / "consistency.yaml").write_text(MEASURED_DESIGN.replace("{pin}", ""), encoding="utf-8")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a branch citing a contract")
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(repo))
+    assert "None. review(" in status(view="reviews")
+    review("BRN-grasp-reach", target="CTR-grasp-reachable", note="first reading")
+    review("BRN-grasp-reach", target="CTR-grasp-reachable", outcome="not_aligned", note="it skips collisions")
+    out = status(view="reviews", subject="BRN-grasp-reach")
+    assert out.index("REV-0002") < out.index("REV-0001"), "newest first"
+    assert "BRN-grasp-reach cites CTR-grasp-reachable -- not_aligned" in out and "[latest]" in out
+    assert out.count("[latest]") == 1 and "it skips collisions" in out and "first reading" in out
+    assert "commit .consistency/reviews.yaml" in out
+    assert "Reviews (0 of CTR-nothing" in status(view="reviews", subject="CTR-nothing")
+

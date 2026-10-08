@@ -331,8 +331,8 @@ components:
     failure_modes:
       - {id: FM-unreviewed-edit-forgotten, observable: "a tagged body edited without re-pinning reads aligned a commit later",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_code_edit_stays_reported_at_every_later_commit_until_repinned"}
-      - {id: FM-upstream-restatement-missed, observable: "a premise restated upstream of a linked claim leaves its pins aligned",
-         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_restating_a_premise_upstream_stales_every_link_resting_on_it"}
+      - {id: FM-upstream-restatement-missed, observable: "a premise a linked claim cites, restated, leaves its link aligned",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_restating_a_premise_stales_the_links_of_the_claims_that_cite_it"}
       - {id: FM-dangling-mention-silent, observable: "a comment naming a removed claim produces no finding",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_removed_claim_leaves_its_tag_and_its_mentions_dangling"}
       - {id: FM-formatting-churn, observable: "a formatter run or a comment edit stales a body pin",
@@ -362,7 +362,7 @@ components:
       - {id: FM-move-loses-review, observable: "a reviewed function moved to another file, unchanged, reads unreviewed",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestRelocation::test_a_moved_function_keeps_its_review"}
       - {id: FM-decider-unsaid, observable: "a link with both a header pin and a ledger review does not say which decides",
-         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviews::test_the_report_says_which_review_decides"}
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestDecider::test_the_report_says_which_review_decides"}
       - {id: FM-stale-without-diffs, observable: "a link stale since its review is shown without the code diff or the claim diff since it",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviewBundle::test_a_stale_link_shows_both_diffs_since_its_review"}
       - {id: FM-environment-unscoped-silent, observable: "a test behind linked code names no lockfile and nothing says so",

@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarations, _git_show, _parse,
+from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarations, _git_show, _parse, git_head,
                            contract_beliefs,
                            load as load_declarations)
 from .graph import ProofDAG, ProofNode
@@ -24,10 +24,10 @@ from .render import basis_line, bullet, envelope, render_ascii_dag, render_linea
 from .store import Store
 
 VIEWS = ("tree", "branches", "axioms", "sources", "obligations", "probe", "contradictions", "coverage", "audit",
-         "cycle")
+         "reviews", "cycle")
 
 #: The views that read status(subject=...); every other view ignores it, and says so.
-SUBJECT_VIEWS = ("tree", "branches", "probe", "audit")
+SUBJECT_VIEWS = ("tree", "branches", "probe", "audit", "reviews")
 
 #: States a verifier can still act on: the probe view serves these.
 OPEN_STATES = (OBLIGATION, STALE, DOUBTED)
@@ -241,6 +241,33 @@ def view_axioms(ctx: Context) -> str:
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
 
 
+def view_reviews(ctx: Context, subject: str | None = None) -> str:
+    """Every review recorded (DEF-review), newest first -- of a region, a node, a branch or a
+    contract when `subject` names one -- with the latest of each link or measurement marked."""
+    reviews = ctx.store.reviews()
+    latest: dict[tuple, str] = {}
+    for r in reviews:
+        key = (r.get("region"), r.get("target")) if r.get("kind") == "link" else (r.get("branch"), r.get("contract"))
+        latest[key] = r.get("id", "")
+    shown = [r for r in reviews if not subject or subject in (r.get("region"), r.get("target"), r.get("branch"),
+                                                                r.get("contract"))]
+    lines = [f"Reviews ({len(shown)}" + (f" of {subject}" if subject else "") + f", of {len(reviews)} recorded)"
+             f" -- {ctx.store.reviews_where()}", ""]
+    if not shown:
+        lines.append("None. review(<CODE-id>, note=...) records one after you read committed code against its claim; "
+                     "review(<BRN-id>, target=<CTR-id>) one of a cited contract.")
+    for r in reversed(shown):
+        key = (r.get("region"), r.get("target")) if r.get("kind") == "link" else (r.get("branch"), r.get("contract"))
+        what = (f"{r.get('region')} {r.get('relation', 'relates to')} {r.get('target')}" if r.get("kind") == "link"
+                else f"{r.get('branch')} cites {r.get('contract')}")
+        mark = "  [latest]" if latest.get(key) == r.get("id") else ""
+        lines.append(f"{r.get('id')} {str(r.get('timestamp') or '')[:16]} {what} -- {r.get('outcome')} at "
+                     f"{str(r.get('commit') or '')[:7]} by {r.get('actor') or '?'}{mark}")
+        if r.get("note"):
+            lines.append(f"    {r['note']}")
+    return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
 def view_sources(ctx: Context) -> str:
     """The reference list: each declared source, its entry and the nodes that reference it, then
     the references naming no declared source. A reference is for the reader; it weighs nothing in
@@ -424,7 +451,10 @@ def view_coverage(ctx: Context) -> str:
     slices = {s.target_id: s for s in ctx.slices}
     beliefs = contract_beliefs(ctx.root)
     cited = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9-]*\b")
-    measured = cited_measurements(decl, ctx.store.measurement_reviews())
+    from .links import PinHistory
+    head = git_head(ctx.root)
+    measured = cited_measurements(decl, ctx.store.measurement_reviews(),
+                                  PinHistory(ctx.root, head).translate if head else None)
     review = {(m.branch, m.contract): m for m in measured}
     designs: dict[str, list[str]] = {}
     removed: list[str] = []          # subject was a component id; belief.yaml no longer declares it

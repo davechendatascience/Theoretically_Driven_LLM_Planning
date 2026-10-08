@@ -198,6 +198,8 @@ def bundle(root: Path, index: CodeIndex, block) -> list[str]:
                          if rv.get("legacy") else since)
         if rv.get("note"):
             lines.append(f"    last review {rv.get('id', '')} by {rv.get('actor') or '?'}: {display(rv['note'], 300)}")
+        if rv.get("relocated_from"):
+            lines.append(f"    its review was carried from {rv['relocated_from']}, where the same code was reviewed")
     if base_code:
         diff = region_diff(root, base_code, rev, block.path, block.start_line, block.end_line)
         lines.append(f"    code since {base_code[:7]}:" + ("" if diff else " (git shows no change in these lines)"))
@@ -228,6 +230,11 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
              f"{len(states) - n_explain - n_review} aligned, {n_review} not"
              + (f"; {n_explain} motivated-by, explanatory only" if n_explain else ""),
              f"scope: {index.scope.describe()}"]
+    try:
+        from consistency_belief.store import Store
+        lines.append("reviews: " + Store(root).reviews_where())
+    except ImportError:
+        pass
     if not index.validated:
         lines.append("no consistency.yaml at this revision: references and pins are unchecked")
 
@@ -354,15 +361,27 @@ def _uncommitted(root: Path, index: CodeIndex, subject: str | None) -> list[str]
     return lines
 
 
+def decided_by(block, relation) -> str:
+    """Which review sets the link's state, and what was compared: a reader of a region carrying
+    both a header pin and a ledger review must not take the pin for the state."""
+    rv = review_of(block, relation)
+    if rv is None:
+        return "never reviewed"
+    if rv.get("legacy"):
+        return (f"decided by its header pin: body @{block.pin} against @{block.legacy_body_pin} under grammar 1"
+                f" (the old digest, docstrings kept), claim @{rv.get('pin') or rv.get('claim')} under the earlier rule")
+    moved = f", carried from {rv['relocated_from']} (moved, its code unchanged)" if rv.get("relocated_from") else ""
+    return (f"decided by {rv.get('id')} at {str(rv.get('commit') or '')[:7]} by {rv.get('actor') or '?'}, "
+            f"{rv.get('outcome')}{moved}")
+
+
 def _block_lines(block, claims, index: CodeIndex, evidence=lambda _t: "") -> str:
     kind = "  (docstring region)" if block.origin == "docstring" else ""
-    out = [f"{block.block_id} {block.location}  body @{block.body_pin}{kind}" + ("" if block.valid else "  INVALID")]
+    header = f"  ·  header pin @{block.pin} is grammar 1's @{block.legacy_body_pin}" if block.pin else ""
+    out = [f"{block.block_id} {block.location}  body @{block.body_pin}{kind}{header}" + ("" if block.valid else "  INVALID")]
     for r in block.relations:
-        rv = review_of(block, r)
-        seen = ("never reviewed" if rv is None else
-                f"pinned in its header @{rv.get('claim')}" if rv.get("legacy") else
-                f"{rv.get('id')} at {str(rv.get('commit') or '')[:7]} by {rv.get('actor') or '?'}, {rv.get('outcome')}")
-        out.append(f"  {r.kind} {r.target} [{link_state(block, r, claims)}] -- {seen}" + evidence(r.target))
+        out.append(f"  {r.kind} {r.target} [{link_state(block, r, claims)}] -- {decided_by(block, r)}"
+                   + evidence(r.target))
     return "\n".join(out)
 
 

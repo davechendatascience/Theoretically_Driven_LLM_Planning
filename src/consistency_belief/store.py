@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,13 @@ from typing import Any, Iterator
 from .ids import sequential_id
 
 STORE_DIR = ".consistency"
+#: Reviews of code links and cited measurements (DEF-review) live in a file of their own, meant
+#: to be tracked even where a repository keeps its event ledgers local: which code realizes which
+#: claim, and who read it at which commit, travels with the code. One JSON object per line.
+REVIEWS_FILE = "reviews.yaml"
+_REVIEWS_HEADER = (
+    "# Reviews of code links and cited measurements (DEF-review): appended by review(), never edited.\n"
+    "# Track this file in git -- it is what makes a review travel with the code. One review a line.\n")
 VALIDITY = ("valid", "invalid", "quarantined", "superseded")
 
 
@@ -193,16 +201,72 @@ class Store:
 
     # ---------- reviews ----------
 
+    @property
+    def reviews_path(self) -> Path:
+        return self.dir / REVIEWS_FILE
+
+    def _events_reviews(self) -> list[dict[str, Any]]:
+        """Reviews 0.8.0 recorded as events in events.jsonl, before they had a file of their own."""
+        return [{**e.get("payload", {}), "actor": e.get("actor", ""), "timestamp": e.get("timestamp", "")}
+                for e in self.events() if e.get("tool") == "review"]
+
+    def _file_reviews(self) -> list[dict[str, Any]]:
+        if not self.reviews_path.exists():
+            return []
+        out = []
+        for line in self.reviews_path.read_text(encoding="utf-8").splitlines():
+            if line.startswith("- {"):
+                try:
+                    out.append(json.loads(line[2:]))
+                except json.JSONDecodeError:
+                    continue
+        return out
+
     def append_review(self, payload: dict[str, Any], actor: str = "agent") -> dict[str, Any]:
-        """Record that `actor` read a code link or a cited measurement at one commit (DEF-review).
-        A review is an event: appended, never edited, and the latest one for a link wins."""
-        rec = {**payload, "id": sequential_id("REV", len(self.reviews()) + 1)}
-        self.append_event("review", rec, actor=actor)
+        """Record that `actor` read a code link or a cited measurement at one commit (DEF-review):
+        appended, never edited; the latest one for a link wins. The first review written to the
+        reviews file carries over those recorded in events.jsonl before it existed."""
+        self.ensure()
+        if not self.reviews_path.exists():
+            carried = [{**r, "carried_from": "events.jsonl"} for r in self._events_reviews()]
+            self.reviews_path.write_text(_REVIEWS_HEADER + "".join(
+                "- " + json.dumps(r, sort_keys=True) + "\n" for r in carried), encoding="utf-8")
+        rec = {**payload, "id": sequential_id("REV", len(self.reviews()) + 1), "actor": actor,
+               "timestamp": utc_now()}
+        with self.reviews_path.open("a", encoding="utf-8") as f:
+            f.write("- " + json.dumps(rec, sort_keys=True) + "\n")
         return rec
 
     def reviews(self) -> list[dict[str, Any]]:
-        return [{**e.get("payload", {}), "actor": e.get("actor", ""), "timestamp": e.get("timestamp", "")}
-                for e in self.events() if e.get("tool") == "review"]
+        """Every review, oldest first: those in events.jsonl not yet carried into the reviews file,
+        then the file's."""
+        filed = self._file_reviews()
+        ids = {r.get("id") for r in filed}
+        return [r for r in self._events_reviews() if r.get("id") not in ids] + filed
+
+    def reviews_ignored(self) -> str | None:
+        """The .gitignore rule that keeps the reviews file out of git, or None when git would
+        track it (or there is no git to ask)."""
+        try:
+            out = subprocess.run(["git", "check-ignore", "-v", "--no-index", f"{STORE_DIR}/{REVIEWS_FILE}"],
+                                 cwd=self.root, capture_output=True, text=True, timeout=30,
+                                 stdin=subprocess.DEVNULL, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if out.returncode != 0 or not out.stdout.strip():
+            return None
+        source = out.stdout.split("\t", 1)[0]
+        return None if source.split(":")[-1].startswith("!") else source
+
+    def reviews_where(self) -> str:
+        """Where reviews are kept, and what to do so they travel with the code."""
+        rule = self.reviews_ignored()
+        where = f"{STORE_DIR}/{REVIEWS_FILE}"
+        if rule:
+            return (f"{where} is ignored by git ({rule}), so reviews stay on this machine: add the line "
+                    f"`!{where}` to .gitignore (and un-ignore {STORE_DIR}/ if a rule ignores the "
+                    "directory), then commit it")
+        return f"commit {where} with your change: reviews travel with the code"
 
     def link_reviews(self) -> dict[tuple[str, str], dict[str, Any]]:
         """The latest review of each code link, by (region id, node id)."""

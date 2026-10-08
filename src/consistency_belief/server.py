@@ -34,6 +34,7 @@ from .views import (
     view_no_declarations,
     view_obligations,
     view_probe,
+    view_reviews,
     view_sources,
     view_tree,
 )
@@ -189,6 +190,8 @@ def status(
       audit          - for a node id, the blast radius if it is modified; for a CMP- id, what
                        that component's designs rest on (its branches, the axioms, definitions
                        and lemmas they reach, and which other components share that ground)
+      reviews        - every review of a code link or a cited measurement, newest first, the latest
+                       of each marked; subject=<CODE-, node, BRN- or CTR- id> narrows it
       cycle          - full state as structured JSON
     """
     if view not in VIEWS:
@@ -230,6 +233,8 @@ def _status(view: str, subject: str | None) -> str:
         return view_coverage(ctx)
     if view == "audit":
         return view_audit(ctx, subject)
+    if view == "reviews":
+        return view_reviews(ctx, subject)
     if view == "cycle":
         return json.dumps(view_cycle(ctx), indent=2, default=str)
 
@@ -608,8 +613,10 @@ def audit_change(
     if restates is not True:
         lines.append("A change only to the derivation rule -- a CTR- citation, the argument's "
                      "wording -- restates nothing and sets no trial aside.")
-    lines += _code_links_unpinned(root, target_id, blast, restates)
-    lines += _measurements_unreviewed(ctx, target_id, blast, restates)
+    # A claim digest reads one layer (DEF-code-link): a restatement reaches the links and cited
+    # measurements of the node itself and of the nodes citing it, not the whole blast radius.
+    lines += _code_links_unpinned(root, target_id, citers, restates)
+    lines += _measurements_unreviewed(ctx, target_id, citers, restates)
 
     return envelope("\n".join(lines), basis_line(ctx.slices))
 
@@ -700,7 +707,7 @@ def review(subject: str, target: str | None = None, outcome: str = "aligned", no
     """
     from code_links import GRAMMAR_VERSION, link_state, resolve_revision
 
-    from .links import claim_pin, scan
+    from .links import CLAIM_SCHEME, claim_pin, scan
     from .measurements import cited_measurements
 
     root = project_root()
@@ -745,7 +752,8 @@ def review(subject: str, target: str | None = None, outcome: str = "aligned", no
         recorded = [store.append_review({
             "kind": "link", "region": subject, "target": r.target, "relation": r.kind, "path": block.path,
             "commit": head, "body": block.body_pin, "grammar": GRAMMAR_VERSION,
-            "claim": claims[r.target].pin, "outcome": outcome, "note": note.strip()}, actor=actor)
+            "claim": claims[r.target].pin, "claim_scheme": CLAIM_SCHEME, "outcome": outcome,
+            "note": note.strip()}, actor=actor)
             for r in relations]
         after = scan(root, head, explain=False)
         now = after.get_block(subject) if after else None
@@ -766,13 +774,13 @@ def review(subject: str, target: str | None = None, outcome: str = "aligned", no
             return (f"{subject}, or a node it rests on, has uncommitted edits in consistency.yaml: commit "
                     "them first, so the review names the claim you read")
         rec = store.append_review({"kind": "measurement", "branch": subject, "contract": target,
-                                   "commit": head, "claim": m.expected, "outcome": outcome,
-                                   "note": note.strip()}, actor=actor)
+                                   "commit": head, "claim": m.expected, "claim_scheme": CLAIM_SCHEME,
+                                   "outcome": outcome, "note": note.strip()}, actor=actor)
         lines = [f"{rec['id']} recorded: {subject} cites {target} -- {outcome} at {head[:7]}"]
     else:
         return "subject is a CODE- region id, or a BRN- branch with target the CTR- contract it cites"
-    lines.append("A review is a ledger record, not a trial: it moves no proof state. Commit .consistency "
-                 "with your evidence.")
+    lines.append("A review is a ledger record, not a trial: it moves no proof state. "
+                 + store.reviews_where() + ".")
     return "\n".join(lines)
 
 

@@ -94,9 +94,9 @@ def codes(index, severity=None) -> list[str]:
 
 def pinned(index) -> str:
     """The servo file with its header pinned as reviews were written before they were ledger
-    records: the body under grammar 1, and each claim's digest as it stands (DEF-review)."""
+    records: the body under grammar 1, and each claim's digest under the earlier rule (DEF-review)."""
     block, claims = index.get_block("CODE-servo-cap"), index.claims
-    return servo(body=block.legacy_body_pin, brn=claims["BRN-servo"].pin, lma=claims["LMA-scaling"].pin)
+    return servo(body=block.legacy_body_pin, brn=claims["BRN-servo"].pin_v1, lma=claims["LMA-scaling"].pin_v1)
 
 
 @pytest.fixture
@@ -240,15 +240,17 @@ class TestAlignment:
         commit(aligned, {"servo.py": text})
         assert "BODY_CHANGED" in codes(scan(aligned), REVIEW)
 
-    def test_restating_a_premise_upstream_stales_every_link_resting_on_it(self, aligned):
+    def test_restating_a_premise_stales_the_links_of_the_claims_that_cite_it(self, aligned):
+        """A claim digest reads one layer (DEF-code-link): the lemma cites DEF-cap, the branch does
+        not -- it cites the lemma, whose statement is unchanged."""
         commit(aligned, {"consistency.yaml": DESIGN.replace("never up.", "never up, and never to zero.")},
                "restate DEF-cap")
         index = scan(aligned)
-        restated = [d for d in index.diagnostics if d.code == "CLAIM_RESTATED"]
-        assert len(restated) == 2, "the branch and the lemma both rest on the definition"
-        assert all("upstream DEF-cap" in d.message for d in restated)
+        [restated] = [d for d in index.diagnostics if d.code == "CLAIM_RESTATED"]
+        assert "uses LMA-scaling" in restated.message and "the premise it cites DEF-cap" in restated.message
         block = index.get_block("CODE-servo-cap")
-        assert {link_state(block, r, index.claims) for r in block.relations} == {CLAIM_RESTATED}
+        assert {r.target: link_state(block, r, index.claims) for r in block.relations} == {
+            "BRN-servo": ALIGNED, "LMA-scaling": CLAIM_RESTATED}
 
     def test_restating_the_claim_itself_says_so(self, aligned):
         commit(aligned, {"consistency.yaml": DESIGN.replace("at most the bound times dt", "at most the bound")})
@@ -435,7 +437,8 @@ class TestBoundaries:
         from consistency_belief.server import audit_change
 
         out = audit_change("DEF-cap", proposed_statement="A vector scaled to exactly a given norm.")
-        assert "CODE-servo-cap implements BRN-servo" in out and "CODE-servo-cap uses LMA-scaling" in out
+        assert "CODE-servo-cap uses LMA-scaling" in out, "the lemma cites DEF-cap"
+        assert "CODE-servo-cap implements BRN-servo" not in out, "the branch reads the lemma, not DEF-cap"
         assert "servo.py" not in out
         same = audit_change("DEF-cap", proposed_statement="A vector scaled down to at most a given norm, never up.")
         assert "unaffected, their reviews hold" in same
@@ -718,3 +721,98 @@ class TestReviewBundle:
         assert "last review REV-0001" in out and "capped at cap * dt" in out
         assert 'once read, record: review("CODE-servo-cap", note="what you checked")' in out
         assert "to review (1)" in report(reviewing), "the full report draws the bundle too"
+
+
+# --- reviews travel with the code; claims read one layer; moved code keeps its review ----------
+
+class TestVersionedReviews:
+    def test_reviews_go_to_a_file_git_can_track_and_an_ignored_one_is_named(self, reviewing):
+        """Reported from embodied_ai, whose .gitignore keeps *.jsonl ledgers local: its reviews
+        existed on one machine. Reviews now have a file of their own, and an ignored one is named."""
+        from consistency_belief.server import review
+        from consistency_belief.store import Store
+
+        # A review 0.8.0 recorded as an event is carried into the file by the first new one.
+        (reviewing / ".consistency").mkdir(exist_ok=True)
+        old = {"timestamp": "2026-10-08T00:00:00+00:00", "actor": "agent", "tool": "review",
+               "payload": {"id": "REV-0001", "kind": "link", "region": "CODE-servo-cap", "target": "LMA-scaling",
+                           "commit": "0" * 40, "body": "00000000", "claim": "00000000", "outcome": "aligned"}}
+        (reviewing / ".consistency" / "events.jsonl").write_text(json.dumps(old) + "\n", encoding="utf-8")
+        out = review("CODE-servo-cap", target="BRN-servo", note="capped at cap * dt")
+        assert "REV-0002 recorded" in out and "commit .consistency/reviews.yaml with your change" in out
+        text = (reviewing / ".consistency" / "reviews.yaml").read_text(encoding="utf-8")
+        assert text.startswith("# Reviews of code links") and '"carried_from": "events.jsonl"' in text
+        assert [r["id"] for r in Store(reviewing).reviews()] == ["REV-0001", "REV-0002"]
+
+        commit(reviewing, {".gitignore": ".consistency/\n"}, "keep the ledgers local")
+        out = review("CODE-servo-cap", target="BRN-servo", note="again")
+        assert ".consistency/reviews.yaml is ignored by git (.gitignore:1:.consistency/)" in out
+        assert "`!.consistency/reviews.yaml`" in out
+
+
+class TestClaimDigest:
+    def test_a_restatement_beyond_the_cited_premises_leaves_the_link_aligned(self, reviewing):
+        from consistency_belief.server import review
+
+        review("CODE-servo-cap", note="read against both")
+        commit(reviewing, {"consistency.yaml": DESIGN.replace("never up.", "never up, and never to zero.")},
+               "restate DEF-cap, which the lemma cites and the branch does not")
+        assert states(reviewing) == {"BRN-servo": ALIGNED, "LMA-scaling": CLAIM_RESTATED}
+
+    def test_old_claim_digests_are_judged_at_the_revision_they_were_taken(self, aligned, monkeypatch):
+        """Header pins and 0.8.0 reviews recorded the earlier, transitive digest. Each counts as the
+        one-layer digest its claim had at the latest revision with that earlier digest
+        (DEF-review): the change of rule stales nothing, and a deep restatement stales only what
+        reads it."""
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(aligned))
+        assert set(states(aligned).values()) == {ALIGNED}, "the change of rule stales nothing"
+        index = scan(aligned)
+        (aligned / ".consistency").mkdir(exist_ok=True)
+        old = {"timestamp": "2026-10-08T00:00:00+00:00", "actor": "agent", "tool": "review",
+               "payload": {"id": "REV-0001", "kind": "link", "region": "CODE-servo-cap", "target": "BRN-servo",
+                           "commit": index.revision, "body": index.get_block("CODE-servo-cap").body_pin,
+                           "grammar": 2, "claim": index.claims["BRN-servo"].pin_v1, "outcome": "aligned"}}
+        (aligned / ".consistency" / "events.jsonl").write_text(json.dumps(old) + "\n", encoding="utf-8")
+        commit(aligned, {"consistency.yaml": DESIGN.replace("never up.", "never up, and never to zero.")},
+               "restate DEF-cap")
+        assert states(aligned) == {"BRN-servo": ALIGNED, "LMA-scaling": CLAIM_RESTATED}
+        commit(aligned, {"consistency.yaml": DESIGN.replace("never up.", "never up, and never to zero.")
+                         .replace("preserves its direction", "keeps its direction")}, "restate the lemma")
+        assert states(aligned) == {"BRN-servo": CLAIM_RESTATED, "LMA-scaling": CLAIM_RESTATED}, \
+            "the branch cites the lemma: its statement is what the branch reads"
+
+
+class TestRelocation:
+    def test_a_moved_function_keeps_its_review(self, reviewing):
+        from consistency_belief.server import review
+        from stamp_monitor.links import report
+
+        commit(reviewing, {"idle.py": IDLE}, "the idle path")
+        review("CODE-idle-command", note="returns zero")       # named by its Region: line
+        review("CODE-idle--Idle", note="an idle class")         # named by its path: moves change it
+        commit(reviewing, {"idle.py": None, "arm/idle.py": IDLE}, "move the idle path into arm/")
+        assert set(states(reviewing, "CODE-idle-command").values()) == {ALIGNED}, "a named region kept its id"
+        assert set(states(reviewing, "CODE-arm-idle--Idle").values()) == {ALIGNED}, "the review followed the code"
+        assert "carried from CODE-idle--Idle (moved, its code unchanged)" in report(reviewing, "CODE-arm-idle--Idle")
+        commit(reviewing, {"arm/idle.py": IDLE.replace("return 0.0", "return 0")}, "and edit it")
+        assert set(states(reviewing, "CODE-arm-idle--Idle").values()) == {UNREVIEWED}, \
+            "a review follows unchanged code only"
+
+
+class TestDecider:
+    def test_the_report_says_which_review_decides(self, aligned, monkeypatch):
+        """Reported from embodied_ai: a header pin @5db46a30 beside `body @3e85d4e1` read as a stale
+        link, though the pin is compared under grammar 1, where it matches."""
+        from consistency_belief.server import review
+        from stamp_monitor.links import report
+
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(aligned))
+        index = scan(aligned)
+        block = index.get_block("CODE-servo-cap")
+        out = report(aligned, "CODE-servo-cap")
+        assert f"header pin @{block.pin} is grammar 1's @{block.legacy_body_pin}" in out
+        assert "decided by its header pin" in out and "HEADER_PIN_SUPERSEDED" not in out
+        review("CODE-servo-cap", note="read again")
+        out = report(aligned, "CODE-servo-cap")
+        assert "decided by REV-0001" in out and "decided by its header pin" not in out
+        assert "HEADER_PIN_SUPERSEDED" in [d.code for d in scan(aligned).diagnostics]

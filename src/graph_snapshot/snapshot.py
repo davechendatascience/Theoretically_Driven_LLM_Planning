@@ -33,6 +33,7 @@ from component_belief.declarations import load as load_components
 from component_belief.staleness import named_paths
 from code_links import ERROR, REVIEW, CodeIndex, link_state, review_of
 from consistency_belief.declarations import DECLARATION_FILE as CONSISTENCY_FILE
+from consistency_belief.links import PinHistory
 from consistency_belief.links import scan as scan_links
 from consistency_belief.measurements import REVIEWED, cited_measurements, uncited_by_kind
 from consistency_belief.model import CONDITIONAL, PROVEN
@@ -145,7 +146,7 @@ def take(root: Path) -> dict[str, Any]:
     # Judged from the declarations at this commit and the reviews in the ledger as read -- a review
     # against a claim digest -- so no evidence record is read; a contract's own state is never
     # shown (DEF-snapshot).
-    cited = cited_measurements(ctx.decl, ctx.store.measurement_reviews())
+    cited = cited_measurements(ctx.decl, ctx.store.measurement_reviews(), PinHistory(root, sha).translate)
     for m in cited:
         if m.branch in nodes:
             nodes[m.branch].setdefault("measured", []).append({"contract": m.contract, "state": m.state,
