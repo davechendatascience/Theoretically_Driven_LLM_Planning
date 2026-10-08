@@ -590,27 +590,28 @@ definitions:
       The tool records a review only at the head revision, only when the
       region's file has no uncommitted edit and the node's or the branch's claim
       digest is the same in the working tree's declarations as at that revision,
-      and only with the digests as they stand there. The latest review of a link
-      or of a cited measurement is the last one appended for it. A link or a
-      cited measurement with no review in the ledger, whose pins were written
-      before reviews were recorded -- a link's on its begin and relation
-      comments, a measurement's directly after a mention of its contract in the
-      branch's derivation rule, the first if more than one -- counts as having
-      for its latest review an aligned one, taken under the first grammar,
-      recording the digests those pins name: a link's pins name the body digest
-      its region had under the first grammar and the claim digest its node had
-      under the earlier rule, at the revision they were written, and a
-      measurement's pin names the earlier-rule claim digest its branch had then.
-      A review or pin whose claim digest was taken under the earlier rule --
-      over the fingerprints of the node and of every node it depends on --
-      counts as recording the claim digest its node had, as DEF-code-link
-      defines it, at the latest revision at which the node had that earlier
-      digest, and as recording a digest no node has where there is no such
-      revision. A link whose region has no review of its own for its node counts
-      as its latest review the latest review of a region no longer carried at
-      that revision, for the same node, that recorded the body digest this
-      region has there under that review's grammar, where exactly one such
-      region exists. Otherwise one with no review and no pins has no review.
+      and only with the digests as they stand there. A link's latest review at a
+      revision is, in this order: the last review appended for it; else, where
+      exactly one region no longer carried at that revision was reviewed for the
+      same node and its last review for that node recorded the body digest this
+      region has there under that review's grammar, that review; else, where its
+      begin and relation comments carry pins, an aligned review taken under the
+      first grammar recording the digests those pins name. A cited measurement's
+      latest review is the last review appended for it; else, where its branch's
+      derivation rule carries a pin directly after a mention of its contract,
+      the first if more than one, an aligned review recording the digest that
+      pin names. A link or measurement with none of these has no latest review.
+      A link's pins name the body digest its region had under the first grammar
+      and the claim digest its node had under the earlier rule, at the revision
+      they were written, and a measurement's pin names the earlier-rule claim
+      digest its branch had then. The earlier rule's digest of a node is
+      determined by the fingerprints of the node and of each node it depends on,
+      each taken with its id, and differs whenever any of those, or the set of
+      nodes it depends on, differs. A review or pin whose claim digest was taken
+      under the earlier rule counts as recording the claim digest its node had,
+      as DEF-code-link defines it, at the latest revision, in the order history
+      is read back from the head, at which the node had that earlier digest, and
+      as recording a digest no node has where there is no such revision.
       Recording a review appends no trial, amendment, note, decision or
       proposal, withdraws no proposal and changes no declaration.
 
@@ -1135,17 +1136,17 @@ branches:
     statement: >-
       At every revision, a code link reads aligned exactly when it is aligned. A
       link is not aligned, and is reported with why, at every revision at which
-      it has no review; or its latest review is not aligned; or its region's
-      code, as its latest review's grammar keeps it, differs from the code whose
-      body digest that review records; or its node is not in the declared graph;
-      or its node's statement or cited premises, or the statement of a premise
-      it cites, differ from when the claim digest its latest review records was
-      taken. The review tool records a review only of code committed as it
-      stands, and with the revision it was made at. A mention, in a comment or
-      docstring of a scanned file that does not declare its ids foreign, of an
-      id that names no node in the declared graph at that revision and no code
-      region is reported. Neither recording a review nor producing these reports
-      changes a proof state.
+      it has no latest review, as DEF-review defines it; or its latest review is
+      not aligned; or its region's code, as its latest review's grammar keeps
+      it, differs from the code whose body digest that review records; or its
+      node is not in the declared graph; or its node's statement or cited
+      premises, or the statement of a premise it cites, differ from when the
+      claim digest its latest review records was taken. The review tool records
+      a review only of code committed as it stands, and with the revision it was
+      made at. A mention, in a comment or docstring of a scanned file that does
+      not declare its ids foreign, of an id that names no node in the declared
+      graph at that revision and no code region is reported. Neither recording a
+      review nor producing these reports changes a proof state.
     premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-review, DEF-current-trial, DEF-premise-graph, DEF-report, DEF-proof-state]
     derivation_rule: >-
       By AXM-links-never-silent every code link is reported, at every revision,
@@ -1153,27 +1154,30 @@ branches:
       why, so it reads aligned exactly when it is aligned. By DEF-aligned-link a
       link is aligned only when its latest review, as DEF-review defines it, is
       aligned and recorded the body digest its region has under that review's
-      grammar and the claim digest its node has; so a link with no review, or
-      whose latest review is not aligned, is not aligned. By DEF-review a review
-      records the digests its region and node had at the revision it was taken
-      at, under the grammar it was taken under -- the first, for a review
-      counted from pins. By DEF-code-link a body digest under a grammar differs
-      whenever the code that grammar keeps differs, so where the region's code,
-      so kept, differs from the code the review read, the digest differs from
-      the recorded one. By DEF-code-link the claim digest is determined by the
-      node's fingerprint and the statement of each premise it cites in the
-      declared graph, which DEF-code-link builds as DEF-premise-graph describes,
-      and differs whenever either differs; by DEF-current-trial the fingerprint
-      differs whenever the node's statement or cited premises differ, so in each
-      of those cases the claim digest differs from the recorded one -- which, by
-      DEF-review, a review or pin taken under the earlier rule counts as the
-      digest its node had at the latest revision with its earlier digest. A node
-      not in the declared graph fails DEF-aligned-link directly. In every case
-      DEF-aligned-link is not met, and by AXM-links-never-silent the link is
-      reported with why at every revision at which the case holds. By DEF-review
-      the tool records a review only at the head revision, only when the
-      region's file has no uncommitted edit, and with that revision, so only of
-      code committed as it stands. The mention clause is
+      grammar and the claim digest its node has; so a link with no latest
+      review, or whose latest review is not aligned, is not aligned. By
+      DEF-review a review records the digests its region and node had at the
+      revision it was taken at, under the grammar it was taken under -- the
+      first, for a review counted from pins. By DEF-code-link a body digest
+      under a grammar differs whenever the code that grammar keeps differs, so
+      where the region's code, so kept, differs from the code the review read,
+      the digest differs from the recorded one. By DEF-code-link the claim
+      digest is determined by the node's fingerprint and the statement of each
+      premise it cites in the declared graph, which DEF-code-link builds as
+      DEF-premise-graph describes, and differs whenever either differs; by
+      DEF-current-trial the fingerprint differs whenever the node's statement or
+      cited premises differ, so in each of those cases the claim digest differs
+      from the recorded one -- which, by DEF-review, a review or pin taken under
+      the earlier rule counts as the digest its node had at the latest revision
+      with its earlier digest; since that earlier digest differs whenever the
+      fingerprint of the node or of any node it depends on differs, the node and
+      the premises it cites read there as they did when the review or pin was
+      taken. A node not in the declared graph fails DEF-aligned-link directly.
+      In every case DEF-aligned-link is not met, and by AXM-links-never-silent
+      the link is reported with why at every revision at which the case holds.
+      By DEF-review the tool records a review only at the head revision, only
+      when the region's file has no uncommitted edit, and with that revision, so
+      only of code committed as it stands. The mention clause is
       AXM-links-never-silent's. By DEF-review recording a review appends no
       trial, amendment, note, decision or proposal, withdraws no proposal and
       changes no declaration, and by DEF-report producing a report appends no
@@ -1188,16 +1192,16 @@ branches:
     claim_type: contract
     statement: >-
       At every revision, a cited measurement reads reviewed exactly when it is
-      reviewed. One with no review is not reviewed, and neither is one whose
-      latest review is not aligned; nor one whose branch is not in the declared
-      graph at that revision; nor one whose branch's statement or cited
-      premises, or the statement of a premise it cites in the declared graph at
-      that revision, differ from when the claim digest its latest review records
-      was taken; each is reported with why at every revision at which that
-      holds. Recording a review restates no node and leaves every current trial
-      current. At every revision, every contract declared at that revision that
-      no branch declared there names in its derivation rule is reported. None of
-      these reports changes a proof state.
+      reviewed. One with no latest review, as DEF-review defines it, is not
+      reviewed, and neither is one whose latest review is not aligned; nor one
+      whose branch is not in the declared graph at that revision; nor one whose
+      branch's statement or cited premises, or the statement of a premise it
+      cites in the declared graph at that revision, differ from when the claim
+      digest its latest review records was taken; each is reported with why at
+      every revision at which that holds. Recording a review restates no node
+      and leaves every current trial current. At every revision, every contract
+      declared at that revision that no branch declared there names in its
+      derivation rule is reported. None of these reports changes a proof state.
     premises: [AXM-cited-measurements-reviewed, DEF-cited-measurement, DEF-review, DEF-code-link, DEF-current-trial, DEF-premise-graph, DEF-restatement, DEF-report, DEF-proof-state]
     derivation_rule: >-
       By AXM-cited-measurements-reviewed every cited measurement is reported at
@@ -1205,10 +1209,10 @@ branches:
       not reviewed with why, so it reads reviewed exactly when it is reviewed.
       By DEF-cited-measurement one is reviewed only when its branch is in the
       declared graph and its latest review, as DEF-review defines it, is aligned
-      and recorded the branch's claim digest there; so one with no review, or
-      whose latest review is not aligned, is not, and one whose branch is
-      outside the declared graph, having no claim digest there, is not. By
-      DEF-review a review records the claim digest its branch had at the
+      and recorded the branch's claim digest there; so one with no latest
+      review, or whose latest review is not aligned, is not, and one whose
+      branch is outside the declared graph, having no claim digest there, is
+      not. By DEF-review a review records the claim digest its branch had at the
       revision it was taken at -- for one counted from a pin, the revision the
       pin was written at; by DEF-code-link the claim digest is determined by the
       branch's fingerprint and the statement of each premise it cites in the
@@ -1216,12 +1220,15 @@ branches:
       the fingerprint differs whenever the branch's statement or cited premises
       differ; and by DEF-review a review or pin taken under the earlier rule
       counts as recording the digest its branch had at the latest revision with
-      its earlier digest. So in each remaining case, all read in the declared
-      graph, the digest differs from the recorded one and the measurement is not
-      reviewed, and AXM-cited-measurements-reviewed reports it with why at every
-      revision at which the case holds. By DEF-review recording a review appends
-      no trial, amendment, note, decision or proposal, withdraws no proposal and
-      changes no declaration, so by DEF-restatement it restates no node, by
+      its earlier digest, where, since that earlier digest differs whenever the
+      fingerprint of the branch or of any node it depends on differs, the branch
+      and the premises it cites read as they did when it was taken. So in each
+      remaining case, all read in the declared graph, the digest differs from
+      the recorded one and the measurement is not reviewed, and
+      AXM-cited-measurements-reviewed reports it with why at every revision at
+      which the case holds. By DEF-review recording a review appends no trial,
+      amendment, note, decision or proposal, withdraws no proposal and changes
+      no declaration, so by DEF-restatement it restates no node, by
       DEF-premise-graph every build is as it was, and by DEF-current-trial, with
       no amendment appended, every trial current before is current after. The
       uncited-contract clause is AXM-cited-measurements-reviewed's. By
