@@ -128,4 +128,11 @@ is optional: a project without one is still checked branch by branch, and a proj
    documenting code asks for no re-review.
 5. Pins written before reviews were records still count, as aligned reviews under the first
    grammar, which kept docstrings: an upgrade stales nothing, and a ledger review replaces them.
+6. A link's claim digest reads one layer (`DEF-code-link`): the claim's statement and the
+   statements of the premises it cites, as a trial does. A review taken under the earlier,
+   transitive digest is judged at the latest revision with that digest (`DEF-review`).
+7. A link's latest review is, in order, its own in the ledger, a moved region's (the one region
+   no longer present that was reviewed for the same claim with the same body), then its header
+   pins. Reviews live in `.consistency/reviews.yaml`, which a repository tracks even where it
+   keeps its event ledgers local.
 

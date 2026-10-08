@@ -145,9 +145,10 @@ stretch that is not a whole definition, mark it with `# tdlp:begin CODE-<name>` 
 
 1. **Commit, then review.** Read the region against its claim as committed, then record
    `review("<region id>", note="what you checked")`. `stamp-monitor links` names each region's
-   id. A review of uncommitted code or claims is refused: it names the commit it read.
+   id. A review of uncommitted code or claims is refused: it names the commit it read. Commit
+   `.consistency/reviews.yaml` afterwards; if git ignores it, the reply says which line to add.
 2. **A stale link is a review, not a chore.** `BODY_CHANGED` means the code moved since the last
-   review; `CLAIM_RESTATED` means the claim or a premise upstream changed. `stamp-monitor links`
+   review; `CLAIM_RESTATED` means the claim, or a premise it cites, was restated. `stamp-monitor links`
    shows the bundle: the claim now, what moved in it, and the code diff since. Re-read, then
    review. Never record a review of a region you did not re-read.
 3. **A mismatch is a finding.** `review(..., outcome="not_aligned", note=...)` records it; fix the

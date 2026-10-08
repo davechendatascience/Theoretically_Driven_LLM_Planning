@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.8.0" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.8.1" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -507,8 +507,16 @@ record `review("CODE-<id>", note="what you checked")` in consistency-belief.
 
 * **Code edit.** A review records the body's digest, which ignores comments, docstrings and
   formatting, so a code edit stales it and documenting the code does not.
-* **Claim restated.** A review records the claim's digest, which binds to what a verification
-  trial binds to, so restating the claim, or any premise upstream of it, stales the link.
+* **Claim restated.** A review records the claim's digest: its statement and the statements of
+  the premises it cites, which is what a verification trial binds to. Restating either stales the
+  link; a restatement further upstream does not.
+* **Reviews travel with the code.** They live in `.consistency/reviews.yaml`, one per line,
+  append-only. Commit it even where the event ledgers stay local; `review()` and `links` say when
+  git ignores it, and give the `.gitignore` line to add. `status(view="reviews")` lists every review.
+* **Moved code keeps its review.** A reviewed function moved to another file, unchanged, carries
+  its review to its new region (`carried from`).
+* **Which review decides.** `links` says, per link, whether its ledger review or its header pin
+  sets its state, and shows a header pin beside the old-grammar digest it is compared with.
 * **Persistent.** A stale link is reported at every revision until someone re-reads the region
   and records a new review, not only in the commit that broke it.
 * **The review bundle.** For each link to review, `stamp-monitor links` shows the claim as it
@@ -772,6 +780,38 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.8.1 — 2026-10-08 · reviews travel with the code, and a link's claim reads one layer
+
+From a second report on code links, from embodied_ai.
+
+- **Reviews have a tracked file of their own.** embodied_ai ignores `*.jsonl`, so its 0.8.0
+  reviews, written to `events.jsonl`, existed on one machine. Reviews now go to
+  `.consistency/reviews.yaml`. The first new review carries over those already in `events.jsonl`.
+  `review()`, `links` and `status(view="reviews")` say when git ignores the file and give the line
+  to add.
+- **A link's claim digest reads one layer**, as trials have since 0.7.8: the claim's statement and
+  the statements of the premises it cites.
+  - In embodied_ai, 6 of 18 links reading `claim restated` had moved only two or more citations
+    up; they read aligned now.
+  - Header pins, derivation-rule pins and 0.8.0 reviews recorded the earlier digest. Each is
+    judged as the one-layer digest its claim had at the latest revision with that earlier digest,
+    so the change stales nothing.
+  - `audit_change` lists the links and measurements of the node and the nodes citing it.
+- **A moved function keeps its review.** A region no longer present, reviewed for the same claim
+  with the same body, hands its review to the region now holding that code.
+- **Which review decides.** `links` names it for each link: the ledger review (id, commit, actor)
+  or the header pin under the old grammar. `HEADER_PIN_SUPERSEDED` suggests dropping a pin once a
+  ledger review exists.
+  - The report's "every header pin went stale" was this display: a new-grammar digest printed
+    beside an old-grammar pin. embodied_ai read 43 aligned before and after 0.8.0.
+- **`status(view="reviews")`** lists every review, newest first, with the latest marked.
+- **Theory.** `DEF-code-link` (the claim digest) and `DEF-review` were restated, along with the two
+  link branches.
+  - Round one doubted both branches. It found the old digest's coverage unstated, and a loophole:
+    renaming a region and keeping its pins could set aside a failed review.
+  - `DEF-review` now orders a link's reviews: its own, then a moved region's, then its pins. The
+    code was changed to match.
 
 ### 0.8.0 — 2026-10-08 · reviews are ledger records bound to a commit, and a docstring declares a region
 
