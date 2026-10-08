@@ -110,8 +110,10 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_verify_step_refuses_a_falsification_argued_from_source"}
       - {id: FM-restated-claim-keeps-measurement, observable: "a branch restated, or one whose premise was, reads its cited contract as reviewed",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_restating_the_claim_or_a_premise_leaves_it_unreviewed_until_read_again"}
-      - {id: FM-pin-restates, observable: "writing a pin on a cited measurement sets a trial aside",
+      - {id: FM-pin-restates, observable: "writing a pin, or recording a review, on a cited measurement sets a trial aside",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_a_pin_reads_reviewed_and_restates_nothing"}
+      - {id: FM-measurement-review-ignored, observable: "a cited measurement reviewed aligned in the ledger reads unreviewed, or reads reviewed after its claim moved",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server.TestCitedMeasurements::test_a_measurement_review_reads_reviewed_until_the_claim_moves"}
       - {id: FM-goal-measures-mixed, observable: "a goal's measure is listed among the component contracts no design cites",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_goal_and_interface_measures_are_listed_apart_from_a_components"}
       - {id: FM-uncited-contract-silent, observable: "a contract no branch cites goes unreported",
@@ -317,9 +319,11 @@ components:
   - id: CMP-code-links
     purpose: Read tagged code regions at one revision and say whether each link still matches its code and its claim
     testable_capability: >-
-      Reads markers from real comments only, at one resolved revision; reports every link whose
-      body or claim pin no longer matches, at every revision until it is re-pinned, and every id
-      named in a comment or docstring that resolves to nothing; and moves no proof state
+      Reads regions from real comments and from docstrings that declare relations, at one
+      resolved revision; aligns a link only by its latest review in the ledger, and reports every
+      link whose code or claim moved since that review, at every revision until it is reviewed
+      again, with the code and claim diffs since; refuses a review of uncommitted code; reports
+      every id named in a comment or docstring that resolves to nothing; and moves no proof state
     failure_modes:
       - {id: FM-unreviewed-edit-forgotten, observable: "a tagged body edited without re-pinning reads aligned a commit later",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestAlignment::test_a_code_edit_stays_reported_at_every_later_commit_until_repinned"}
@@ -335,6 +339,18 @@ components:
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestRevisions::test_working_tree_edits_are_reported_and_never_indexed"}
       - {id: FM-aligned-read-as-working, observable: "a link reads aligned with nothing beside it saying the evidence its claim cites is stale or missing",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestMeasurementBesideLinks::test_each_link_shows_the_state_of_the_evidence_its_claim_cites"}
+      - {id: FM-review-ignored, observable: "a link reviewed aligned in the ledger reads unreviewed, or reads aligned after its code or claim moved",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviews::test_a_ledger_review_aligns_a_link_until_either_side_moves"}
+      - {id: FM-failed-review-aligned, observable: "a link whose latest review found it not aligned reads aligned",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviews::test_a_failed_review_reads_not_aligned_until_reviewed_again"}
+      - {id: FM-uncommitted-reviewed, observable: "a review is recorded of a region, or a claim, with uncommitted edits",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviews::test_a_review_of_uncommitted_code_or_claims_is_refused"}
+      - {id: FM-legacy-pins-dropped, observable: "a link pinned in its header before reviews were recorded reads unreviewed after the upgrade",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviews::test_pins_in_headers_count_as_reviews"}
+      - {id: FM-docstring-region-unread, observable: "a function whose docstring declares Implements: is not a region, or a docstring edit stales its review",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestDocstringRegions::test_a_docstring_declares_a_function_region"}
+      - {id: FM-stale-without-diffs, observable: "a link stale since its review is shown without the code diff or the claim diff since it",
+         observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestReviewBundle::test_a_stale_link_shows_both_diffs_since_its_review"}
       - {id: FM-environment-unscoped-silent, observable: "a test behind linked code names no lockfile and nothing says so",
          observed_by: CTR-code-links-aligned, case: "tests.test_code_links.TestMeasurementBesideLinks::test_a_test_that_names_no_environment_file_is_reported_until_it_does"}
     remediation: code_links.parser's body digest; code_links.validation; consistency_belief.links.claim_pin

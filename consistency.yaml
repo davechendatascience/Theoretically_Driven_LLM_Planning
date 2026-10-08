@@ -494,8 +494,8 @@ definitions:
       declaration it shows from that commit and from no other version of it; a
       declaration file whose working copy differs from that commit it names as
       carrying uncommitted edits, which it does not show. It builds the premise
-      graph as DEF-premise-graph defines it, from that commit's declarations
-      and the proposals staged in the ledger as the snapshot read it, and every
+      graph as DEF-premise-graph defines it, from that commit's declarations and
+      the proposals staged in the ledger as the snapshot read it, and every
       proposal it shows is the one staged for that id in the ledger as the
       snapshot read it. For each lemma and branch in that build it shows the
       proof state DEF-proof-state gives that node in that build, and no other.
@@ -504,48 +504,53 @@ definitions:
       goal no axiom names, a component with code that no declared branch
       governs, an interface or goal no branch governs, an axiom or definition
       nothing rests on, a cited measurement that is not reviewed at that commit
-      as DEF-cited-measurement defines it, and a contract declared at that
-      commit that no branch declared there names in its derivation rule,
-      marked as a goal's, an interface's or a component's. Beside each branch
-      it shows whether each of its cited measurements is reviewed at that
-      commit. Beside each axiom, definition, lemma and
-      branch it shows the code regions linked to that node in the scanned files
-      of that commit, each with its link's state as DEF-aligned-link gives it at
-      that commit, and it lists the tags and mentions the code-link scan of that
-      commit reports as broken and the links it reports as not aligned; a code
-      region is never a node or an edge of the premise graph it shows. It shows
-      no state for a contract and reads no evidence record. Taking a snapshot
-      appends no record to the ledger --
-      no trial, amendment, note, event or decision, of any provenance --
-      changes no declaration, makes no commit and does not move the head
-      revision. Besides the report it returns, it writes two files and nothing
-      else: its page, and a file that keeps git from tracking the directory
-      both are in. That directory holds no declaration file and no part of the
-      ledger, and where a component's code claims either file, or a declared
-      test names either on its run line or among what it reads, the snapshot
-      writes nothing.
+      as DEF-cited-measurement defines it, judged from the reviews in the ledger
+      as the snapshot read it, and a contract declared at that commit that no
+      branch declared there names in its derivation rule, marked as a goal's, an
+      interface's or a component's. Beside each branch it shows whether each of
+      its cited measurements is reviewed at that commit, so judged. Beside each
+      axiom, definition, lemma and branch it shows the code regions linked to
+      that node in the scanned files of that commit, each with its link's state
+      as DEF-aligned-link gives it at that commit from the reviews in the ledger
+      as the snapshot read it, and it lists the tags and mentions the code-link
+      scan of that commit reports as broken and the links it reports as not
+      aligned; a code region is never a node or an edge of the premise graph it
+      shows. It shows no state for a contract and reads no evidence record.
+      Taking a snapshot appends no record to the ledger -- no trial, amendment,
+      note, event or decision, of any provenance -- changes no declaration,
+      makes no commit and does not move the head revision. Besides the report it
+      returns, it writes two files and nothing else: its page, and a file that
+      keeps git from tracking the directory both are in. That directory holds no
+      declaration file and no part of the ledger, and where a component's code
+      claims either file, or a declared test names either on its run line or
+      among what it reads, the snapshot writes nothing.
 
   - id: DEF-code-link
     term: Code link
     meaning: >-
       A scanned file at a revision is a Python source file git tracks at that
-      revision outside the ledger directories. A code link is a relation of kind
-      implements, uses or checks, declared in comments of a scanned file at a
-      revision, from a delimited region of that file to a node, carrying two
-      pins: a body pin on the region and a claim pin on the relation. A relation
-      of kind motivated-by asserts no correspondence and is not a code link. A
-      region's body digest is determined by its code with comments and layout
-      set aside, and differs whenever that code differs. The declared graph at a
-      revision is the premise graph DEF-premise-graph describes, built from the
-      declarations committed at that revision with no staged proposal. A node's
-      claim digest at a revision is determined by the fingerprints, as
-      DEF-current-trial uses them, of the node and of every node it depends on
-      in the declared graph at that revision, and differs whenever any of those
-      differs or the set of nodes it depends on differs. A link's body pin is
-      taken by recording the body digest of the link's own region, and its claim
-      pin by recording the claim digest of the link's own node, each as it
-      stands at the revision the pin is taken at, so a pin equals that digest as
-      it stood then. A file that declares tdlp:foreign-ids names ids of the
+      revision outside the ledger directories. A region is a stretch of a
+      scanned file: either the lines from a begin comment to the end comment
+      naming the same id, carrying the relations declared in comments right
+      after its begin, or a function, class or module whose docstring declares
+      relations in lines that begin Implements:, Uses: or Checks: and name node
+      ids, spanning that definition. A region is known by its id: the one its
+      begin names, or the one a Region: line of its docstring names, or else one
+      derived from its file's path and the definition's qualified name. A code
+      link is a relation of kind implements, uses or checks from a region to a
+      node; a relation of kind motivated-by asserts no correspondence and is not
+      a code link. A region has a body digest under each grammar: under the
+      first, its code with comments and layout set aside; under the second, with
+      docstrings set aside as well; under either, the digest differs whenever
+      the code that grammar keeps differs. A review recorded in the ledger is
+      taken under the second grammar, and a pin written in the source under the
+      first. The declared graph at a revision is the premise graph
+      DEF-premise-graph describes, built from the declarations committed at that
+      revision with no staged proposal. A node's claim digest at a revision is
+      determined by the fingerprints, as DEF-current-trial uses them, of the
+      node and of every node it depends on in the declared graph at that
+      revision, and differs whenever any of those differs or the set of nodes it
+      depends on differs. A file that declares tdlp:foreign-ids names ids of the
       projects it builds; its mentions are not mentions of this project's nodes.
       A code link is a declared relationship: it is not a trial and not a record
       in the ledger.
@@ -554,27 +559,47 @@ definitions:
     term: Aligned link
     meaning: >-
       A code link is aligned at a revision exactly when its region is well
-      formed and its id is carried by no other region there, its node is in
-      the declared graph at that revision, its body pin equals the region's
-      body digest at that revision, and its claim pin equals the node's claim
-      digest at that revision.
+      formed and its id is carried by no other region there, its node is in the
+      declared graph at that revision, and its latest review, as DEF-review
+      defines it, is aligned and recorded the body digest its region has at that
+      revision under the grammar that review was taken under, and the claim
+      digest its node has at that revision.
 
   - id: DEF-cited-measurement
     term: Cited measurement
     meaning: >-
       A cited measurement at a revision is a pair of a branch declared at that
       revision and a contract id that branch's derivation rule names, once or
-      more. It carries a pin when a pin is written directly after a mention of
-      that id in that rule -- the first such pin, if more than one -- taken by
-      recording the branch's claim digest, as DEF-code-link defines it, when
-      the contract's acceptance rule and the tests that measure it were read
-      against the branch's claim; so a pin equals that digest for the claim as
-      it stood then. A branch that is not in the declared graph at a revision
-      has no claim digest there. A cited measurement is reviewed at a revision
-      exactly when it carries a pin, its branch is in the declared graph at
-      that revision, and its branch's claim digest there equals the pin. A
-      derivation rule is neither a node's statement nor the premises it cites,
-      so writing, changing or removing a pin changes neither.
+      more. A branch that is not in the declared graph at a revision has no
+      claim digest there, the claim digest being DEF-code-link's. A cited
+      measurement is reviewed at a revision exactly when its branch is in the
+      declared graph at that revision and its latest review, as DEF-review
+      defines it, is aligned and recorded the branch's claim digest at that
+      revision. A derivation rule is neither a node's statement nor the premises
+      it cites, so writing, changing or removing a pin in one changes neither.
+
+  - id: DEF-review
+    term: Review
+    meaning: >-
+      An event the review tool appends to the ledger, never edited, recording
+      that its actor read one code link, or one cited measurement, at one
+      revision. A review of a code link names the link's region and node and
+      records the region's body digest and the node's claim digest at that
+      revision; a review of a cited measurement names the branch and the
+      contract and records the branch's claim digest at that revision; each
+      records that revision, an outcome, aligned or not aligned, and its actor.
+      The tool records a review only at the head revision, only when the
+      region's file has no uncommitted edit and the node's or the branch's claim
+      digest is the same in the working tree's declarations as at that revision,
+      and only with the digests as they stand there. The latest review of a link
+      or of a cited measurement is the last one appended for it. A link or a
+      cited measurement with no review in the ledger, whose pins were written
+      before reviews were recorded -- a link's on its begin and relation
+      comments, a measurement's directly after a mention of its contract in the
+      branch's derivation rule, the first if more than one -- counts as having
+      for its latest review an aligned one recording the digests those pins
+      name; one with neither has no review. Recording a review appends no trial,
+      amendment, note, decision or proposal and changes no declaration.
 
   - id: DEF-source-reference
     term: Source reference
@@ -1095,41 +1120,50 @@ branches:
     subject: CMP-code-links
     claim_type: contract
     statement: >-
-      At every revision, a code link reads aligned exactly when it is aligned.
-      A link is not aligned, and is reported with why, at every revision at
-      which its region's code, comments and layout aside, differs from the code
-      its body pin was taken from; or its node is not in the declared graph; or
-      its node, or a node its node depends on there, has a statement or cited
-      premises other than when its claim pin was taken, or its node depends on
-      a different set of nodes. A mention, in a comment or docstring of a
-      scanned file that does not declare its ids foreign, of an id that names
-      no node in the declared graph and no code region is reported. None of
-      these reports changes a proof state.
-    premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-current-trial, DEF-premise-graph, DEF-report, DEF-proof-state]
+      At every revision, a code link reads aligned exactly when it is aligned. A
+      link is not aligned, and is reported with why, at every revision at which
+      it has no review; or its latest review is not aligned; or its region's
+      code, as its latest review's grammar keeps it, differs from the code whose
+      body digest that review records; or its node is not in the declared graph;
+      or its node, or a node its node depends on there, has a statement or cited
+      premises other than when the claim digest its latest review records was
+      taken, or its node depends on a different set of nodes. The review tool
+      records a review only of code committed as it stands, and with the
+      revision it was made at. A mention, in a comment or docstring of a scanned
+      file that does not declare its ids foreign, of an id that names no node in
+      the declared graph and no code region is reported. Neither recording a
+      review nor producing these reports changes a proof state.
+    premises: [AXM-links-never-silent, DEF-code-link, DEF-aligned-link, DEF-review, DEF-current-trial, DEF-premise-graph, DEF-report, DEF-proof-state]
     derivation_rule: >-
-      By AXM-links-never-silent every code link is reported, at every
-      revision, as aligned exactly when it is aligned and otherwise as not
-      aligned with why, so it reads aligned exactly when it is aligned. By
-      DEF-code-link a pin equals the digest it names for the code and the
-      claim as they stood when it was taken. The body digest is determined by
-      the region's code with comments and layout set aside and differs
-      whenever that code differs, so where the code differs from the code the
-      body pin was taken from, the body digest differs from the body pin. The
-      claim digest is determined by the fingerprints of the node and of every
-      node it depends on in the declared graph -- which DEF-code-link builds as
-      DEF-premise-graph describes -- and differs whenever one of them differs
-      or the set of them does; by DEF-current-trial a fingerprint differs
-      whenever a statement or the cited premises differ, so in each of those
-      cases the claim digest differs from the claim pin. A node not in the
-      declared graph fails DEF-aligned-link directly. In every case
-      DEF-aligned-link is not met, so the link is not aligned, and by
-      AXM-links-never-silent it is reported with why at every revision at
-      which the case holds. The mention clause is AXM-links-never-silent's. By
-      DEF-report producing a report appends no record and changes no
-      declaration, and by DEF-code-link a link is neither a trial nor a ledger
-      record; by DEF-proof-state a proof state is computed from the premise
-      graph and the trials recorded on it alone, so no proof state changes.
-      evidence: CTR-code-links-aligned
+      By AXM-links-never-silent every code link is reported, at every revision,
+      as aligned exactly when it is aligned and otherwise as not aligned with
+      why, so it reads aligned exactly when it is aligned. By DEF-aligned-link a
+      link is aligned only when its latest review, as DEF-review defines it, is
+      aligned and recorded the body digest its region has under that review's
+      grammar and the claim digest its node has; so a link with no review, or
+      whose latest review is not aligned, is not aligned. By DEF-review a review
+      records the digests as they stood when it was taken. By DEF-code-link a
+      body digest under a grammar differs whenever the code that grammar keeps
+      differs, so where the region's code, so kept, differs from the code the
+      review read, the digest differs from the recorded one. The claim digest is
+      determined by the fingerprints of the node and of every node it depends on
+      in the declared graph, which DEF-code-link builds as DEF-premise-graph
+      describes, and differs whenever one of them, or the set of them, differs;
+      by DEF-current-trial a fingerprint differs whenever a statement or the
+      cited premises differ, so in each of those cases the claim digest differs
+      from the recorded one. A node not in the declared graph fails
+      DEF-aligned-link directly. In every case DEF-aligned-link is not met, and
+      by AXM-links-never-silent the link is reported with why at every revision
+      at which the case holds. By DEF-review the tool records a review only at
+      the head revision, only when the region's file has no uncommitted edit,
+      and with that revision, so only of code committed as it stands. The
+      mention clause is AXM-links-never-silent's. By DEF-review recording a
+      review appends no trial, amendment, note, decision or proposal and changes
+      no declaration, and by DEF-report producing a report appends no record and
+      changes no declaration; by DEF-code-link a link is neither a trial nor a
+      ledger record; by DEF-proof-state a proof state is computed from the
+      premise graph and the trials recorded on it alone, so no proof state
+      changes. evidence: CTR-code-links-aligned
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
   - id: BRN-cited-measurements-reviewed-while-the-claim-stands
@@ -1137,39 +1171,40 @@ branches:
     claim_type: contract
     statement: >-
       At every revision, a cited measurement reads reviewed exactly when it is
-      reviewed. One that carries no pin is not reviewed; neither is one whose
-      branch is not in the declared graph at that revision, nor one whose
-      branch, or a node its branch depends on in the declared graph at that
-      revision, has a statement or cited premises other than when its pin was
+      reviewed. One with no review is not reviewed, and neither is one whose
+      latest review is not aligned; nor one whose branch is not in the declared
+      graph at that revision; nor one whose branch, or a node its branch depends
+      on in the declared graph at that revision, has a statement or cited
+      premises other than when the claim digest its latest review records was
       taken, nor one whose branch depends there on a different set of nodes;
-      each is reported with why at every revision at which that holds. Writing
-      or changing a pin restates no node and leaves every current trial
-      current. At every revision, every contract declared at that revision
-      that no branch declared there names in its derivation rule is reported.
-      None of these reports changes a proof state.
-    premises: [AXM-cited-measurements-reviewed, DEF-cited-measurement, DEF-code-link, DEF-current-trial, DEF-premise-graph, DEF-restatement, DEF-report, DEF-proof-state]
+      each is reported with why at every revision at which that holds. Recording
+      a review restates no node and leaves every current trial current. At every
+      revision, every contract declared at that revision that no branch declared
+      there names in its derivation rule is reported. None of these reports
+      changes a proof state.
+    premises: [AXM-cited-measurements-reviewed, DEF-cited-measurement, DEF-review, DEF-code-link, DEF-current-trial, DEF-premise-graph, DEF-restatement, DEF-report, DEF-proof-state]
     derivation_rule: >-
-      By AXM-cited-measurements-reviewed every cited measurement is reported
-      at every revision as reviewed exactly when it is reviewed, and otherwise
-      as not reviewed with why, so it reads reviewed exactly when it is
-      reviewed. By DEF-cited-measurement one is reviewed only when it carries
-      a pin and its branch is in the declared graph with a claim digest equal
-      to the pin; so one with no pin is not, and one whose branch is outside
-      the declared graph, having no claim digest there, is not. A pin equals
-      the claim digest of the claim as it stood when it was taken; by
-      DEF-code-link the claim digest is determined by the fingerprints of the
-      branch and of every node it depends on in the declared graph, and
+      By AXM-cited-measurements-reviewed every cited measurement is reported at
+      every revision as reviewed exactly when it is reviewed, and otherwise as
+      not reviewed with why, so it reads reviewed exactly when it is reviewed.
+      By DEF-cited-measurement one is reviewed only when its branch is in the
+      declared graph and its latest review, as DEF-review defines it, is aligned
+      and recorded the branch's claim digest there; so one with no review, or
+      whose latest review is not aligned, is not, and one whose branch is
+      outside the declared graph, having no claim digest there, is not. By
+      DEF-review a review records the claim digest as it stood when it was
+      taken; by DEF-code-link the claim digest is determined by the fingerprints
+      of the branch and of every node it depends on in the declared graph, and
       differs whenever one of them, or the set of them, differs; by
-      DEF-current-trial a fingerprint differs whenever a statement or the
-      cited premises differ. So in each remaining case, all read in the
-      declared graph, the digest differs from the pin and the measurement is
-      not reviewed, and AXM-cited-measurements-reviewed reports it with why at
-      every revision at which the case holds. By DEF-cited-measurement a pin
-      lives in a derivation rule, which is neither a statement nor cited
-      premises, so by DEF-restatement changing it restates no node; by
-      DEF-premise-graph a build admits nodes by the premises they cite alone,
-      so every build is as it was; and by DEF-current-trial, with no amendment
-      appended, every trial current before is current after. The
+      DEF-current-trial a fingerprint differs whenever a statement or the cited
+      premises differ. So in each remaining case, all read in the declared
+      graph, the digest differs from the recorded one and the measurement is not
+      reviewed, and AXM-cited-measurements-reviewed reports it with why at every
+      revision at which the case holds. By DEF-review recording a review appends
+      no trial, amendment, note, decision or proposal and changes no
+      declaration, so by DEF-restatement it restates no node, by
+      DEF-premise-graph every build is as it was, and by DEF-current-trial, with
+      no amendment appended, every trial current before is current after. The
       uncited-contract clause is AXM-cited-measurements-reviewed's. By
       DEF-report producing a report appends no record and changes no
       declaration, and by DEF-proof-state a proof state is computed from the
