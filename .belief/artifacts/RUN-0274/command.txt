@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0274/result.json -- tests/test_interfaces.py::TestDeclarationsToModel -q -p no:asyncio
+exit=0
+test=TST-ifc-declarations-model@93511712
+at=2026-10-08T06:24:56+00:00

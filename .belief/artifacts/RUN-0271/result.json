@@ -1,0 +1,103 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_servers_own_variable_wins"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_project_claude_code_reports_is_next"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_an_unexpanded_placeholder_names_no_directory"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_every_server_resolves_the_same_project"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_one_version_everywhere"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_installs_from_this_versions_tag"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_reads_the_project_claude_code_reports"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_installs_by_copying"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_the_verifier_holds_only_tools_its_server_registers"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_skill_is_where_the_plugin_loads_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin::test_this_project_gives_the_servers_time_to_build_after_an_update"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

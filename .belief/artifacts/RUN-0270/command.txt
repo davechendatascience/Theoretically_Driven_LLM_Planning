@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0270/result.json -- tests/test_goals.py -q -p no:asyncio
+exit=0
+test=TST-goals@7f00c63a
+at=2026-10-08T06:24:44+00:00
