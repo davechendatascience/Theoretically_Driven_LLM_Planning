@@ -4,6 +4,14 @@ Status: Phase 1 and the read-only half of Phase 2 built for 0.7.2; Phase 3 not s
 Date: 2026-10-06
 Project: Theoretically_Driven_LLM_Planning
 
+> **Since 0.8.0 (2026-10-08) pins are not written into the source.** A review is a ledger record
+> in `.consistency/`, made with consistency-belief's `review()` at a commit, carrying the body
+> and claim digests there (`DEF-review`). A function, class or module whose docstring declares
+> `Implements:` / `Uses:` / `Checks:` is a region, and its body digest sets docstrings aside.
+> Header pins written before then still count as reviews. Where this document says "write the
+> pin", read "record the review"; the alignment model -- body digest, claim digest, stale until
+> re-read -- is unchanged.
+
 ## 1. Decision
 
 Implement code tagging as a shared Python module, `code_links`, used by the existing servers. Do not introduce a fifth MCP server for parsing and navigation alone.

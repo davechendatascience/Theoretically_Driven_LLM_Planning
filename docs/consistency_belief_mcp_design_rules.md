@@ -79,11 +79,13 @@ opposite failure is silent — a design left behind by a component that was dele
 like a design that is still true.
 
 A branch's derivation rule cites the contract that measures it (`evidence: CTR-x`), and a citation
-may carry a pin, `CTR-x@<claim digest>`, written when the contract's acceptance rule and tests were
-read against the claim (`DEF-cited-measurement`). Restating the branch, or any node it depends on,
-moves its claim digest away from the pin, and the cited measurement reads unreviewed until it is
-read again and re-pinned. The derivation rule is outside every fingerprint, so a pin restates
-nothing. A contract no branch cites is listed by what it measures -- a component's first, then
+is reviewed: `review("BRN-x", target="CTR-x")` records, in the ledger, the commit and the branch's
+claim digest when the contract's acceptance rule and tests were read against the claim
+(`DEF-cited-measurement`, `DEF-review`). Restating the branch, or any node it depends on, moves its
+claim digest away from the review's, and the cited measurement reads unreviewed until it is read
+again and reviewed. A review is not a statement or a premise, so recording one restates nothing; a
+pin written in the derivation rule before reviews were records, `CTR-x@<claim digest>`, still
+counts as one. A contract no branch cites is listed by what it measures -- a component's first, then
 an interface's, then a goal's, whose outcome already says why it matters -- and marked when
 nothing has measured it yet.
 
@@ -109,4 +111,21 @@ is optional: a project without one is still checked branch by branch, and a proj
    broken record for the reader, never a broken claim.
 4. Nothing checks that a source says what a node referencing it states. A reference records where
    a claim came from, never that it holds.
+
+## 11. Review Code and Measurements at a Commit, Never in the Source
+
+1. A review is a ledger event (`DEF-review`): its actor read one code link, or one cited
+   measurement, at one commit. It records that commit, the digests there -- the region's body
+   digest and the claim's digest -- an outcome, `aligned` or `not_aligned`, and a note. Nothing is
+   written into source or declaration files.
+2. The `review` tool records one only at HEAD, and refuses while the region's file or the claim's
+   declarations carry uncommitted edits, so the commit it names holds what was read.
+3. A link or measurement reads aligned only while its latest review is aligned and both digests
+   still match (`DEF-aligned-link`, `DEF-cited-measurement`). A `not_aligned` review is a finding
+   that stands until the code or the claim changes and someone reviews again.
+4. A function, class or module whose docstring declares `Implements:`, `Uses:` or `Checks:` is a
+   region (`DEF-code-link`). Its body digest sets comments, docstrings and layout aside, so
+   documenting code asks for no re-review.
+5. Pins written before reviews were records still count, as aligned reviews under the first
+   grammar, which kept docstrings: an upgrade stales nothing, and a ledger review replaces them.
 

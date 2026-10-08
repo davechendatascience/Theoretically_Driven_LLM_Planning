@@ -91,6 +91,12 @@ So a claim states what must be true and cites where a measured fact lives; it do
 number. Numbers written into claims rot: restating a claim invalidates trials that measured
 the old wording, and a figure measured under one configuration is silently wrong under the next.
 
+A code region names the claim it realizes in its docstring (`Implements: BRN-x`) or between
+`# tdlp:begin` / `# tdlp:end` markers. After committing it, read it against the claim and record
+review(<CODE-id>, note=...); the same for a cited contract: review(<BRN-id>, target=<CTR-id>). A
+review is a ledger record naming the commit it read, never a pin in the source; stamp-monitor
+links shows, for each link to review, the claim and the code diff since its last review.
+
 A branch's `subject` is the join between the two ledgers: it names a component declared in
 belief.yaml, where that component's code paths, contracts and measurements live, and
 consistency.yaml opens with the list of components its designs govern (an import, not a copy). status(view=
@@ -625,8 +631,8 @@ def _measurements_unreviewed(ctx: Any, target_id: str, blast: list[str], restate
 
 
 def _code_links_unpinned(root: Path, target_id: str, blast: list[str], restates: bool | None) -> list[str]:
-    """The tagged code regions whose relation pins a restatement would make stale: a link binds
-    to its claim and everything upstream, as a trial does. Ids only -- no path, no line -- so the
+    """The code links whose reviews a restatement would make stale: a review records its claim's
+    digest, over the claim and everything upstream. Ids only -- no path, no line -- so the
     blast radius names what needs re-review without pointing anyone at the source."""
     from .links import links_reached, scan
 

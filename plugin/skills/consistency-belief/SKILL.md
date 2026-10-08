@@ -81,22 +81,25 @@ before reporting any node as proven. Read its report; do not re-verify in the ma
    component-belief -- a design proven over a refuted measurement is proven of nothing.
    `note()` is inert (zero proof weight) and cannot close an obligation.
 
-## Pinning what a branch cites
+## Reviewing what a branch cites
 
 A branch's `evidence: CTR-x` says which contract measures it. When you have read that contract's
-acceptance rule and tests against the claim, pin the citation: `evidence: CTR-x@<8 hex>`.
-`status(view="coverage")` prints the pin to write.
+acceptance rule and tests against the claim, record it:
+`review("BRN-x", target="CTR-x", note="what you checked")`. The review is a ledger record naming
+the commit you read; nothing is written into consistency.yaml.
 
 - **Restating the branch, or a premise upstream, leaves its cited measurements unreviewed.** The
   contract may still read supported, but it measured the old claim. Re-read it against the new
-  claim; strengthen the test if the claim now says more; then write the new pin. `audit_change`
+  claim; strengthen the test if the claim now says more; then review again. `audit_change`
   lists them before you restate.
-- **A pin lives in the derivation rule, which no fingerprint covers,** so writing one restates
-  nothing and sets no trial aside.
+- **A review restates nothing** and sets no trial aside: it is not a statement or a premise.
+- **`not_aligned` is a finding.** If the contract does not measure the claim, record
+  `outcome="not_aligned"` with a note; it reads `review failed` until something changes.
 - **`contracts no branch cites`** in the coverage view lists them by what they measure.
   On a component: declare the design it measures, or keep it as a plain regression
   measure, knowingly. A goal's measure is explained by the goal's outcome. `(no evidence
   yet)` marks one nothing has measured.
+- An old `evidence: CTR-x@<8 hex>` pin still counts as a review until you record one.
 
 ## Referencing sources
 
@@ -123,29 +126,37 @@ axioms:
 
 ## Linking code to claims
 
-When you write the code that realizes a branch, lemma or definition, tag the region. A tag is
-an assertion that you read this code against this claim. It is not a proof, and it moves no
-proof state.
+When you write the code that realizes a branch, lemma or definition, name the claim in its
+docstring. A link is an assertion that the code realizes the claim; a review says you read it
+against the claim, at a commit. Neither is a proof, and neither moves a proof state.
 
 ```python
-# tdlp:begin CODE-runner-exit-code-fallback
-# tdlp:implements BRN-runner-captures
-...the code...
-# tdlp:end CODE-runner-exit-code-fallback
+def capped_step(requested, previous, cap, dt):
+    """One servo step, its change capped at cap * dt.
+
+    Implements: BRN-runner-captures
+    Uses: DEF-cap
+    """
 ```
 
-1. **Pin before you commit.** `stamp-monitor links` lists your uncommitted regions with the exact
-   header lines that align them, the `@xxxxxxxx` pins. Read the region against the claim
-   (`status(view="branches", subject=<id>)`), then paste the lines and commit both together.
-2. **A stale pin is a review, not a chore.** `BODY_CHANGED` means the code moved since someone
-   read it against the claim, and it names the revision to diff against. `CLAIM_RESTATED` means
-   the claim or a premise upstream changed, and it names which. Re-read, then re-pin. Never
-   re-pin a region you did not re-read.
-3. **Cite the theory inside a region that declares it.** A `DEF-`/`BRN-` id in a comment or
-   docstring outside such a region is `UNTRACKED_MENTION`, and nothing will notice when it rots.
-   One that names nothing is `DANGLING_MENTION`. Fix those first.
-4. **Before you restate a node,** `audit_change` lists the regions whose pins it will stale.
-5. **The verifier never sees any of this.** Links live in stamp-monitor, not in `status`. Do not
+The function (or class, or module) is the region; nested ones are their own regions. For a
+stretch that is not a whole definition, mark it with `# tdlp:begin CODE-<name>` /
+`# tdlp:implements BRN-<id>` / `# tdlp:end CODE-<name>`.
+
+1. **Commit, then review.** Read the region against its claim as committed, then record
+   `review("<region id>", note="what you checked")`. `stamp-monitor links` names each region's
+   id. A review of uncommitted code or claims is refused: it names the commit it read.
+2. **A stale link is a review, not a chore.** `BODY_CHANGED` means the code moved since the last
+   review; `CLAIM_RESTATED` means the claim or a premise upstream changed. `stamp-monitor links`
+   shows the bundle: the claim now, what moved in it, and the code diff since. Re-read, then
+   review. Never record a review of a region you did not re-read.
+3. **A mismatch is a finding.** `review(..., outcome="not_aligned", note=...)` records it; fix the
+   code or restate the claim, then review again.
+4. **Cite the theory where it is declared.** A `DEF-`/`BRN-` id in prose outside a region that
+   declares it is `UNTRACKED_MENTION`: add a `Uses:` line to that docstring. One that names
+   nothing is `DANGLING_MENTION`. Fix those first.
+5. **Before you restate a node,** `audit_change` lists the links it will stale.
+6. **The verifier never sees any of this.** Links live in stamp-monitor, not in `status`. Do not
    paste a region into a probe or a trial. Whether code realizes a claim is the implementer's
    judgment, and whether it works is component-belief's measurement.
 

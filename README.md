@@ -117,7 +117,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.7.8" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.8.0" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -288,10 +288,11 @@ A result stops counting the moment the thing it measured changes — and not bef
 * A **test run** writes a content stamp: the git blob id of every file its evidence rests on, as the
   working tree actually stood. Once one of those files differs at HEAD, its trials are `stale`.
 
-* A **review** is bound to what was reviewed. A tagged code region carries a pin of its body
-  and of the claim it realizes. A branch's cited contract carries a pin of the claim it was read
-  against. When either side moves, the region or citation reads unreviewed, at every revision,
-  until someone re-reads it and writes the new pin.
+* A **review** is bound to what was reviewed. `review()` records, in the ledger, that someone
+  read a code region against the claim it realizes, or a branch's cited contract against the
+  claim, at one commit, with the digests of both there. No pin is written into the source. When
+  either side moves, the region or citation reads unreviewed, at every revision, until someone
+  re-reads it and records a new review.
 
 Stale evidence stays on record and cited; it is not counted, cannot satisfy an adopt criterion,
 and the plan schedules the re-run. Nothing re-runs automatically.
@@ -332,12 +333,14 @@ declarations in [`consistency.yaml`](consistency.yaml).
     pass and which only wait.
   - A revised claim keeps its id rather than needing a new one to escape old verdicts.
 * **Staged proposals.** `propose_branch` stages a branch that persists, can be verified, and can be cited at once; it shows as `· STAGED`. It supports `decide()` only once declared at HEAD, and trials recorded while staged carry over if the declared statement is the same.
-* **Cited measurements are pinned.**
-  - A branch's citation can carry a pin: `evidence: CTR-x@<pin>`, the claim's digest when the
-    contract's rule and tests were read against it.
+* **Cited measurements are reviewed.**
+  - After reading a contract's rule and tests against the branch that cites it, record
+    `review("BRN-x", target="CTR-y", note=...)`. It names the commit and the claim's digest there.
   - Restating the branch, or a premise upstream, leaves the citation unreviewed until it is
-    re-read and re-pinned. The contract alone would go on reading supported for a claim it never
-    measured.
+    re-read and reviewed again. The contract alone would go on reading supported for a claim it
+    never measured.
+  - A pin written in the derivation rule before reviews were records, `evidence: CTR-x@<pin>`,
+    still counts as its review.
   - A contract no branch cites is listed by what it measures: a component's, an interface's or a
     goal's.
 * **Sources are referenced, never relied on.**
@@ -377,17 +380,18 @@ recorded but does not close an obligation. `plugin/agents/consistency-verifier.m
 in a context that cannot open a file; `plugin/skills/consistency-belief/SKILL.md` says when to
 hand it work.
 
-### Tools (eight)
+### Tools (nine)
 
 | Tool | Does |
 |---|---|
-| `status` | 10 views: `tree`, `branches`, `axioms`, `sources`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the pin to write, and lists the contracts no branch cites by what they measure; `sources` is the reference list, each source with the nodes that reference it |
+| `status` | 10 views: `tree`, `branches`, `axioms`, `sources`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the review to record, and lists the contracts no branch cites by what they measure; `sources` is the reference list, each source with the nodes that reference it |
 | `propose_branch` | stages a branch or lemma; checks acyclicity and premises; warns when a claim names a file, class or call instead of what must hold of any implementation |
 | `verify_step` | records one pass of falsification trials, each bound to the statement it verified |
 | `amend` | reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending; the original and the reason stay |
 | `withdraw` | retires a staged proposal; refused for a declaration or anything a declared node cites |
 | `audit_change` | computes the blast radius of changing an axiom or lemma -- the steps citing it, which need a verifier pass, apart from those further down, which only wait -- and records the audit so impact, approval and re-verification form one chain. It also names, by id, the tagged code regions and cited measurements the change would leave unreviewed |
 | `note` | qualitative annotation; zero weight |
+| `review` | records that you read a code region, or a cited contract, against its claim at HEAD: the commit, the digests there, aligned or not aligned, and a note. Refused for uncommitted code or claims; a ledger record, never a line in the source |
 | `decide` | evaluates a policy; `evidence: supported` also requires each cited contract supported in component-belief; human approval for `ADOPT`; records the revision |
 
 ```
@@ -484,30 +488,45 @@ The same reports run from a shell for git hooks, CI, and Claude Code hooks:
 
 ### Code linked to claims
 
-A region of code names the claim it realizes, and carries two pins: one of its own body, and one
-of the claim as it stood when someone read the two together.
+A region of code names the claim it realizes, usually in the docstring it already has. A
+review, recorded in the ledger, says someone read the two together at one commit.
 
 ```python
-# tdlp:begin CODE-runner-exit-code-fallback@3f9a1c2e      <- the body that was reviewed
-# tdlp:implements BRN-runner-captures@7c41d0e2            <- the claim, and everything upstream
-...
-# tdlp:end CODE-runner-exit-code-fallback
+def load_grid(path):
+    """The map's free cells.
+
+    Implements: BRN-clearance-grid-clears-the-footprint
+    Uses: AXM-behavior-trav-maps
+    """
 ```
 
-* **Code edit.** The body pin ignores comments and formatting, so a code edit stales it and a
-  formatter run does not.
-* **Claim restated.** The claim pin binds to what a verification trial binds to, so restating the
-  claim, or any premise upstream of it, stales the link.
+The docstring makes the function a region (classes and modules too; they nest). A stretch that
+isn't a whole function can still be marked with `# tdlp:begin CODE-<name>` / `# tdlp:implements
+BRN-<id>` / `# tdlp:end CODE-<name>`. After committing the code, read it against its claim and
+record `review("CODE-<id>", note="what you checked")` in consistency-belief.
+
+* **Code edit.** A review records the body's digest, which ignores comments, docstrings and
+  formatting, so a code edit stales it and documenting the code does not.
+* **Claim restated.** A review records the claim's digest, which binds to what a verification
+  trial binds to, so restating the claim, or any premise upstream of it, stales the link.
 * **Persistent.** A stale link is reported at every revision until someone re-reads the region
-  and updates the pin, not only in the commit that broke it.
+  and records a new review, not only in the commit that broke it.
+* **The review bundle.** For each link to review, `stamp-monitor links` shows the claim as it
+  stands, a word diff of what moved in it since the last review, the code diff since (the
+  region's lines only), and the last reviewer's note.
+* **A failed review is a finding.** `review(..., outcome="not_aligned", note=...)` makes the link
+  read `review failed` until the code or the claim changes and someone reviews it again.
+* **Old pins still count.** Header pins written before reviews were records, `# tdlp:begin
+  CODE-x@3f9a1c2e`, align a link that has no review in the ledger, under the old body digest,
+  which kept docstrings. So upgrading stales nothing.
 * **Dangling ids.** A `DEF-`/`BRN-` id in a comment or docstring that names nothing is reported.
   So is one outside any region that declares it, since nothing will notice when it rots.
 * **Aligned is not "works".** Each link is printed beside the state of the contract its claim
   cites. A region reads aligned while its evidence is stale, and that combination is flagged
   (`LINKED_EVIDENCE_NOT_SUPPORTED`).
-* **Tag and pin in one commit.** For an uncommitted region, `links` prints the pins it would need
-  once committed as it stands. `links --strict` exits 1 on any broken tag or link needing review,
-  for CI or a hook.
+* **Commit, then review.** A review names the commit it read, so it is refused while the region's
+  file or its claim has uncommitted edits. `links --strict` exits 1 on any broken tag or link
+  needing review, for CI or a hook.
 * **Outside the probe.** None of it reaches the verifier. Links are a stamp-monitor report, not
   a consistency-belief view.
 
@@ -606,10 +625,11 @@ claim follows from its premises has nothing to do with whether anyone built it.
 | `UNATTACHED_SUBJECT` | the subject is prose, so the design was never bound to a component |
 | `UNKNOWN_EVIDENCE` | a derivation rule cites a `CMP-`/`CTR-` id `belief.yaml` does not declare |
 
-A citation can carry a pin, `evidence: CTR-motion-clear@<pin>`: the claim's digest when the
-contract's rule and tests were read against it. A contract can read supported for a claim it never
-measured: the claim was restated after its test was written. So the coverage view reports each
-cited measurement as `reviewed`, `unpinned` or `not reviewed`, and prints the pin to write. It also
+A contract can read supported for a claim it never measured: the claim was restated after its
+test was written. So a citation is reviewed: `review("BRN-x", target="CTR-motion-clear")` records
+the claim's digest when the contract's rule and tests were read against it. The coverage view
+reports each cited measurement as `reviewed`, `unreviewed`, `review failed` or `not reviewed`, and
+names the review to record. It also
 lists every contract no branch cites, sorted by what it measures: a component's (decide why it is
 measured), an interface's, or a goal's (its outcome says why). One with no evidence yet is marked.
 
@@ -633,7 +653,7 @@ traceability and configuration control. The human owns the top of the V; the age
 | Build | `code:` claims per component; `status(view="artifacts")` | inspection |
 | Component, integration, system test | contracts and tests by `layer`, an interface's contract on the interface itself; `run_test`; `.belief/` | test |
 | Risk register | failure modes in `belief.yaml`, each naming the contract and the case that observe it (`observed_by:`, `case:`) | mechanical: `status(view="graph")` lists the ones nothing observes and checks each named case passed in the ledger |
-| Traceability | a branch's `subject` and cited contract, the citation pinned to the claim it was read against; `status(view="coverage")` on both sides; tagged code regions pinned to the claims they realize (`stamp-monitor links`) | mechanical |
+| Traceability | a branch's `subject` and cited contract, the citation reviewed against the claim it was read against; `status(view="coverage")` on both sides; code regions reviewed against the claims they realize (`stamp-monitor links`) | mechanical |
 | Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
 | Change control | `audit_change` (with the code links and cited measurements a change leaves unreviewed), STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
 | Configuration audit | `stamp-monitor audit`, `workflow` and `links`; `graph-snapshot` for the whole design at one revision | mechanical, read-only |
@@ -668,8 +688,8 @@ src/
     probes.py                        falsification probe generators and parsers
     decide.py                        policy evaluation and the human approval gate
     views.py / render.py             proof tree, status and coverage views
-    measurements.py                  cited measurements: pins, review state, contracts no branch cites
-    links.py                         the theory side of code links: what a claim pin must be
+    measurements.py                  cited measurements: reviews, review state, contracts no branch cites
+    links.py                         the theory side of code links: claim digests, reviews, what moved
     store.py                         append-only JSONL ledger in .consistency/
   component_belief/                  empirical server (6 tools)
     declarations.py                  git-HEAD loader, validation, code claims
@@ -681,7 +701,7 @@ src/
     decide.py                        policy evaluation and the human approval gate
     stamps.py / views.py / render.py the artifacts view; status views
     store.py                         append-only JSONL ledger in .belief/
-  code_links/                        tagged code regions: parser, revision-pinned index, pins, mentions
+  code_links/                        code regions: parser (markers, docstrings), revision-pinned index, reviews, mentions
   graph_snapshot/                    the design graph at one revision (1 tool)
     snapshot.py                      the join, the revision it pins, the gaps
     page.py / page.html              the one self-contained page, and where it may be written
@@ -700,7 +720,7 @@ plugin/                              the `tdlp` Claude Code plugin
   .mcp.json                          the four servers, installed with uvx from tag tdlp--v<version>
   agents/consistency-verifier.md     verifier subagent: consistency-belief tools only, no file access
   skills/component-belief/SKILL.md   the empirical loop, four rules
-  skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate, pinning what a branch cites, linking code
+  skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate, reviewing what a branch cites, linking code
   skills/adopt-goals/SKILL.md        setting up goals.yaml in a project that already uses TDLP
 ```
 
@@ -737,9 +757,9 @@ The suites assert the invariants above, not the implementation:
 16. A declared input git ignores is judged by its content on disk: changed or missing, its evidence is stale; the same bytes again, current.
 17. A measure promoted from `belief.yaml` into `goals.yaml` keeps its evidence, while both files declare it and after; a draft `goals.yaml` is checked without taking effect.
 18. A snapshot shows the declarations of the one revision it names and the proof states the consistency server computes over them, lists the join's gaps, reads no evidence, and writes nothing but its page, which git does not see and no declaration names.
-19. A tagged code region reads aligned only while its body and its claim, with everything upstream, are as they were pinned; any other link, and any id named in a comment that resolves to nothing, is reported at every revision until fixed; and none of it moves a proof state or reaches the probe.
+19. A code region reads aligned only while its body and its claim, with everything upstream, are as its latest review recorded them; any other link, and any id named in a comment that resolves to nothing, is reported at every revision until fixed; and none of it moves a proof state or reaches the probe.
 20. Runs made together take distinct run ids and evidence ids and overlap in time; a rejected import leaves no run behind.
-21. A cited measurement reads reviewed only while its branch, and everything the branch rests on in the declared graph, is as it was when the pin was written; writing a pin restates nothing and sets no trial aside; a contract no branch cites is reported.
+21. A cited measurement reads reviewed only while its branch, and everything the branch rests on in the declared graph, is as it was when its latest review was recorded; recording a review restates nothing and sets no trial aside; a contract no branch cites is reported.
 22. Staleness gives every trial the verdict it would get alone, judged once per run.
 23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
 24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
@@ -752,6 +772,39 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### 0.8.0 — 2026-10-08 · reviews are ledger records bound to a commit, and a docstring declares a region
+
+From a field report on code links from RoboPraxis (27 regions, 70 header pins), and the user's
+call that pins do not belong in the source.
+
+- **`review()` records a review, in `.consistency/`, never in the source.**
+  - A review names a code link (region and claim) or a cited measurement (branch and contract),
+    the commit it read, the code and claim digests there, `aligned` or `not_aligned`, and a note.
+  - It is refused while the region's file or the claim's declarations have uncommitted edits, so
+    the commit holds what was read.
+  - The latest review decides: a link reads `aligned`, `unreviewed`, `review failed`,
+    `body changed` or `claim restated`.
+- **A docstring declares a region.** `Implements:`, `Uses:`, `Checks:` and `Motivated-by:` lines
+  in a function, class or module docstring make that definition a region. An optional
+  `Region: CODE-x` line names it; otherwise its id comes from its path and qualified name.
+  Regions nest. Prose mentions in a docstring now suggest a `Uses:` line, not deleting them.
+- **Documenting code asks for no re-review.** The body digest under the new grammar sets
+  docstrings aside, as comments and layout already were.
+- **The review bundle.** For each link to review, `stamp-monitor links` shows the claim as it
+  stands, a word diff of what moved in it since the review, the code diff since (the region's
+  hunks only), and the last reviewer's note. The snapshot shows each link's and measurement's
+  latest review: id, commit, actor and note.
+- **Nothing goes stale on upgrade.** Header pins and derivation-rule pins still count as reviews,
+  compared under the old grammar, which kept docstrings. A ledger review replaces them once
+  recorded. The `@hash` can be dropped from a header whenever its file is next touched.
+- "Unpinned" is now "unreviewed" (`UNREVIEWED`, `MEASUREMENT_UNREVIEWED`).
+- **Theory.** `DEF-review` is new. `DEF-code-link`, `DEF-aligned-link`, `DEF-cited-measurement`
+  and `DEF-snapshot` were restated, along with the two link branches. The verifier's first round
+  found DEF-review silent on what a pin names and on withdrawal. Both were added; the code already
+  behaved that way.
+- **Not yet:** a review records the claim and the code, not the relation kind, and not the
+  contract's own rule or tests. Restating a contract leaves its reviews standing.
 
 ### 0.7.8 — 2026-10-07 · a proof rests on its steps
 
