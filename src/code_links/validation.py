@@ -98,18 +98,12 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
     out = index.diagnostics
     reviews = reviews or {}
     present = {b.block_id for b in index.blocks}
+    # A link's latest review, in DEF-review's order: its own last review in the ledger; else a
+    # moved region's, where exactly one region no longer carried was reviewed for the same node
+    # with this body; else the pins in its header. Pins come last, so renaming a region and
+    # keeping its old pins cannot set aside a review that found it not aligned.
     for block in index.blocks:
         block.reviews = {t: reviews[(block.block_id, t)] for t in block.targets() if (block.block_id, t) in reviews}
-        for r in block.relations:
-            if r.target in block.reviews or block.pin is None or r.pin is None:
-                continue
-            # A header pin is a review under grammar 1 and the earlier claim rule.
-            known = claims.get(r.target) if claims else None
-            claim = (known.pin if known and r.pin == known.pin_v1 else
-                     translate_claim(r.target, r.pin) if translate_claim else r.pin)
-            block.reviews[r.target] = {"body": block.pin, "claim": claim, "grammar": 1, "outcome": "aligned",
-                                       "legacy": True, "pin": r.pin}
-        # A region no longer carried, reviewed for the same node with this body, follows its code.
         if index.scope.paths is None:
             for r in block.relations:
                 if r.target in block.reviews:
@@ -120,6 +114,15 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
                 if len(moved) == 1:
                     region, rv = moved[0]
                     block.reviews[r.target] = {**rv, "relocated_from": region}
+        for r in block.relations:
+            if r.target in block.reviews or block.pin is None or r.pin is None:
+                continue
+            # A header pin is a review under grammar 1 and the earlier claim rule.
+            known = claims.get(r.target) if claims else None
+            claim = (known.pin if known and r.pin == known.pin_v1 else
+                     translate_claim(r.target, r.pin) if translate_claim else r.pin)
+            block.reviews[r.target] = {"body": block.pin, "claim": claim, "grammar": 1, "outcome": "aligned",
+                                       "legacy": True, "pin": r.pin}
     by_id: dict[str, list[Block]] = {}
     for block in index.blocks:
         by_id.setdefault(block.block_id, []).append(block)

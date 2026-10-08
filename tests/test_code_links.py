@@ -799,6 +799,18 @@ class TestRelocation:
             "a review follows unchanged code only"
 
 
+    def test_a_renamed_region_keeping_old_pins_does_not_launder_a_failed_review(self, aligned, monkeypatch):
+        """DEF-review's order -- own review, a moved region's, then pins -- found by the verifier:
+        renaming a region and keeping its header pins must not set aside a not_aligned review."""
+        from consistency_belief.server import review
+
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(aligned))
+        review("CODE-servo-cap", target="BRN-servo", outcome="not_aligned", note="no cap when dt < 0")
+        text = (aligned / "servo.py").read_text(encoding="utf-8")
+        commit(aligned, {"servo.py": text.replace("CODE-servo-cap", "CODE-servo-step")}, "rename the region")
+        assert states(aligned, "CODE-servo-step")["BRN-servo"] == REVIEW_FAILED
+
+
 class TestDecider:
     def test_the_report_says_which_review_decides(self, aligned, monkeypatch):
         """Reported from embodied_ai: a header pin @5db46a30 beside `body @3e85d4e1` read as a stale
