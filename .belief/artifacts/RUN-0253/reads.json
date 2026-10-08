@@ -1,0 +1,17 @@
+[
+ "pyproject.toml",
+ "src/component_belief/__init__.py",
+ "src/component_belief/declarations.py",
+ "src/component_belief/expr.py",
+ "src/component_belief/ids.py",
+ "src/component_belief/model.py",
+ "src/component_belief/stats.py",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "test_an_unexpanded_placeholder0",
+ "test_every_server_resolves_the0",
+ "test_the_project_claude_code_r0",
+ "test_the_servers_own_variable_0",
+ "tests/conftest.py",
+ "tests/test_interfaces.py",
+ "tools/pytest_trials.py"
+]
