@@ -421,3 +421,17 @@ def test_a_review_is_shown_beside_its_region_and_measurement(project):
     assert gate["measured"] == [{"contract": "CTR-motion-clear", "state": "reviewed",
                                  "review": f"REV-0002 at {sha[:7]} by agent: the test drives the gate to zero clearance"}]
 
+
+def test_a_moved_regions_review_is_shown_as_carried(project):
+    """0.8.1: a function moved unchanged keeps its review; the page says where it came from."""
+    from consistency_belief.server import review
+    from graph_snapshot.snapshot import take
+
+    plan = 'def plan():\n    """Plan a path.\n\n    Implements: BRN-motion-gate\n    """\n    return []\n'
+    commit(project, {"motion.py": plan}, "link the planner in its docstring")
+    review("CODE-motion--plan", note="an empty plan aborts nothing")
+    commit(project, {"motion.py": "", "planner/motion.py": plan}, "move the planner")
+    [region] = take(project)["nodes"]["BRN-motion-gate"]["regions"]
+    assert region["id"] == "CODE-planner-motion--plan" and region["state"] == "aligned"
+    assert "carried from CODE-motion--plan" in region["review"]
+

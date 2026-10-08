@@ -188,11 +188,12 @@ def review_line(review: dict | None) -> str:
     if not review:
         return "never reviewed"
     if review.get("legacy"):
-        return "pinned in the source, before reviews were records"
+        return "decided by its header pin, written before reviews were records"
     note = f": {review['note']}" if review.get("note") else ""
     outcome = "" if review.get("outcome") == "aligned" else " (not aligned)"
+    moved = f", carried from {review['relocated_from']}" if review.get("relocated_from") else ""
     return (f"{review.get('id', 'reviewed')} at {str(review.get('commit') or '')[:7]} by "
-            f"{review.get('actor') or '?'}{outcome}{note}")
+            f"{review.get('actor') or '?'}{outcome}{moved}{note}")
 
 
 def references(decl: Any, node_id: str) -> list[dict[str, str]]:
