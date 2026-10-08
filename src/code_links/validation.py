@@ -1,11 +1,14 @@
 """Checks over a whole index: identity, references, pins, mentions and coverage.
 
-Every link ends in exactly one state, and every state but `aligned` is a diagnostic:
+Every link ends in exactly one state, and every state but `aligned` is a diagnostic. A link's
+review is its latest review in the ledger (DEF-review), or, if it has none, the pins written in
+its header before reviews were records:
 
-  aligned         both pins present and equal to what is there now
-  unpinned        never reviewed: a pin is missing (the diagnostic prints the lines to write)
-  body changed    the region's code differs from the body its pin records
-  claim restated  the claim, or a node it depends on, was restated since its pin
+  aligned         its review found it aligned, and both digests it recorded are what is there now
+  unreviewed      no review in the ledger and no pins in the header: never read against its claim
+  review failed   its latest review found it not aligned, and nothing has changed since
+  body changed    the region's code differs from the body its review recorded
+  claim restated  the claim, or a node it depends on, was restated since its review
   unknown claim   the target is not in the premise graph at this revision
   invalid block   the region is malformed, nested, empty or shares its id
   explanatory     a motivated-by relation with no pin: no correspondence asserted, so not a
@@ -23,7 +26,9 @@ from typing import Callable, Mapping
 from .model import (ERROR, OBSERVATION, REVIEW, Block, ClaimRef, CodeIndex, Diagnostic, Relation)
 
 ALIGNED = "aligned"
-UNPINNED = "unpinned"
+UNREVIEWED = "unreviewed"
+UNPINNED = UNREVIEWED                   # the name before reviews were ledger records
+REVIEW_FAILED = "review failed"
 BODY_CHANGED = "body changed"
 CLAIM_RESTATED = "claim restated"
 UNKNOWN_CLAIM = "unknown claim"
@@ -33,6 +38,22 @@ INVALID_BLOCK = "invalid block"
 EXPLANATORY = "explanatory"
 
 
+def review_of(block: Block, relation: Relation) -> dict | None:
+    """The link's review: its latest in the ledger, or else the pins its header carries, read as
+    an aligned review under grammar 1 (DEF-review). None: never reviewed."""
+    found = block.reviews.get(relation.target)
+    if found is not None:
+        return found
+    if block.pin is not None and relation.pin is not None:
+        return {"body": block.pin, "claim": relation.pin, "grammar": 1, "outcome": "aligned", "legacy": True}
+    return None
+
+
+def _moved(block: Block, review: dict, claims: Mapping[str, ClaimRef], target: str) -> tuple[bool, bool]:
+    body_now = block.body_pin if int(review.get("grammar", 2)) >= 2 else block.legacy_body_pin
+    return review.get("body") != body_now, review.get("claim") != claims[target].pin
+
+
 def link_state(block: Block, relation: Relation, claims: Mapping[str, ClaimRef] | None) -> str:
     if not block.valid:
         return INVALID_BLOCK
@@ -40,28 +61,41 @@ def link_state(block: Block, relation: Relation, claims: Mapping[str, ClaimRef] 
         return UNKNOWN_CLAIM
     if not relation.needs_pin and relation.pin is None:
         return EXPLANATORY
-    if relation.needs_pin and (relation.pin is None or block.pin is None):
-        return UNPINNED
-    if block.pin is not None and block.pin != block.body_pin:
+    review = review_of(block, relation)
+    if review is None:
+        return UNREVIEWED
+    body_moved, claim_moved = _moved(block, review, claims, relation.target)
+    if body_moved:
         return BODY_CHANGED
-    if relation.pin is not None and relation.pin != claims[relation.target].pin:
+    if claim_moved:
         return CLAIM_RESTATED
+    if review.get("outcome") != "aligned":
+        return REVIEW_FAILED
     return ALIGNED
 
 
+def review_call(block: Block, targets: list[str] | None = None) -> str:
+    """The call that records a review of the region, once it was read against its claims."""
+    only = f', target="{targets[0]}"' if targets and len(targets) == 1 else ""
+    return f'review("{block.block_id}"{only}, note="what you checked")'
+
+
 def header_lines(block: Block, claims: Mapping[str, ClaimRef]) -> tuple[str, ...]:
-    """The begin and relation lines with every pin as it would read once re-reviewed now."""
-    lines = [block.header(block.body_pin)]
-    for r in block.relations:
-        pin = claims[r.target].pin if r.target in claims else r.pin
-        lines.append(r.header(pin if (r.needs_pin or r.pin) else None))
-    return tuple(lines)
+    """The begin and relation lines of a marker region with no pins: reviews are ledger records."""
+    return tuple([block.header(None)] + [r.header(None) for r in block.relations])
 
 
 def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
              explain_claim: Callable[[str, str], str | None] | None = None,
-             explain_body: Callable[[str, str, str], str | None] | None = None) -> None:
+             explain_body: Callable[[str, str, str], str | None] | None = None,
+             reviews: Mapping[tuple[str, str], dict] | None = None,
+             explain_since: Callable[[str, str], str | None] | None = None) -> None:
+    """`reviews` maps (region, node) to its latest review in the ledger. `explain_claim` says why a
+    header pin no longer matches; `explain_since` why a claim moved since a review's commit."""
     out = index.diagnostics
+    for block in index.blocks:
+        block.reviews = {t: reviews[(block.block_id, t)] for t in block.targets()
+                         if reviews and (block.block_id, t) in reviews}
     by_id: dict[str, list[Block]] = {}
     for block in index.blocks:
         by_id.setdefault(block.block_id, []).append(block)
@@ -89,34 +123,54 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
                     f"{r.kind} {r.target}, which is not in the premise graph at {rev} -- removed, "
                     "renamed, staged but not declared, or declared and not admitted; repoint the "
                     "tag or remove it", block.path, r.line))
-        known = [r for r in block.relations if r.target in claims]
-        fix = header_lines(block, claims)
-        unpinned = ((block.needs_pin and block.pin is None)
-                    or any(r.needs_pin and r.pin is None for r in known))
-        if unpinned:
+        known = [r for r in block.relations if r.target in claims and (r.needs_pin or r.pin)]
+        states = {r.target: link_state(block, r, claims) for r in known}
+        never = [r.target for r in known if states[r.target] == UNREVIEWED]
+        if never:
             out.append(Diagnostic(
-                "UNPINNED", REVIEW, block.block_id,
-                f"never reviewed ({block.location}): read the region against "
-                f"{', '.join(r.target for r in known) or 'its claims'}, and once it holds, write "
-                "these header lines", block.path, block.start_line, fix))
-        if block.pin is not None and block.pin != block.body_pin:
-            why = explain_body(block.block_id, block.path, block.pin) if explain_body else None
+                "UNREVIEWED", REVIEW, block.block_id,
+                f"never reviewed ({block.location}): read the region against {', '.join(never)} as it "
+                f"stands at {rev}, then record the review", block.path, block.start_line,
+                (review_call(block, never),)))
+        body = [r for r in known if states[r.target] == BODY_CHANGED]
+        if body:
+            rv = review_of(block, body[0]) or {}
+            if rv.get("legacy"):
+                since = f"pinned @{rv.get('body')} in its header"
+                why = explain_body(block.block_id, block.path, rv.get("body", "")) if explain_body else None
+            else:
+                commit = str(rv.get("commit") or "")[:7]
+                since = f"{rv.get('id', 'its review')} at {commit}"
+                why = f"`git diff {commit} {rev} -- {block.path}` shows what changed" if commit else None
             out.append(Diagnostic(
                 "BODY_CHANGED", REVIEW, block.block_id,
-                f"its code changed since it was reviewed (pinned @{block.pin}, now @{block.body_pin}); "
+                f"its code changed since it was reviewed ({since}, now @{block.body_pin}); "
                 + (why + "; " if why else "")
-                + f"re-read it against {', '.join(r.target for r in known) or 'its claims'}, then update the pins",
-                block.path, block.start_line, fix))
+                + f"re-read it against {', '.join(r.target for r in body)}, then record the review",
+                block.path, block.start_line, (review_call(block, [r.target for r in body]),)))
         for r in known:
-            expected = claims[r.target].pin
-            if r.pin is not None and r.pin != expected:
-                why = explain_claim(r.target, r.pin) if explain_claim else None
+            rv = review_of(block, r) or {}
+            if states[r.target] == CLAIM_RESTATED:
+                if rv.get("legacy"):
+                    since = f"pinned {r.target}@{rv.get('claim')} in its header"
+                    why = explain_claim(r.target, rv.get("claim", "")) if explain_claim else None
+                else:
+                    since = f"{rv.get('id', 'its review')} at {str(rv.get('commit') or '')[:7]}"
+                    why = explain_since(r.target, str(rv.get("commit") or "")) if explain_since else None
                 out.append(Diagnostic(
                     "CLAIM_RESTATED", REVIEW, block.block_id,
-                    f"{r.kind} {r.target}@{r.pin}, and {r.target} now pins @{expected}: it, or a node it "
-                    "depends on, was restated since this link was reviewed"
-                    + (f" ({why})" if why else "") + "; re-read the region against the claim as it "
-                    "stands, then update the pin", block.path, r.line, fix))
+                    f"{r.kind} {r.target} was reviewed against @{rv.get('claim')} ({since}), and "
+                    f"{r.target} now pins @{claims[r.target].pin}: it, or a node it depends on, was "
+                    "restated since" + (f" ({why})" if why else "") + "; re-read the region against the "
+                    "claim as it stands, then record the review", block.path, r.line,
+                    (review_call(block, [r.target]),)))
+            elif states[r.target] == REVIEW_FAILED:
+                out.append(Diagnostic(
+                    "REVIEW_FAILED", REVIEW, block.block_id,
+                    f"{rv.get('id', 'its latest review')} at {str(rv.get('commit') or '')[:7]} found "
+                    f"{r.kind} {r.target} not aligned: {rv.get('note') or '(no note)'}; fix the code or "
+                    "restate the claim, then review again", block.path, r.line,
+                    (review_call(block, [r.target]),)))
 
     code_ids = {b.block_id for b in index.blocks}
     blocks = {b.block_id: b for b in index.blocks if b.valid}
@@ -133,16 +187,18 @@ def validate(index: CodeIndex, claims: Mapping[str, ClaimRef] | None, *,
                                   f"names {m.target}, which is not in the premise graph at {rev} -- it "
                                   "was removed or renamed; update the text", m.path, m.line))
             continue
-        block = blocks.get(m.block or "")
-        covered = block is not None and any(
-            m.target == t or m.target in claims[t].basis for t in block.targets() if t in claims)
+        around = [blocks[b] for b in (m.blocks or ((m.block,) if m.block else ())) if b in blocks]
+        covered = any(m.target == t or m.target in claims[t].basis
+                      for block in around for t in block.targets() if t in claims)
         if not covered:
-            inside = f"inside {block.block_id}, which declares no relation covering it" if block else \
-                "outside any region"
+            inside = (f"inside {around[0].block_id}, which declares no relation covering it" if around
+                      else "outside any region")
+            remedy = ("add `Uses: " + m.target + "` (or Implements:, Checks:) to the docstring of the "
+                      "function or class it describes" if m.where == "docstring" else
+                      "declare it on the region the comment describes")
             out.append(Diagnostic("UNTRACKED_MENTION", OBSERVATION, where,
                                   f"{m.where} names {m.target} {inside}; nothing will notice when it "
-                                  "is restated -- wrap the code it describes in a region that declares "
-                                  "it, or drop the reference", m.path, m.line))
+                                  f"is restated -- {remedy}", m.path, m.line))
 
     if index.scope.paths is not None:
         return                                 # a partial scan cannot judge coverage

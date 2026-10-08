@@ -784,11 +784,11 @@ class TestCitedMeasurements:
 
         assert self.only(measured).state == UNPINNED
         out = status(view="coverage")
-        assert "CTR-grasp-reachable [" in out and "(unpinned)" in out
+        assert "CTR-grasp-reachable [" in out and "(unreviewed)" in out
         assert "contracts no branch cites (1):" in out
         assert "on components -- measured, and no design says why it matters" in out
         assert "(1): CTR-grasp-fast (no evidence yet)" in out
-        assert "cited measurements to re-read" not in out, "unpinned is listed only once a project pins"
+        assert "cited measurements to re-read" not in out, "unreviewed is listed only once a project reviews any"
 
     def test_a_pin_reads_reviewed_and_restates_nothing(self, measured):
         from consistency_belief.measurements import REVIEWED
@@ -814,13 +814,35 @@ class TestCitedMeasurements:
         assert m.state == NOT_REVIEWED and m.pin == pin
         out = status(view="coverage")
         assert "cited measurements to re-read against their claims (1)" in out
-        assert f"write evidence: CTR-grasp-reachable@{m.expected}" in out
+        assert 'record review("BRN-grasp-reach", target="CTR-grasp-reachable"' in out
         assert "MEASUREMENT_NOT_REVIEWED" in {f.code for f in audit(measured)}
         self.pin(measured, pin, MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
         assert self.only(measured).state == NOT_REVIEWED, "a premise restated upstream reaches it too"
         self.pin(measured, self.only(measured).expected,
                  MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
         assert self.only(measured).state == REVIEWED
+
+    def test_a_measurement_review_reads_reviewed_until_the_claim_moves(self, measured):
+        """A review of a cited measurement is a ledger record bound to a commit; no pin is written."""
+        from consistency_belief.declarations import load
+        from consistency_belief.measurements import NOT_REVIEWED, REVIEW_FAILED, REVIEWED, cited_measurements
+        from consistency_belief.server import review
+        from consistency_belief.store import Store
+
+        def state():
+            [m] = cited_measurements(load(measured), Store(measured).measurement_reviews())
+            return m.state
+
+        assert "name the contract" in review("BRN-grasp-reach")
+        out = review("BRN-grasp-reach", target="CTR-grasp-reachable", note="the test runs IK on every pose")
+        assert "REV-0001 recorded: BRN-grasp-reach cites CTR-grasp-reachable -- aligned" in out
+        assert state() == REVIEWED and "@" not in (measured / "consistency.yaml").read_text(encoding="utf-8")
+        review("BRN-grasp-reach", target="CTR-grasp-reachable", outcome="not_aligned", note="skips collisions")
+        assert state() == REVIEW_FAILED
+        assert "skips collisions" in status(view="coverage")
+        review("BRN-grasp-reach", target="CTR-grasp-reachable", note="collisions are checked after all")
+        self.pin(measured, "", MEASURED_DESIGN.replace("IK returns a solution.", "IK returns a solution within 50 ms."))
+        assert state() == NOT_REVIEWED, "a premise restated upstream reaches it"
 
     def test_rewording_the_derivation_rule_keeps_the_review(self, measured):
         from consistency_belief.measurements import REVIEWED
@@ -833,7 +855,7 @@ class TestCitedMeasurements:
         out = audit_change("DEF-reachable", proposed_statement="IK returns a solution within 50 ms.")
         assert "BRN-grasp-reach cites CTR-grasp-reachable" in out
         same = audit_change("DEF-reachable", proposed_statement="IK returns a solution.")
-        assert "unaffected, their pins hold" in same
+        assert "unaffected, their reviews hold" in same
 
     def test_a_branch_outside_the_declared_graph_has_no_reviewed_measurement(self, measured):
         """It has no claim digest, so no pin reviews it -- and it is reported, not skipped."""

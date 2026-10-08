@@ -9,11 +9,18 @@ text inside a string or a docstring is never one. Mentions -- ids named in prose
 comments and from docstrings, which is where code cites the theory it follows; other string
 literals are data (messages, fixtures, patterns) and are not read.
 
-The body digest is what a body pin vouches for, so it is built to change when the code changes
+A region is delimited by begin/end comments, or is a function, class or module whose docstring
+declares relations in lines of their own -- `Implements: BRN-x`, `Uses: DEF-y, AXM-z`, `Checks:`,
+`Motivated-by:` -- and optionally names itself with `Region: CODE-<name>`; otherwise its id is
+derived from its file and qualified name. Such regions may nest (a method inside a class): each
+covers the definition it documents, nested ones included.
+
+The body digest is what a review vouches for, so it is built to change when the code changes
 and only then:
 
-  - comments, blank lines and the whitespace inside a line are set aside, so a formatter run or
-    a reworded comment does not ask for a re-review;
+  - comments, blank lines, the whitespace inside a line and -- under grammar 2 -- docstrings are
+    set aside, so a formatter run or a reworded comment or docstring does not ask for a re-review;
+    grammar 1 keeps docstrings, and is what a pin written in the source was taken under;
   - each logical line keeps its indentation relative to the block's least-indented line, so a
     statement moved into or out of a branch is a change, and the block moved to another nesting
     level is not;
@@ -31,8 +38,8 @@ import re
 import tokenize
 from dataclasses import dataclass, field
 
-from .model import (ERROR, GRAMMAR_VERSION, RELATION_KINDS, Block, Diagnostic, Mention, Relation,
-                    display)
+from .model import (ERROR, GRAMMAR_VERSION, LEGACY_GRAMMAR, RELATION_KINDS, Block, Diagnostic, Mention,
+                    Relation, display)
 
 BLOCK_ID = r"CODE-[A-Za-z0-9][A-Za-z0-9_-]*"
 NODE_ID = r"(?:AXM|DEF|LMA|BRN)-[A-Za-z0-9][A-Za-z0-9_-]*"
@@ -50,6 +57,12 @@ MENTION = re.compile(r"(?<![A-Za-z0-9_-])((?:AXM|DEF|LMA|BRN|CODE)-[A-Za-z0-9](?
 #: Tokens that are not code: they never enter a body digest, and none ends a header.
 _LAYOUT = {"COMMENT", "NL", "NEWLINE", "INDENT", "DEDENT", "ENCODING", "ENDMARKER"}
 
+#: A docstring line that declares relations: the kind, a colon, and nothing but node ids. A line
+#: that names an id among other words is prose -- a mention -- and declares nothing.
+_DOC_RELATION = re.compile(r"^\s*(Implements|Uses|Checks|Motivated-by)\s*:\s*(.*?)\s*$")
+_DOC_REGION = re.compile(r"^\s*Region\s*:\s*(\S+)\s*$")
+_DOC_KINDS = {"Implements": "implements", "Uses": "uses", "Checks": "checks", "Motivated-by": "motivated-by"}
+
 
 @dataclass
 class FileScan:
@@ -62,22 +75,34 @@ class FileScan:
 
 @dataclass
 class _Open:
+    """A region being read: its logical lines under grammar 1 (docstrings kept) and grammar 2."""
+
     block: Block
     header: bool = True                                  # no code token seen yet
     lines: list[tuple[int, list[str]]] = field(default_factory=list)
     current: list[str] = field(default_factory=list)
     current_col: int = 0
+    lines2: list[tuple[int, list[str]]] = field(default_factory=list)
+    current2: list[str] = field(default_factory=list)
+    current2_col: int = 0
 
-    def add(self, text: str, col: int) -> None:
+    def add(self, text: str, col: int, doc: bool = False) -> None:
         self.header = False
         if not self.current:
             self.current_col = col
         self.current.append(text)
+        if not doc:
+            if not self.current2:
+                self.current2_col = col
+            self.current2.append(text)
 
     def flush(self) -> None:
         if self.current:
             self.lines.append((self.current_col, self.current))
             self.current = []
+        if self.current2:
+            self.lines2.append((self.current2_col, self.current2))
+            self.current2 = []
 
 
 def decode(data: bytes) -> str:
@@ -87,9 +112,9 @@ def decode(data: bytes) -> str:
     return text.removeprefix("﻿").replace("\r\n", "\n").replace("\r", "\n")
 
 
-def body_digest(lines: list[tuple[int, list[str]]]) -> str:
+def body_digest(lines: list[tuple[int, list[str]]], grammar: int = GRAMMAR_VERSION) -> str:
     base = min((col for col, _ in lines), default=0)
-    payload = [GRAMMAR_VERSION, [[col - base, toks] for col, toks in lines]]
+    payload = [grammar, [[col - base, toks] for col, toks in lines]]
     blob = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
 
@@ -146,6 +171,92 @@ def docstring_lines(text: str) -> set[int] | None:
     return lines
 
 
+def _slug(part: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_-]+", "-", part).strip("_-")
+
+
+def derived_id(path: str, qualname: str = "") -> str:
+    """A docstring region's id when it names none: its file and qualified name, as an id."""
+    stem = path.removesuffix(".pyi").removesuffix(".py")
+    parts = [p for p in (_slug(s) for s in re.split(r"[/\\.]", stem)) if p] or ["module"]
+    out = "CODE-" + "-".join(parts)
+    if qualname:
+        out += "--" + "-".join(p for p in (_slug(s) for s in qualname.split(".")) if p)
+    return out
+
+
+@dataclass
+class _DocRegion:
+    entry: _Open
+    end: int
+    rows: set[int]                      # the docstring lines that declared it
+
+
+def docstring_regions(path: str, text: str, diag) -> list[_DocRegion]:
+    """The functions, classes and the module whose docstrings declare relations, as regions."""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError):
+        return []
+    n_lines = len(text.split("\n"))
+    found: list[_DocRegion] = []
+
+    def visit(node: ast.AST, qual: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                name = f"{qual}.{child.name}" if qual else child.name
+                start = min([child.lineno] + [d.lineno for d in child.decorator_list])
+                read(child, start, child.end_lineno or child.lineno, name)
+                visit(child, name)
+            elif not isinstance(child, ast.Lambda):
+                visit(child, qual)
+
+    def read(node: ast.AST, start: int, end: int, qual: str) -> None:
+        body = getattr(node, "body", [])
+        if not (body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+                and isinstance(body[0].value.value, str)):
+            return
+        first = body[0].lineno
+        block_id, relations, rows = None, [], set()
+        for offset, line in enumerate(body[0].value.value.split("\n")):
+            row = first + offset
+            region = _DOC_REGION.match(line)
+            if region:
+                rows.add(row)
+                if re.fullmatch(BLOCK_ID, region.group(1)):
+                    block_id = region.group(1)
+                else:
+                    diag("MALFORMED_MARKER", f"{path}:{row}", f"`{display(line.strip(), 80)}`: Region: "
+                         "names one CODE- id", row)
+                continue
+            m = _DOC_RELATION.match(line)
+            if not m:
+                continue
+            ids = [t for t in re.split(r"[,\s]+", m.group(2)) if t]
+            if not ids or not all(re.fullmatch(rf"{NODE_ID}(?:@{PIN})?", t) for t in ids):
+                continue                         # prose that happens to begin with the word
+            rows.add(row)
+            kind = _DOC_KINDS[m.group(1)]
+            for t in ids:
+                target, _, pin = t.partition("@")
+                if pin:
+                    diag("MALFORMED_MARKER", f"{path}:{row}", f"`{display(line.strip(), 80)}`: a docstring "
+                         "relation carries no pin -- a review is recorded with review(), in the ledger", row)
+                if any(r.kind == kind and r.target == target for r in relations):
+                    diag("DUPLICATE_RELATION", block_id or derived_id(path, qual),
+                         f"declares {kind} {target} twice", row)
+                    continue
+                relations.append(Relation(kind, target, None, row))
+        if relations:
+            bid = block_id or derived_id(path, qual)
+            block = Block(bid, path, start, end, relations=relations, origin="docstring")
+            found.append(_DocRegion(_Open(block), end, rows))
+
+    read(tree, 1, n_lines, "")
+    visit(tree, "")
+    return found
+
+
 def parse_python(path: str, text: str) -> FileScan:
     scan = FileScan(path)
 
@@ -165,14 +276,17 @@ def parse_python(path: str, text: str) -> FileScan:
         docstrings = set()
     text_lines = text.split("\n")
     stack: list[_Open] = []
+    regions = docstring_regions(path, text, diag)
+    declaring = {row for r in regions for row in r.rows}
 
     def close(entry: _Open, line: int, *, valid: bool) -> None:
         entry.flush()
         block = entry.block
         block.end_line = line
-        block.body_hash = body_digest(entry.lines)
+        block.body_hash = body_digest(entry.lines2, GRAMMAR_VERSION)
+        block.body_hash_v1 = body_digest(entry.lines, LEGACY_GRAMMAR)
         block.source_hash = source_digest(text_lines, block.start_line, line)
-        block.n_code_lines = len(entry.lines)
+        block.n_code_lines = len(entry.lines2)
         block.valid = block.valid and valid
         if not entry.lines:
             block.valid = False
@@ -184,11 +298,21 @@ def parse_python(path: str, text: str) -> FileScan:
                  "remove the markers", block.start_line)
         scan.blocks.append(block)
 
+    def enclosing(row: int) -> tuple[str, ...]:
+        """Every region the line sits in, innermost first: marker regions, then docstring ones."""
+        inner = [e.block.block_id for e in reversed(stack)]
+        doc = sorted((r for r in regions if r.entry.block.start_line <= row <= r.end),
+                     key=lambda r: r.end - r.entry.block.start_line)
+        return tuple(inner + [r.entry.block.block_id for r in doc])
+
     def mentions(text_: str, line: int, where: str) -> None:
-        enclosing = stack[-1].block.block_id if stack else None
         for offset, chunk in enumerate(text_.split("\n")):
+            if where == "docstring" and line + offset in declaring:
+                continue                     # a relation line declares; it does not mention
             for m in MENTION.finditer(chunk):
-                scan.mentions.append(Mention(m.group(1), path, line + offset, where, enclosing))
+                around = enclosing(line + offset)
+                scan.mentions.append(Mention(m.group(1), path, line + offset, where,
+                                             around[0] if around else None, around))
 
     for kind, string, (row, col) in tokens:
         if kind == "COMMENT":
@@ -266,18 +390,26 @@ def parse_python(path: str, text: str) -> FileScan:
         if kind == "NEWLINE":
             for entry in stack:
                 entry.flush()
+            for region in regions:
+                region.entry.flush()
             continue
         if kind in _LAYOUT:
             continue
-        if kind == "STRING" and row in docstrings:
+        doc = kind == "STRING" and row in docstrings
+        if doc:
             mentions(string, row, "docstring")
         for entry in stack:
-            entry.add(string, col)
+            entry.add(string, col, doc)
+        for region in regions:
+            if region.entry.block.start_line <= row <= region.end:
+                region.entry.add(string, col, doc)
 
     for entry in reversed(stack):
         diag("UNMATCHED_BEGIN", entry.block.block_id, "is never ended in this file; regions cannot "
              "cross files", entry.block.start_line)
         close(entry, len(text_lines), valid=False)
+    for region in regions:
+        close(region.entry, region.end, valid=True)
     scan.blocks.sort(key=lambda b: b.start_line)
     if scan.foreign:
         # A file that builds throwaway projects names their ids, which resolve nowhere here.

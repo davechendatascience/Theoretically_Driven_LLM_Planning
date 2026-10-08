@@ -191,6 +191,27 @@ class Store:
                 out.pop(node_id, None)
         return out
 
+    # ---------- reviews ----------
+
+    def append_review(self, payload: dict[str, Any], actor: str = "agent") -> dict[str, Any]:
+        """Record that `actor` read a code link or a cited measurement at one commit (DEF-review).
+        A review is an event: appended, never edited, and the latest one for a link wins."""
+        rec = {**payload, "id": sequential_id("REV", len(self.reviews()) + 1)}
+        self.append_event("review", rec, actor=actor)
+        return rec
+
+    def reviews(self) -> list[dict[str, Any]]:
+        return [{**e.get("payload", {}), "actor": e.get("actor", ""), "timestamp": e.get("timestamp", "")}
+                for e in self.events() if e.get("tool") == "review"]
+
+    def link_reviews(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """The latest review of each code link, by (region id, node id)."""
+        return {(r.get("region"), r.get("target")): r for r in self.reviews() if r.get("kind") == "link"}
+
+    def measurement_reviews(self) -> dict[tuple[str, str], dict[str, Any]]:
+        """The latest review of each cited measurement, by (branch id, contract id)."""
+        return {(r.get("branch"), r.get("contract")): r for r in self.reviews() if r.get("kind") == "measurement"}
+
     # ---------- decisions ----------
 
     def append_decision(self, record: dict[str, Any]) -> dict[str, Any]:

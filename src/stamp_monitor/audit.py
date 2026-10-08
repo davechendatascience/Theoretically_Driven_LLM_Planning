@@ -103,28 +103,32 @@ def audit(root: Path) -> list[Finding]:
 
 
 def _cited_measurements(root: Path) -> list[Finding]:
-    """A pinned cited measurement whose claim was restated since warns; unpinned ones (once the
-    project pins any) and contracts no design cites are counted as information."""
+    """A reviewed cited measurement whose claim was restated since, or whose review found it not
+    aligned, warns; unreviewed ones (once the project reviews any) and contracts no design cites
+    are counted as information."""
     if not (root / "consistency.yaml").exists():
         return []
     try:
         from consistency_belief.declarations import load as load_design
-        from consistency_belief.measurements import (NOT_REVIEWED, UNPINNED, adopted,
+        from consistency_belief.measurements import (NOT_REVIEWED, REVIEW_FAILED, UNREVIEWED, adopted,
                                                      cited_measurements, uncited_by_kind)
+        from consistency_belief.store import Store
     except ImportError:
         return []
     decl = load_design(root)
     if decl.source == "none":
         return []
-    found = cited_measurements(decl)
-    out = [Finding("MEASUREMENT_NOT_REVIEWED", WARN, f"{m.branch} -> {m.contract}", f"{m.why}; {m.fix}")
-           for m in found if m.state == NOT_REVIEWED and (m.pin or m.expected is None)]
-    unpinned = [m for m in found if m.state == UNPINNED]
-    if unpinned and adopted(found):
-        out.append(Finding("MEASUREMENT_UNPINNED", INFO, f"{len(unpinned)} cited measurement(s)",
-                           "never read against their claims and pinned: "
-                           + ", ".join(f"{m.branch} -> {m.contract}" for m in unpinned[:4])
-                           + (" ..." if len(unpinned) > 4 else "")))
+    found = cited_measurements(decl, Store(root).measurement_reviews())
+    out = [Finding("MEASUREMENT_" + m.state.upper().replace(" ", "_"), WARN, f"{m.branch} -> {m.contract}",
+                   f"{m.why}; {m.fix}")
+           for m in found if (m.state == NOT_REVIEWED and (m.latest or m.expected is None))
+           or m.state == REVIEW_FAILED]
+    unreviewed = [m for m in found if m.state == UNREVIEWED]
+    if unreviewed and adopted(found):
+        out.append(Finding("MEASUREMENT_UNREVIEWED", INFO, f"{len(unreviewed)} cited measurement(s)",
+                           "never read against their claims and reviewed: "
+                           + ", ".join(f"{m.branch} -> {m.contract}" for m in unreviewed[:4])
+                           + (" ..." if len(unreviewed) > 4 else "")))
     groups = uncited_by_kind(decl)
     total = sum(len(v) for v in groups.values())
     if total:

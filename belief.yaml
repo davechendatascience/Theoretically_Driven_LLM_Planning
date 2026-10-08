@@ -307,6 +307,8 @@ components:
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_cited_measurements_and_uncited_contracts_are_shown"}
       - {id: FM-references-unshown, observable: "a snapshot omits a node's source references",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_source_references_are_shown_beside_their_nodes"}
+      - {id: FM-review-unshown, observable: "a snapshot shows a link or a cited measurement without its latest review, or a docstring region not at all",
+         observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_review_is_shown_beside_its_region_and_measurement"}
       - {id: FM-conditional-undrawn, observable: "a snapshot draws a conditional claim with no mark, or without the steps it waits on",
          observed_by: CTR-snapshot-shows-one-revision, case: "tests.test_graph_snapshot::test_a_conditional_claim_is_drawn_with_what_it_waits_on"}
       - {id: FM-template-missing, observable: "installed as a package, the server finds no page template",

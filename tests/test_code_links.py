@@ -17,9 +17,9 @@ from pathlib import Path
 import pytest
 
 from conftest import BASE_YAML, git
-from code_links import (ALIGNED, BODY_CHANGED, CLAIM_RESTATED, ERROR, OBSERVATION, REVIEW, UNKNOWN_CLAIM,
-                        UNPINNED, build_index, compare_indexes, display, link_state, parse_python,
-                        resolve_revision, scan_worktree)
+from code_links import (ALIGNED, BODY_CHANGED, CLAIM_RESTATED, ERROR, OBSERVATION, REVIEW, REVIEW_FAILED,
+                        UNKNOWN_CLAIM, UNREVIEWED, build_index, compare_indexes, display, link_state,
+                        parse_python, resolve_revision, scan_worktree)
 from code_links.impact import ADDED, BODY, MOVED, RELATIONS, REMOVED, RENAMED, REPINNED
 from code_links.parser import code_tokens
 from consistency_belief.links import claim_refs, scan
@@ -93,14 +93,10 @@ def codes(index, severity=None) -> list[str]:
 
 
 def pinned(index) -> str:
-    """The servo file with the header lines the UNPINNED finding prints, as an agent writes them
-    once it has read the region against its claims."""
-    [finding] = [d for d in index.diagnostics if d.code == "UNPINNED"]
-    text = SERVO.format(body="", brn="", lma="")
-    old = ["    # tdlp:begin CODE-servo-cap", "    # tdlp:implements BRN-servo", "    # tdlp:uses LMA-scaling"]
-    for before, after in zip(old, finding.fix):
-        text = text.replace(before + "\n", "    " + after + "\n")
-    return text
+    """The servo file with its header pinned as reviews were written before they were ledger
+    records: the body under grammar 1, and each claim's digest as it stands (DEF-review)."""
+    block, claims = index.get_block("CODE-servo-cap"), index.claims
+    return servo(body=block.legacy_body_pin, brn=claims["BRN-servo"].pin, lma=claims["LMA-scaling"].pin)
 
 
 @pytest.fixture
@@ -202,12 +198,12 @@ class TestMarkers:
 # --- alignment: the pins, and what changes them ----------------------------------------------
 
 class TestAlignment:
-    def test_an_unreviewed_link_prints_the_lines_that_align_it(self, project):
+    def test_an_unreviewed_link_names_the_review_to_record(self, project):
         index = scan(project)
         [finding] = [d for d in index.diagnostics if d.severity == REVIEW]
-        assert finding.code == "UNPINNED" and len(finding.fix) == 3
+        assert finding.code == "UNREVIEWED" and finding.fix == ('review("CODE-servo-cap", note="what you checked")',)
         block = index.get_block("CODE-servo-cap")
-        assert {link_state(block, r, index.claims) for r in block.relations} == {UNPINNED}
+        assert {link_state(block, r, index.claims) for r in block.relations} == {UNREVIEWED}
 
     def test_written_pins_align_every_link(self, aligned):
         index = scan(aligned)
@@ -324,25 +320,25 @@ class TestRevisions:
         assert {(c.block_id, c.change) for c in changes.items} == {("CODE-servo-cap", BODY), ("CODE-new", ADDED)}
         assert dirty == ["new.py", "servo.py"]
 
-    def test_a_region_is_tagged_and_pinned_in_one_commit(self, aligned, monkeypatch):
-        """Untagged code: the agent writes the markers, reads the region against its claim, and
-        writes the pins the uncommitted report prints -- then commits once, aligned."""
+    def test_a_region_is_tagged_committed_and_reviewed(self, aligned, monkeypatch):
+        """Untagged code: the agent names the claim in the docstring, commits the code, reads it
+        against its claim and records the review -- no pin is written into the source."""
+        from consistency_belief.server import review
         from stamp_monitor.links import report
 
-        (aligned / "idle.py").write_text("def idle():\n    # tdlp:begin CODE-idle\n"
-                                         "    # tdlp:implements BRN-idle\n    return 0.0\n"
-                                         "    # tdlp:end CODE-idle\n", encoding="utf-8")
-        text = report(aligned)
-        start = text.index("CODE-idle: once committed as it stands")
-        header = [ln.strip() for ln in text[start:].splitlines()[1:3]]
-        assert header[0].startswith("# tdlp:begin CODE-idle@") and header[1].startswith("# tdlp:implements BRN-idle@")
-        body = (aligned / "idle.py").read_text(encoding="utf-8")
-        body = body.replace("# tdlp:begin CODE-idle\n", header[0] + "\n").replace(
-            "# tdlp:implements BRN-idle\n", header[1] + "\n")
-        commit(aligned, {"idle.py": body}, "tag and pin the idle path, reviewed")
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(aligned))
+        idle = 'def idle():\n    """Command nothing.\n\n    Implements: BRN-idle\n    """\n    return 0.0\n'
+        (aligned / "idle.py").write_text(idle, encoding="utf-8")
+        assert "CODE-idle--idle: commit it as it stands" in report(aligned)
+        assert "a review reads committed code" in review("CODE-idle--idle"), "uncommitted is refused"
+        commit(aligned, {"idle.py": idle}, "tag the idle path")
+        assert "REV-0001 recorded: CODE-idle--idle implements BRN-idle -- aligned" in review(
+            "CODE-idle--idle", note="returns zero, so nothing moves")
         index = scan(aligned)
         assert codes(index, REVIEW) == [] and codes(index, ERROR) == []
         assert "UNLINKED_CLAIM" not in codes(index), "the branch is linked now"
+        assert "idle.py" not in subprocess.run(["git", "status", "--porcelain"], cwd=aligned, check=False,
+                                               capture_output=True, text=True).stdout, "no source edited"
 
 
 # --- what a range of commits did --------------------------------------------------------------
@@ -442,7 +438,7 @@ class TestBoundaries:
         assert "CODE-servo-cap implements BRN-servo" in out and "CODE-servo-cap uses LMA-scaling" in out
         assert "servo.py" not in out
         same = audit_change("DEF-cap", proposed_statement="A vector scaled down to at most a given norm, never up.")
-        assert "unaffected, their pins hold" in same
+        assert "unaffected, their reviews hold" in same
 
     def test_the_monitor_reports_and_writes_nothing(self, roots):
         from stamp_monitor.audit import audit
@@ -453,7 +449,7 @@ class TestBoundaries:
         ledgers = {p: p.read_bytes() for d in (".belief", ".consistency") if (roots / d).exists()
                    for p in (roots / d).rglob("*") if p.is_file()}
         report = links()
-        assert "BODY_CHANGED CODE-servo-cap" in report and "# tdlp:begin CODE-servo-cap@" in report
+        assert "BODY_CHANGED CODE-servo-cap" in report and "to review (1)" in report and "code since" in report
         assert "LINK_BODY_CHANGED" in {f.code for f in audit(roots)}
         assert {p: p.read_bytes() for p in ledgers} == ledgers
 
@@ -511,7 +507,7 @@ class TestReportBySubject:
         assert "plain.py: 0 region(s)" in report(aligned, "plain.py")
         assert "nothing uncommitted matches it either" in report(aligned, "nowhere.py")
 
-    def test_an_uncommitted_region_is_found_by_id_claim_or_path_with_its_pins(self, aligned):
+    def test_an_uncommitted_region_is_found_by_id_claim_or_path_with_what_to_do(self, aligned):
         from stamp_monitor.links import report
 
         (aligned / "idle.py").write_text("# tdlp:begin CODE-idle\n# tdlp:implements BRN-idle\nx = 0\n"
@@ -519,11 +515,11 @@ class TestReportBySubject:
         for subject in ("CODE-idle", "BRN-idle", "idle.py"):
             text = report(aligned, subject)
             assert "CODE-idle added" in text, subject
-            assert "# tdlp:begin CODE-idle@" in text and "# tdlp:implements BRN-idle@" in text, subject
+            assert 'CODE-idle: commit it as it stands, read it against BRN-idle, then record review("CODE-idle"' in text, subject
         assert "in the working tree only" in report(aligned, "CODE-idle")
         assert "CODE-idle" not in report(aligned, "CODE-servo-cap"), "narrowed to its subject"
 
-    def test_a_long_report_counts_what_it_cannot_list_and_puts_the_pins_first(self, aligned):
+    def test_a_long_report_counts_what_it_cannot_list_and_puts_the_uncommitted_first(self, aligned):
         from stamp_monitor.links import LISTED, report
 
         commit(aligned, {f"pkg/m{i:02d}.py": f"# per LMA-scaling, step {i}\nx = {i}\n" for i in range(LISTED + 10)})
@@ -567,3 +563,158 @@ class TestMeasurementBesideLinks:
         assert _names_environment("python run.py", ["deps/requirements-dev.txt"])
         assert _names_environment("pip install -r requirements.txt && pytest", [])
         assert not _names_environment("python run.py $OUT", ["tests/conftest.py"])
+
+
+# --- reviews: ledger records bound to a commit, never lines in the source ----------------------
+
+@pytest.fixture
+def reviewing(project: Path, monkeypatch) -> Path:
+    for var in ("CONSISTENCY_PROJECT_ROOT", "BELIEF_PROJECT_ROOT", "STAMP_MONITOR_ROOT"):
+        monkeypatch.setenv(var, str(project))
+    return project
+
+
+def states(root: Path, block_id: str = "CODE-servo-cap") -> dict[str, str]:
+    index = scan(root)
+    block = index.get_block(block_id)
+    return {r.target: link_state(block, r, index.claims) for r in block.relations}
+
+
+class TestReviews:
+    def test_a_ledger_review_aligns_a_link_until_either_side_moves(self, reviewing):
+        from consistency_belief.server import review
+
+        assert set(states(reviewing).values()) == {UNREVIEWED}
+        out = review("CODE-servo-cap", note="delta is capped at cap * dt; the scaling keeps direction")
+        assert "REV-0001 recorded: CODE-servo-cap implements BRN-servo -- aligned" in out
+        assert "REV-0002 recorded: CODE-servo-cap uses LMA-scaling -- aligned" in out
+        assert set(states(reviewing).values()) == {ALIGNED}
+        assert "tdlp:begin CODE-servo-cap\n" in (reviewing / "servo.py").read_text(encoding="utf-8"), "no pin written"
+
+        text = (reviewing / "servo.py").read_text(encoding="utf-8")
+        commit(reviewing, {"servo.py": text.replace("cap * dt", "cap")}, "edit the servo")
+        assert set(states(reviewing).values()) == {BODY_CHANGED}
+        review("CODE-servo-cap", note="the cap no longer scales with dt; still a cap")
+        assert set(states(reviewing).values()) == {ALIGNED}
+
+        commit(reviewing, {"consistency.yaml": DESIGN.replace("preserves its direction", "keeps its direction")},
+               "restate the lemma")
+        assert states(reviewing) == {"BRN-servo": CLAIM_RESTATED, "LMA-scaling": CLAIM_RESTATED}, \
+            "the lemma is the branch's premise: both claims moved"
+
+    def test_a_failed_review_reads_not_aligned_until_reviewed_again(self, reviewing):
+        from consistency_belief.server import review
+
+        assert "needs a note" in review("CODE-servo-cap", target="BRN-servo", outcome="not_aligned")
+        review("CODE-servo-cap", target="BRN-servo", outcome="not_aligned", note="no cap when dt is negative")
+        review("CODE-servo-cap", target="LMA-scaling")
+        assert states(reviewing) == {"BRN-servo": REVIEW_FAILED, "LMA-scaling": ALIGNED}
+        finding = [d for d in scan(reviewing).diagnostics if d.code == "REVIEW_FAILED"]
+        assert len(finding) == 1 and "no cap when dt is negative" in finding[0].message
+        review("CODE-servo-cap", target="BRN-servo", note="dt is never negative: the scheduler guarantees it")
+        assert states(reviewing) == {"BRN-servo": ALIGNED, "LMA-scaling": ALIGNED}, "the latest review wins"
+
+    def test_a_review_of_uncommitted_code_or_claims_is_refused(self, reviewing):
+        from consistency_belief.server import review
+
+        text = (reviewing / "servo.py").read_text(encoding="utf-8")
+        (reviewing / "servo.py").write_text(text.replace("cap * dt", "cap"), encoding="utf-8")
+        assert "servo.py has uncommitted edits" in review("CODE-servo-cap")
+        (reviewing / "servo.py").write_text(text, encoding="utf-8")
+        (reviewing / "consistency.yaml").write_text(DESIGN.replace("preserves its direction", "keeps its direction"),
+                                                    encoding="utf-8")
+        assert "LMA-scaling, or a node it rests on, has uncommitted edits" in review("CODE-servo-cap", target="LMA-scaling")
+        assert "BRN-servo, or a node it rests on, has uncommitted edits" in review("CODE-servo-cap", target="BRN-servo")
+        assert set(states(reviewing).values()) == {UNREVIEWED}, "nothing was recorded"
+        assert "is not a region at" in review("CODE-nowhere")
+
+    def test_pins_in_headers_count_as_reviews(self, aligned, monkeypatch):
+        """Pins written before reviews were ledger records still align, under grammar 1 -- so an
+        upgrade stales nothing -- and a ledger review, once recorded, takes their place."""
+        from consistency_belief.server import review
+
+        monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(aligned))
+        assert set(states(aligned).values()) == {ALIGNED}
+        text = (aligned / "servo.py").read_text(encoding="utf-8")
+        documented = text.replace("    delta = requested - previous\n",
+                                  '    """The step, capped."""\n    delta = requested - previous\n')
+        commit(aligned, {"servo.py": documented}, "document the servo step")
+        assert set(states(aligned).values()) == {BODY_CHANGED}, "grammar 1 kept docstrings"
+        review("CODE-servo-cap", note="only a docstring was added")
+        assert set(states(aligned).values()) == {ALIGNED}
+        commit(aligned, {"servo.py": documented.replace("The step, capped.", "One capped step.")}, "reword")
+        assert set(states(aligned).values()) == {ALIGNED}, "a ledger review is under grammar 2: docstrings aside"
+
+
+IDLE = '''"""The idle path.
+
+Uses: AXM-bound
+"""
+
+
+class Idle:
+    """An idle arm.
+
+    Implements: BRN-idle
+    """
+
+    def command(self):
+        """Command nothing; by LMA-scaling a zero step stays zero.
+
+        Region: CODE-idle-command
+        Uses: LMA-scaling
+        """
+        return 0.0
+'''
+
+
+class TestDocstringRegions:
+    def test_a_docstring_declares_a_function_region(self, reviewing):
+        from consistency_belief.server import review
+
+        commit(reviewing, {"idle.py": IDLE}, "the idle path, linked in its docstrings")
+        index = scan(reviewing)
+        found = {b.block_id: (b.origin, sorted((r.kind, r.target) for r in b.relations), b.start_line, b.end_line)
+                 for b in index.blocks if b.path == "idle.py"}
+        assert found == {"CODE-idle": ("docstring", [("uses", "AXM-bound")], 1, 20),
+                         "CODE-idle--Idle": ("docstring", [("implements", "BRN-idle")], 7, 19),
+                         "CODE-idle-command": ("docstring", [("uses", "LMA-scaling")], 13, 19)}
+        assert "UNTRACKED_MENTION" not in [d.code for d in index.diagnostics if d.path == "idle.py"], \
+            "a mention inside a region that declares it is tracked"
+        assert "UNLINKED_CLAIM" not in [d.code for d in index.diagnostics if d.subject == "BRN-idle"]
+
+        for region in ("CODE-idle", "CODE-idle--Idle", "CODE-idle-command"):
+            review(region, note="read against its claim")
+        assert {s for b in ("CODE-idle", "CODE-idle--Idle", "CODE-idle-command")
+                for s in states(reviewing, b).values()} == {ALIGNED}
+        commit(reviewing, {"idle.py": IDLE.replace("Command nothing", "Send no command")}, "reword a docstring")
+        assert set(states(reviewing, "CODE-idle-command").values()) == {ALIGNED}, "a docstring edit stales nothing"
+        commit(reviewing, {"idle.py": IDLE.replace("return 0.0", "return 0")}, "change the code")
+        assert set(states(reviewing, "CODE-idle-command").values()) == {BODY_CHANGED}
+        assert set(states(reviewing, "CODE-idle--Idle").values()) == {BODY_CHANGED}, "the class holds the method"
+
+    def test_a_docstring_relation_carries_no_pin_and_prose_declares_nothing(self):
+        scan_ = parse_python("x.py", 'def f():\n    """Implements: BRN-servo@12345678\n\n    Uses: the grid, per DEF-cap.\n    """\n    return 1\n')
+        assert [d.code for d in scan_.diagnostics] == ["MALFORMED_MARKER"]
+        [block] = scan_.blocks
+        assert [(r.kind, r.target, r.pin) for r in block.relations] == [("implements", "BRN-servo", None)]
+        assert [m.target for m in scan_.mentions] == ["DEF-cap"], "a line of prose is a mention, not a relation"
+
+
+class TestReviewBundle:
+    def test_a_stale_link_shows_both_diffs_since_its_review(self, reviewing):
+        from consistency_belief.server import review
+        from stamp_monitor.links import report
+
+        review("CODE-servo-cap", note="capped at cap * dt")
+        text = (reviewing / "servo.py").read_text(encoding="utf-8")
+        commit(reviewing, {"servo.py": text.replace("cap * dt", "cap"),
+                           "consistency.yaml": DESIGN.replace("preserves its direction", "keeps its direction")},
+               "edit the servo and restate the lemma")
+        out = report(reviewing, "CODE-servo-cap")
+        assert "to review:" in out
+        assert "claim since" in out and "LMA-scaling: Capping a vector [-preserves-] {+keeps+} its direction." in out
+        assert "code since" in out and "-    delta = min(delta, cap * dt)" in out and "+    delta = min(delta, cap)" in out
+        assert "last review REV-0001" in out and "capped at cap * dt" in out
+        assert 'once read, record: review("CODE-servo-cap", note="what you checked")' in out
+        assert "to review (1)" in report(reviewing), "the full report draws the bundle too"

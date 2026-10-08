@@ -29,8 +29,10 @@ impact(base)  -- what a change touches: components, contracts (stale at HEAD or 
                  affected), design branches, policies, and the tests to re-run.
 audit()       -- whether the recorded evidence is still what was recorded.
 workflow()    -- patterns in the history that route around the loop.
-links()       -- tagged code regions (# tdlp:begin CODE-...) and the claims they relate to: each
-                 link aligned or not, with why, and the header lines to write once reviewed.
+links()       -- code regions (a docstring's `Implements: BRN-x`, or # tdlp:begin CODE-... markers)
+                 and the claims they relate to: each link aligned or not, with why, and for each
+                 one to review its bundle -- the claim, what moved since its last review, and the
+                 code diff since. Reviews are recorded with consistency-belief's review().
 
 It reports; it never decides, repairs, or re-runs. Call impact after a commit, and audit and
 workflow before asking for a decision. A [block] finding is for the human, not for you to fix
@@ -75,10 +77,11 @@ def workflow() -> str:
 def links(subject: str | None = None) -> str:
     """Tagged code regions and the claims they relate to, at HEAD.
 
-    Each link is aligned, or reported with why: never pinned, its code changed since it was
-    reviewed (with the revision to diff against), its claim -- or a premise upstream of it --
-    restated since, or its claim gone. Mentions of a claim id in a comment or docstring that no
-    region tracks are listed, and so are those that name nothing.
+    Each link is aligned, or reported with why: never reviewed, its latest review found it not
+    aligned, its code changed since that review, its claim -- or a premise upstream of it --
+    restated since, or its claim gone. Each link to review comes with its bundle: the claim as it
+    stands, what moved in it since the review, and the code diff since. Mentions of a claim id in
+    a comment or docstring that no region tracks are listed, and so are those that name nothing.
 
     subject: a CODE- region id, a claim id (LMA-, BRN-, DEF-, AXM-), or a file path; omit for all.
     """

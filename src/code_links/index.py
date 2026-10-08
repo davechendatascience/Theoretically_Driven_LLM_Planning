@@ -84,6 +84,36 @@ def show(root: Path, revision: str, path: str) -> bytes | None:
     return _git(root, "show", f"{revision}:{path}")
 
 
+def region_diff(root: Path, base: str, revision: str, path: str, start: int, end: int,
+                limit: int = 40) -> list[str]:
+    """The hunks of `git diff base revision -- path` that touch lines start..end on the new side:
+    the code half of a reviewer's bundle. Cut to `limit` lines, and empty when git cannot say."""
+    out = _git(root, "diff", "--unified=2", "--no-color", base, revision, "--", path)
+    if not out:
+        return []
+    kept: list[str] = []
+    hunk: list[str] = []
+    overlaps = False
+    for line in out.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("@@"):
+            if hunk and overlaps:
+                kept += hunk
+            hunk, overlaps = [line], False
+            try:
+                new = line.split("+", 1)[1].split(" ", 1)[0]
+                first, _, count = new.partition(",")
+                lo, n = int(first), int(count or 1)
+                overlaps = lo <= end and lo + max(n, 1) - 1 >= start
+            except (IndexError, ValueError):
+                overlaps = True
+        elif hunk:
+            hunk.append(line)
+    if hunk and overlaps:
+        kept += hunk
+    return kept[:limit] + ([f"... {len(kept) - limit} more line(s): git diff {base[:7]} {revision[:7]} -- {path}"]
+                           if len(kept) > limit else [])
+
+
 def _foreign_markers(root: Path, sha: str) -> list[str]:
     excludes = [f":(exclude)*{ext}" for ext in PYTHON + DOCUMENTATION]
     excludes += [f":(exclude){d.rstrip('/')}" for d in LEDGER_DIRS]
@@ -98,7 +128,9 @@ def _foreign_markers(root: Path, sha: str) -> list[str]:
 def build_index(root: Path, revision: str, claims: Mapping[str, ClaimRef] | None = None, *,
                 paths: list[str] | None = None,
                 explain_claim: Callable[[str, str], str | None] | None = None,
-                explain_body: bool = True) -> CodeIndex:
+                explain_body: bool = True,
+                reviews: Mapping[tuple[str, str], dict] | None = None,
+                explain_since: Callable[[str, str], str | None] | None = None) -> CodeIndex:
     """Scan the tracked files at `revision` (a full SHA the caller resolved) and, when `claims`
     is given, check every reference and pin against it. `paths` limits the scan to those files,
     for a comparison that only needs what changed; coverage is then not judged."""
@@ -162,13 +194,15 @@ def build_index(root: Path, revision: str, claims: Mapping[str, ClaimRef] | None
                 "only; the tag links nothing until it moves into Python or is removed", path))
 
     body = BodyHistory(root, revision).explain if explain_body else None
-    validate(index, claims, explain_claim=explain_claim, explain_body=body)
+    validate(index, claims, explain_claim=explain_claim, explain_body=body, reviews=reviews,
+             explain_since=explain_since)
     return index
 
 
 class BodyHistory:
-    """Where a block's body last had the digest its pin records, from the history of its file:
-    so a stale body pin can name the revision to diff against instead of only saying 'changed'."""
+    """Where a block's body last had the digest a header pin records, from the history of its
+    file: so a stale pin can name the revision to diff against instead of only saying 'changed'.
+    Header pins were taken under grammar 1, so that is the digest compared."""
 
     LIMIT = 50
 
@@ -183,18 +217,25 @@ class BodyHistory:
             bodies: dict[str, str] = {}
             if data is not None:
                 try:
-                    bodies = {b.block_id: b.body_pin for b in parse_python(path, decode(data)).blocks}
+                    bodies = {b.block_id: b.legacy_body_pin for b in parse_python(path, decode(data)).blocks}
                 except (SyntaxError, UnicodeDecodeError, LookupError):
                     pass
             self._parsed[key] = bodies
         return self._parsed[key]
 
-    def explain(self, block_id: str, path: str, pin: str) -> str | None:
+    def last_at(self, block_id: str, path: str, pin: str) -> str | None:
+        """The latest revision of the file at which the block's body had that grammar-1 digest."""
         log = _git(self.root, "log", "--format=%H", f"-n{self.LIMIT}", self.revision, "--", path)
         for rev in (log or b"").decode().split():
             if self._bodies(rev, path).get(block_id) == pin:
-                return (f"it last read that way at {rev[:7]}: `git diff {rev[:7]} {self.revision[:7]} "
-                        f"-- {path}` shows what changed")
+                return rev
+        return None
+
+    def explain(self, block_id: str, path: str, pin: str) -> str | None:
+        rev = self.last_at(block_id, path, pin)
+        if rev is not None:
+            return (f"it last read that way at {rev[:7]}: `git diff {rev[:7]} {self.revision[:7]} "
+                    f"-- {path}` shows what changed")
         return (f"no revision among the last {self.LIMIT} of {path} has this body; it was pinned "
                 "against an uncommitted draft, or moved here from another file")
 
@@ -232,5 +273,6 @@ def scan_worktree(root: Path, index: CodeIndex) -> tuple[Changes, list[str], Cod
         except (OSError, SyntaxError, UnicodeDecodeError, LookupError):
             continue
         working.blocks += scan.blocks
-    validate(working, index.claims)
+    validate(working, index.claims, reviews={(b.block_id, t): r for b in index.blocks
+                                             for t, r in b.reviews.items()})
     return compare_indexes(committed, working), paths, working

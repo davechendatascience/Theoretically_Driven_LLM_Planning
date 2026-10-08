@@ -8,6 +8,10 @@ Three readings of one index (code_links), all read-only:
             someone fixes them -- not only in the commit that broke them
   section   impact's share: what the range base..HEAD did to tagged regions
 
+A link that needs review comes with its bundle: the claim as it stands, what moved in the claim
+since the link's last review, and the code diff since that review -- what a reviewer reads before
+recording review() in consistency-belief. The monitor itself records nothing.
+
 A link is a declared relationship, not evidence: nothing here moves a belief or a proof state,
 and a link that needs review blocks nothing. So each link is shown beside the measurement its
 claim cites: "aligned" says the code was read against the claim, and only the contract's state
@@ -18,13 +22,15 @@ it block, by choice.
 
 from __future__ import annotations
 
+import difflib
 import shlex
 from fnmatch import fnmatch
 from pathlib import Path
 
 from code_links import (ALIGNED, ERROR, EXPLANATORY, OBSERVATION, REVIEW, CodeIndex, Diagnostic, build_index,
-                        compare_indexes, display, header_lines, link_state, resolve_revision,
+                        compare_indexes, display, link_state, resolve_revision, review_call, review_of,
                         scan_worktree)
+from code_links.index import BodyHistory, region_diff
 from code_links.impact import BODY, RELATIONS
 
 from . import INFO, WARN, Finding
@@ -132,8 +138,74 @@ def findings(root: Path) -> list[Finding]:
 
 #: Past this many lines of one severity, the full report counts the rest per file instead of
 #: listing them: a project with hundreds of untracked mentions produced a report larger than one
-#: tool response carries, and the uncommitted pins an agent needed sat at its end.
+#: tool response carries, and what an agent needed next sat at its end.
 LISTED = 40
+#: Bundles the full report draws, diffs included; links(subject=<id>) draws any one in full.
+BUNDLED = 8
+
+
+def _word_diff(old: str, new: str, limit: int = 600) -> str:
+    """A claim's change as words: [-removed-] {+added+}, long unchanged runs elided."""
+    a, b = old.split(), new.split()
+    out: list[str] = []
+    for op, i1, i2, j1, j2 in difflib.SequenceMatcher(a=a, b=b, autojunk=False).get_opcodes():
+        if op == "equal":
+            run = a[i1:i2]
+            out.append(" ".join(run) if len(run) <= 8 else " ".join(run[:3] + ["..."] + run[-3:]))
+            continue
+        if i2 > i1:
+            out.append("[-" + " ".join(a[i1:i2]) + "-]")
+        if j2 > j1:
+            out.append("{+" + " ".join(b[j1:j2]) + "+}")
+    text = " ".join(out)
+    return text if len(text) <= limit else text[: limit - 3] + "..."
+
+
+def bundle(root: Path, index: CodeIndex, block) -> list[str]:
+    """What a reviewer reads for one region: each claim as it stands, what moved in it since the
+    link's last review, the code diff since then, the last review's note, and the call to record."""
+    from consistency_belief.links import PinHistory, claim_changes
+
+    claims = index.claims or {}
+    rev = index.revision
+    lines: list[str] = []
+    targets: list[str] = []
+    base_code: str | None = None
+    for r in block.relations:
+        state = link_state(block, r, claims)
+        if state in (ALIGNED, EXPLANATORY) or r.target not in claims:
+            continue
+        targets.append(r.target)
+        rv = review_of(block, r) or {}
+        lines.append(f"  {r.kind} {r.target} [{state}]: {display(claims[r.target].statement, 500)}")
+        # Each side is checked on its own: a link whose code and claim both moved reads
+        # BODY_CHANGED, and its reviewer still needs the claim's diff.
+        claim_moved = bool(rv) and rv.get("claim") != claims[r.target].pin
+        body_now = block.body_pin if int(rv.get("grammar", 2)) >= 2 else block.legacy_body_pin
+        body_moved = bool(rv) and rv.get("body") != body_now
+        since = None
+        if rv.get("legacy"):
+            since = PinHistory(root, rev).pinned_at(r.target, rv.get("claim", "")) if claim_moved else None
+        else:
+            since = str(rv.get("commit") or "") or None
+        if claim_moved and since:
+            for nid, then, now in claim_changes(root, since, rev, r.target):
+                change = ("added since" if then is None else "no longer in the graph" if now is None
+                          else _word_diff(then, now))
+                lines.append(f"    claim since {since[:7]}: {nid}: {change}")
+        if body_moved and base_code is None:
+            base_code = (BodyHistory(root, rev).last_at(block.block_id, block.path, rv.get("body", ""))
+                         if rv.get("legacy") else since)
+        if rv.get("note"):
+            lines.append(f"    last review {rv.get('id', '')} by {rv.get('actor') or '?'}: {display(rv['note'], 300)}")
+    if base_code:
+        diff = region_diff(root, base_code, rev, block.path, block.start_line, block.end_line)
+        lines.append(f"    code since {base_code[:7]}:" + ("" if diff else " (git shows no change in these lines)"))
+        lines += [f"      {display(d, 200)}" for d in diff]
+    if not targets:
+        return []
+    return ([f"{block.block_id} {block.location}"] + lines
+            + [f"  once read, record: {review_call(block, targets if len(targets) < len(block.relations) else None)}"])
 
 
 def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = None,
@@ -175,6 +247,9 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
         scanned = subject in index.scope.files or any(d.path == subject for d in index.diagnostics)
         if block is not None:
             lines += ["", _block_lines(block, claims, index, evidence)]
+            drawn = bundle(root, index, block)
+            if drawn:
+                lines += ["", "to review:", *drawn]
             shown = [d for d in index.diagnostics if d.subject == subject]
         elif related or (claims and subject in claims):
             lines += ["", f"{subject}: {len(related)} link(s)" + evidence(subject)]
@@ -209,8 +284,21 @@ def report(root: Path, subject: str | None = None, *, index: CodeIndex | None = 
         lines += ["", "uncommitted -- not in effect until committed, and then reviewed like any change:",
                   *pending]
 
+    if not subject:
+        needing = [b for b in index.blocks if b.valid
+                   and any(link_state(b, r, claims) not in (ALIGNED, EXPLANATORY) for r in b.relations)]
+        if needing:
+            lines += ["", (f"to review ({len(needing)}) -- each claim as it stands, what moved since the "
+                           "last review, and the code diff since:")]
+            for b in needing[:BUNDLED]:
+                lines += bundle(root, index, b)
+            if len(needing) > BUNDLED:
+                lines.append(f"  and {len(needing) - BUNDLED} more: links(subject=<CODE-id>) draws one, "
+                             + ", ".join(b.block_id for b in needing[BUNDLED:BUNDLED + 6])
+                             + (" ..." if len(needing) > BUNDLED + 6 else ""))
+
     for severity, title in ((ERROR, "errors -- tags that are malformed or name nothing"),
-                            (REVIEW, "review -- links whose pins no longer match, or were never written"),
+                            (REVIEW, "review -- links whose code or claim moved since their review, or never reviewed"),
                             (OBSERVATION, "observations -- coverage, not defects")):
         items = sorted((d for d in shown if d.severity == severity), key=lambda d: (d.code, d.subject, d.line))
         if not items:
@@ -249,43 +337,32 @@ def _counted(items: list, *, listed_some: bool) -> list[str]:
 
 
 def _uncommitted(root: Path, index: CodeIndex, subject: str | None) -> list[str]:
-    """The working tree's changes to tagged regions, and the pins each edited region needs once
-    committed as it stands -- narrowed to `subject` (a region id, a claim it names, or its path)."""
+    """The working tree's changes to tagged regions -- narrowed to `subject` (a region id, a claim
+    it names, or its path) -- and, for each, what to do: a review reads committed code, so it is
+    recorded once the region is committed as it stands."""
     changes, _dirty, working = scan_worktree(root, index)
     items = changes.items
     if subject:
         items = [c for c in items if subject in (c.block_id, c.path) or subject in c.targets]
     lines = [f"  {c.block_id} {c.change}: {c.detail}" for c in items]
-    return lines + _pins_to_write(working, {c.block_id for c in items})
-
-
-def _pins_to_write(working: CodeIndex, changed: set[str]) -> list[str]:
-    """For each edited region, the header that aligns it once committed as it stands -- against
-    the claims at HEAD. Written only after the region was read against those claims."""
-    claims = working.claims
-    if not claims:
-        return []
-    out: list[str] = []
+    changed = {c.block_id for c in items}
     for block in working.blocks:
-        if block.block_id not in changed or not block.valid or not block.relations:
-            continue
-        want = list(header_lines(block, claims))
-        have = [block.header(block.pin)] + [r.header(r.pin) for r in block.relations]
-        if want != have:
-            out.append(f"  {block.block_id}: once committed as it stands, and read against "
-                       f"{', '.join(sorted(block.targets()))}, these lines align it:")
-            out += [f"      {line}" for line in want]
-    return out
+        if block.block_id in changed and block.valid and any(r.needs_pin for r in block.relations):
+            lines.append(f"  {block.block_id}: commit it as it stands, read it against "
+                         f"{', '.join(sorted(r.target for r in block.relations if r.needs_pin))}, then "
+                         f"record {review_call(block)}")
+    return lines
 
 
 def _block_lines(block, claims, index: CodeIndex, evidence=lambda _t: "") -> str:
-    pinned = f"@{block.pin}" if block.pin else "unpinned"
-    out = [f"{block.block_id} {block.location}  body {pinned} (now @{block.body_pin})"
-           + ("" if block.valid else "  INVALID")]
+    kind = "  (docstring region)" if block.origin == "docstring" else ""
+    out = [f"{block.block_id} {block.location}  body @{block.body_pin}{kind}" + ("" if block.valid else "  INVALID")]
     for r in block.relations:
-        expected = f" (now @{claims[r.target].pin})" if claims and r.target in claims else ""
-        out.append(f"  {r.kind} {r.target}{'@' + r.pin if r.pin else ''}{expected} "
-                   f"[{link_state(block, r, claims)}]" + evidence(r.target))
+        rv = review_of(block, r)
+        seen = ("never reviewed" if rv is None else
+                f"pinned in its header @{rv.get('claim')}" if rv.get("legacy") else
+                f"{rv.get('id')} at {str(rv.get('commit') or '')[:7]} by {rv.get('actor') or '?'}, {rv.get('outcome')}")
+        out.append(f"  {r.kind} {r.target} [{link_state(block, r, claims)}] -- {seen}" + evidence(r.target))
     return "\n".join(out)
 
 
@@ -294,11 +371,13 @@ def _next(index: CodeIndex) -> str:
     if errors:
         return f"fix {len(errors)} broken tag(s) or mention(s) first; each names the line"
     if reviews:
-        return (f"review {len(reviews)} region(s) against their claims and write the pins each "
-                "names -- a pin says you read this code against this claim")
+        return (f"review {len(reviews)} region(s): read each against its claim (its bundle above shows "
+                "what moved), then record review() in consistency-belief -- a review says you read this "
+                "code against this claim, at this commit")
     if not index.blocks:
-        return ("no region is tagged; tag the code that realizes a branch with "
-                "`# tdlp:begin CODE-<name>` / `# tdlp:implements BRN-<id>` / `# tdlp:end CODE-<name>`")
+        return ("no region is tagged; name the claim in the docstring of the function that realizes it "
+                "(`Implements: BRN-<id>`), or mark a stretch with `# tdlp:begin CODE-<name>` / "
+                "`# tdlp:implements BRN-<id>` / `# tdlp:end CODE-<name>`")
     return "every link is aligned"
 
 

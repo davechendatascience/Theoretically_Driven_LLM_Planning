@@ -336,10 +336,11 @@ def test_tagged_code_is_listed_on_its_claim_and_is_never_an_edge(project):
                                   "# tdlp:end CODE-<script>\n"}, "tag the planner")
     snap = take(project)
     [region] = snap["nodes"]["BRN-motion-gate"]["regions"]
-    assert region == {"id": "CODE-plan", "relation": "implements", "at": "motion.py:2-5", "state": UNPINNED}
+    assert region == {"id": "CODE-plan", "relation": "implements", "at": "motion.py:2-5", "state": UNPINNED,
+                      "origin": "markers", "review": "never reviewed"}
     assert not any("CODE-" in a or "CODE-" in b for a, b in snap["edges"])
     issues = {(i["code"], i["source"]) for i in snap["issues"]}
-    assert ("UNPINNED", "code links") in issues and ("MALFORMED_MARKER", "code links") in issues
+    assert ("UNREVIEWED", "code links") in issues and ("MALFORMED_MARKER", "code links") in issues
     assert "do not copy me" not in json.dumps(snap)
 
 
@@ -349,9 +350,10 @@ def test_cited_measurements_and_uncited_contracts_are_shown(project):
     from graph_snapshot.snapshot import take
 
     snap = take(project)
-    assert snap["nodes"]["BRN-motion-gate"]["measured"] == [{"contract": "CTR-motion-clear", "state": "unpinned"}]
+    assert snap["nodes"]["BRN-motion-gate"]["measured"] == [{"contract": "CTR-motion-clear", "state": "unreviewed",
+                                                              "review": "never reviewed"}]
     issues = {(i["code"], i["subject"], i["source"]) for i in snap["issues"]}
-    assert ("MEASUREMENT_UNPINNED", "BRN-motion-gate", "cited measurements") in issues
+    assert ("MEASUREMENT_UNREVIEWED", "BRN-motion-gate", "cited measurements") in issues
     uncited = {i["subject"]: i["message"] for i in snap["issues"] if i["code"] == "UNCITED_CONTRACT"}
     assert set(uncited) == {"CTR-reaches", "CTR-holds"}
     assert all("a goal's measure" in m for m in uncited.values())
@@ -400,3 +402,22 @@ def test_a_conditional_claim_is_drawn_with_what_it_waits_on(project):
     assert "1 conditional" in " ".join(summary(snap))
     page = (REPO / "src" / "graph_snapshot" / "page.html").read_text(encoding="utf-8")
     assert 'conditional: ["cond", "Conditional"]' in page and "Waits on" in page
+
+
+def test_a_review_is_shown_beside_its_region_and_measurement(project):
+    """Who read a link or a measurement, at which commit, and what they checked -- from the reviews
+    in the ledger as the snapshot read it (DEF-snapshot)."""
+    from consistency_belief.server import review
+    from graph_snapshot.snapshot import take
+
+    sha = commit(project, {"motion.py": 'def plan():\n    """Plan a path.\n\n    Implements: BRN-motion-gate\n    """\n'
+                                        "    return []\n"}, "link the planner in its docstring")
+    review("CODE-motion--plan", note="an empty plan aborts nothing")
+    review("BRN-motion-gate", target="CTR-motion-clear", note="the test drives the gate to zero clearance")
+    gate = take(project)["nodes"]["BRN-motion-gate"]
+    [region] = gate["regions"]
+    assert region["id"] == "CODE-motion--plan" and region["origin"] == "docstring" and region["state"] == "aligned"
+    assert region["review"] == f"REV-0001 at {sha[:7]} by agent: an empty plan aborts nothing"
+    assert gate["measured"] == [{"contract": "CTR-motion-clear", "state": "reviewed",
+                                 "review": f"REV-0002 at {sha[:7]} by agent: the test drives the gate to zero clearance"}]
+

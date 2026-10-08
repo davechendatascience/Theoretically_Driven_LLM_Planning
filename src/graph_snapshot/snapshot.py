@@ -31,10 +31,10 @@ from component_belief.declarations import DECLARATION_FILE as BELIEF_FILE
 from component_belief.declarations import GOALS_FILE
 from component_belief.declarations import load as load_components
 from component_belief.staleness import named_paths
-from code_links import ERROR, REVIEW, CodeIndex, link_state
+from code_links import ERROR, REVIEW, CodeIndex, link_state, review_of
 from consistency_belief.declarations import DECLARATION_FILE as CONSISTENCY_FILE
 from consistency_belief.links import scan as scan_links
-from consistency_belief.measurements import REVIEWED, UNPINNED, cited_measurements, uncited_by_kind
+from consistency_belief.measurements import REVIEWED, cited_measurements, uncited_by_kind
 from consistency_belief.model import CONDITIONAL, PROVEN
 from consistency_belief.views import Context
 
@@ -142,12 +142,14 @@ def take(root: Path) -> dict[str, Any]:
             if target in nodes:
                 nodes[target].setdefault("gated_by", []).append(pid)
 
-    # Judged from the declarations at this commit alone -- a pin against a claim digest -- so no
-    # evidence record is read; a contract's own state is never shown (DEF-snapshot).
-    cited = cited_measurements(ctx.decl)
+    # Judged from the declarations at this commit and the reviews in the ledger as read -- a review
+    # against a claim digest -- so no evidence record is read; a contract's own state is never
+    # shown (DEF-snapshot).
+    cited = cited_measurements(ctx.decl, ctx.store.measurement_reviews())
     for m in cited:
         if m.branch in nodes:
-            nodes[m.branch].setdefault("measured", []).append({"contract": m.contract, "state": m.state})
+            nodes[m.branch].setdefault("measured", []).append({"contract": m.contract, "state": m.state,
+                                                               "review": review_line(m.latest)})
 
     links = scan_links(root, sha, explain=False)
     if links is not None:
@@ -156,7 +158,8 @@ def take(root: Path) -> dict[str, Any]:
                 if r.target in nodes:
                     nodes[r.target].setdefault("regions", []).append({
                         "id": block.block_id, "relation": r.kind, "at": block.location,
-                        "state": link_state(block, r, links.claims)})
+                        "state": link_state(block, r, links.claims), "origin": block.origin,
+                        "review": review_line(review_of(block, r))})
 
     committed = {CONSISTENCY_FILE: ctx.decl.source != "none", BELIEF_FILE: components.source != "none",
                  GOALS_FILE: bool(components.goals_blob)}
@@ -177,6 +180,18 @@ def take(root: Path) -> dict[str, Any]:
         "issues": issues,
         "page_named_by": naming_the_page(components),
     }
+
+
+def review_line(review: dict | None) -> str:
+    """Who read it, at which commit, and what they checked -- one line for the page."""
+    if not review:
+        return "never reviewed"
+    if review.get("legacy"):
+        return "pinned in the source, before reviews were records"
+    note = f": {review['note']}" if review.get("note") else ""
+    outcome = "" if review.get("outcome") == "aligned" else " (not aligned)"
+    return (f"{review.get('id', 'reviewed')} at {str(review.get('commit') or '')[:7]} by "
+            f"{review.get('actor') or '?'}{outcome}{note}")
 
 
 def references(decl: Any, node_id: str) -> list[dict[str, str]]:
@@ -209,7 +224,7 @@ def _loader_issues(ctx: Context, components: Any) -> list[dict[str, str]]:
 def _measurement_issues(cited: list, uncited: dict[str, list[str]]) -> list[dict[str, str]]:
     """Every cited measurement not reviewed, and every contract no declared branch names, marked by
     what it measures -- the two gaps DEF-snapshot adds to the join's."""
-    out = [{"code": "MEASUREMENT_UNPINNED" if m.state == UNPINNED else "MEASUREMENT_NOT_REVIEWED",
+    out = [{"code": "MEASUREMENT_" + m.state.upper().replace(" ", "_"),
             "subject": m.branch, "message": f"cites {m.contract}: {m.why}", "source": MEASUREMENTS}
            for m in cited if m.state != REVIEWED]
     marks = {"component": "a component's measure", "interface": "an interface's measure",

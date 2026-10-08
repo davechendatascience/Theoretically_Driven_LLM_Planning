@@ -14,8 +14,9 @@ from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarat
                            load as load_declarations)
 from .graph import ProofDAG, ProofNode
 from .ids import content_hash
-from .measurements import NOT_REVIEWED, UNPINNED, CitedMeasurement, cited_measurements, uncited_by_kind
-from .measurements import adopted as adopted_pins
+from .measurements import (NOT_REVIEWED, REVIEW_FAILED, UNREVIEWED, CitedMeasurement, cited_measurements,
+                           uncited_by_kind)
+from .measurements import adopted as adopted_reviews
 from .model import (CONDITIONAL, DOUBTED, PROVEN, REFUTED, OBLIGATION, STALE, UNGROUNDED, ConsistencySlice,
                     compute_consistency)
 from .probes import probe_text
@@ -423,7 +424,7 @@ def view_coverage(ctx: Context) -> str:
     slices = {s.target_id: s for s in ctx.slices}
     beliefs = contract_beliefs(ctx.root)
     cited = re.compile(r"\bCTR-[A-Za-z0-9][A-Za-z0-9-]*\b")
-    measured = cited_measurements(decl)
+    measured = cited_measurements(decl, ctx.store.measurement_reviews())
     review = {(m.branch, m.contract): m for m in measured}
     designs: dict[str, list[str]] = {}
     removed: list[str] = []          # subject was a component id; belief.yaml no longer declares it
@@ -535,19 +536,19 @@ def _measurement_lines(measured: list[CitedMeasurement], uncited: dict[str, list
                        beliefs: dict[str, str]) -> list[str]:
     """Cited measurements to re-read, and contracts no design cites (DEF-cited-measurement).
 
-    A pinned one whose branch was restated since is always listed; an unpinned one only once the
-    project pins any, so a project that has not taken pins up is not handed a list of every
-    branch. A contract no branch cites is listed either way: it is measured, and no design says
+    A reviewed one whose branch was restated since, or whose review found it not aligned, is
+    always listed; an unreviewed one only once the project reviews any, so a project that has not
+    taken reviews up is not handed a list of every branch. A contract no branch cites is listed either way: it is measured, and no design says
     why that matters -- which may be right, for a plain regression measure."""
     out: list[str] = []
-    stale = [m for m in measured if m.state == NOT_REVIEWED]
-    unpinned = [m for m in measured if m.state == UNPINNED] if adopted_pins(measured) else []
-    if stale or unpinned:
-        out.append(f"cited measurements to re-read against their claims ({len(stale) + len(unpinned)}):")
+    stale = [m for m in measured if m.state in (NOT_REVIEWED, REVIEW_FAILED)]
+    unreviewed = [m for m in measured if m.state == UNREVIEWED] if adopted_reviews(measured) else []
+    if stale or unreviewed:
+        out.append(f"cited measurements to re-read against their claims ({len(stale) + len(unreviewed)}):")
         for m in stale:
-            out.append(f"  {m.branch} cites {m.contract}{'@' + m.pin if m.pin else ''}: {m.why} -- {m.fix}")
-        for m in unpinned:
-            out.append(f"  {m.branch} cites {m.contract}, never pinned -- {m.fix}")
+            out.append(f"  {m.branch} cites {m.contract}: {m.why} -- {m.fix}")
+        for m in unreviewed:
+            out.append(f"  {m.branch} cites {m.contract}, never reviewed -- {m.fix}")
         out.append("")
     total = sum(len(v) for v in uncited.values())
     if total:

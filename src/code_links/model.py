@@ -6,24 +6,41 @@ found at one revision, and a block that moves keeps its id. What it is at that r
 body digest -- its code with comments and layout set aside -- and that digest is what a review
 of the correspondence vouches for.
 
-Two pins carry that review into the source itself, in the `ID@pin` form Axiom.ref already uses:
+A review is a record in the design ledger, never a line in the source: whoever records one says
+"I read this body against this claim, at this commit", and it carries the body digest and the
+claim digest as they stood there (DEF-review). The scan compares the latest review of each link
+with what is there now and reports every link whose code or claim moved since -- at every
+revision until someone reviews it again, not only in the commit that changed it.
+
+Before reviews were records, the same two digests were written as pins into the source, in the
+`ID@pin` form Axiom.ref uses:
 
     # tdlp:begin CODE-<name>@<8 hex>     the body the reviewer read
     # tdlp:implements BRN-<id>@<8 hex>   the claim as it stood then
 
-A pin is an assertion, committed with the code it describes: whoever writes it says "I read this
-body against this claim". The scan never writes one. It compares each pin with what is there now
-and reports every link whose pins no longer match -- at every revision until someone re-reviews
-it, not only in the commit that changed it.
+Such pins are still read: a link with no review in the ledger counts them as its review, under the
+first body grammar, which keeps docstrings -- so nothing pinned that way goes stale on upgrade.
+
+A region is delimited by those begin/end comments, or is a function, class or module whose
+docstring declares its relations:
+
+    def load_grid(path):
+        '''The map's free cells.
+
+        Implements: BRN-clearance-grid-clears-the-footprint
+        Uses: AXM-behavior-trav-maps
+        '''
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-#: Bumped when the marker grammar or the body digest changes: a pin made under another version
-#: is reported as such rather than as an edit.
-GRAMMAR_VERSION = 1
+#: The body grammar a review is taken under. Grammar 1 set comments and layout aside; grammar 2
+#: sets docstrings aside too, so documenting code asks for no re-review. A pin written in the
+#: source was taken under grammar 1, and is compared under it (DEF-code-link).
+GRAMMAR_VERSION = 2
+LEGACY_GRAMMAR = 1
 
 #: What a relation asserts. `motivated-by` asserts no correspondence, so it needs no pins.
 RELATION_KINDS = ("implements", "uses", "checks", "motivated-by")
@@ -59,14 +76,21 @@ class Block:
     end_line: int
     pin: str | None = None                 # the body pin as written on the begin line
     relations: list[Relation] = field(default_factory=list)
-    body_hash: str = ""                    # code tokens, comments and layout set aside
+    body_hash: str = ""                    # code tokens; comments, docstrings and layout set aside
+    body_hash_v1: str = ""                 # the same under grammar 1, docstrings kept: for header pins
     source_hash: str = ""                  # the region's exact text, line endings normalised
     valid: bool = True                     # closed, not nested, its id unique in the revision
     n_code_lines: int = 0
+    origin: str = "markers"                # markers | docstring
+    reviews: dict = field(default_factory=dict)   # target -> its latest review in the ledger
 
     @property
     def body_pin(self) -> str:
         return self.body_hash[:8]
+
+    @property
+    def legacy_body_pin(self) -> str:
+        return self.body_hash_v1[:8]
 
     @property
     def needs_pin(self) -> bool:
@@ -95,7 +119,8 @@ class Mention:
     path: str
     line: int
     where: str                  # comment | docstring
-    block: str | None = None    # the enclosing block, if any
+    block: str | None = None    # the innermost enclosing region, if any
+    blocks: tuple[str, ...] = ()   # every enclosing region, innermost first
 
 
 @dataclass(frozen=True)
@@ -128,6 +153,7 @@ class ClaimRef:
     subject: str = ""
     candidates: tuple[str, ...] = ()
     cites: tuple[str, ...] = ()
+    statement: str = ""                         # as it stands, for a reviewer's bundle
 
 
 @dataclass

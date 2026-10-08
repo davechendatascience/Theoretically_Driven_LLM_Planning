@@ -3,14 +3,16 @@ against the claim as it now stands (DEF-cited-measurement).
 
 A branch is proven of its statement, and the contract it cites measures something. Nothing else
 held the two together: a claim restated to say more kept citing the contract that measured the
-old one, and the gate read that contract as supported. A pin written after the contract id --
-`evidence: CTR-x@7c41d0e2` -- records the branch's claim digest when someone read the contract's
-acceptance rule and tests against the claim, the same digest a code link's claim pin records.
-Restate the claim, or anything it rests on, and the digest moves on without the pin: the
-measurement reads unreviewed until someone reads it again and writes the new pin.
+old one, and the gate read that contract as supported. A review -- review("BRN-x", target="CTR-y"),
+a ledger record bound to the commit it read (DEF-review) -- records the branch's claim digest when
+someone read the contract's acceptance rule and tests against the claim, the same digest a code
+link's review records. Restate the claim, or anything it rests on, and the digest moves on without
+the review: the measurement reads unreviewed until someone reads it again and records a new one.
 
-The pin sits in the derivation rule, which no fingerprint covers, so writing one restates
-nothing and sets no trial aside. Nothing here is a proof state or an evidence state; it is a
+Before reviews were ledger records, the digest was written as a pin after the contract id --
+`evidence: CTR-x@7c41d0e2` -- and such a pin still counts as the review of a measurement that has
+none in the ledger. Neither a review nor a pin is a statement or a cited premise, so neither
+restates anything or sets a trial aside. Nothing here is a proof state or an evidence state; it is a
 report, and like a code link it blocks nothing.
 """
 
@@ -26,7 +28,8 @@ from .links import claim_pin
 #: A contract id in a derivation rule, with the pin written directly after it, if any.
 CITED = re.compile(r"\b(CTR-[A-Za-z0-9][A-Za-z0-9_-]*)(?:@([0-9a-f]{8})\b)?")
 
-REVIEWED, UNPINNED, NOT_REVIEWED = "reviewed", "unpinned", "not reviewed"
+REVIEWED, UNREVIEWED, NOT_REVIEWED, REVIEW_FAILED = "reviewed", "unreviewed", "not reviewed", "review failed"
+UNPINNED = UNREVIEWED                   # the name before reviews were ledger records
 
 
 @dataclass(frozen=True)
@@ -38,37 +41,54 @@ class CitedMeasurement:
     contract: str
     pin: str | None
     expected: str | None
+    review: dict | None = None          # its latest review in the ledger
+
+    @property
+    def latest(self) -> dict | None:
+        """Its review: the latest in the ledger, or else the pin its derivation rule carries."""
+        if self.review is not None:
+            return self.review
+        return {"claim": self.pin, "outcome": "aligned", "legacy": True} if self.pin else None
 
     @property
     def state(self) -> str:
+        r = self.latest
         if self.expected is None:
             return NOT_REVIEWED
-        if self.pin is None:
-            return UNPINNED
-        return REVIEWED if self.pin == self.expected else NOT_REVIEWED
+        if r is None:
+            return UNREVIEWED
+        if r.get("claim") != self.expected:
+            return NOT_REVIEWED
+        return REVIEWED if r.get("outcome") == "aligned" else REVIEW_FAILED
 
     @property
     def why(self) -> str:
+        r = self.latest
         if self.expected is None:
             return (f"{self.branch} is not in the declared graph -- a premise it cites is unknown, "
-                    "staged only, or on a cycle -- so it has no claim digest a pin could equal")
-        if self.pin is None:
-            return "never read against the claim and pinned"
-        if self.pin != self.expected:
-            return f"pinned @{self.pin}; the claim, or a node it rests on, was restated since"
-        return "reviewed against the claim as it stands"
+                    "staged only, or on a cycle -- so it has no claim digest a review could record")
+        if r is None:
+            return "never read against the claim and reviewed"
+        where = (f"pinned @{r.get('claim')} in the derivation rule" if r.get("legacy") else
+                 f"{r.get('id', 'reviewed')} at {str(r.get('commit') or '')[:7]}")
+        if r.get("claim") != self.expected:
+            return f"{where}; the claim, or a node it rests on, was restated since"
+        if r.get("outcome") != "aligned":
+            return f"{where} found it not aligned: {r.get('note') or '(no note)'}"
+        return f"reviewed against the claim as it stands ({where})"
 
     @property
     def fix(self) -> str:
         if self.expected is None:
-            return f"repair {self.branch}'s premises; until it is in the declared graph no pin can review it"
+            return f"repair {self.branch}'s premises; until it is in the declared graph no review can hold"
         return (f"once {self.contract}'s acceptance rule and tests are read against {self.branch} "
-                f"as it now stands, write evidence: {self.contract}@{self.expected} in its derivation rule")
+                f'as it now stands, record review("{self.branch}", target="{self.contract}", note=...)')
 
 
-def cited_measurements(decl: Declarations) -> list[CitedMeasurement]:
+def cited_measurements(decl: Declarations, reviews: dict | None = None) -> list[CitedMeasurement]:
     """Every contract each declared branch cites, judged against the declared graph -- the one
-    DEF-code-link names: the declarations at the head revision, no staged proposal."""
+    DEF-code-link names: the declarations at the head revision, no staged proposal -- and the
+    latest review of each pair in the ledger (`reviews`, keyed (branch, contract))."""
     dag = ProofDAG.from_declarations(decl)
     out: list[CitedMeasurement] = []
     for bid in sorted(decl.branches):
@@ -78,7 +98,8 @@ def cited_measurements(decl: Declarations) -> list[CitedMeasurement]:
         pins: dict[str, str | None] = {}
         for m in CITED.finditer(decl.branches[bid].derivation_rule or ""):
             pins[m.group(1)] = pins.get(m.group(1)) or m.group(2)   # any mention may carry it
-        out += [CitedMeasurement(bid, cid, pin, expected) for cid, pin in sorted(pins.items())]
+        out += [CitedMeasurement(bid, cid, pin, expected, (reviews or {}).get((bid, cid)))
+                for cid, pin in sorted(pins.items())]
     return out
 
 
@@ -110,6 +131,6 @@ def uncited_by_kind(decl: Declarations) -> dict[str, list[str]]:
 
 
 def adopted(found: list[CitedMeasurement]) -> bool:
-    """A project that pins one cited measurement has opted in, and its unpinned ones are worth
-    listing; one that pins none still hears of every pin gone stale -- of which it has none."""
-    return any(c.pin for c in found)
+    """A project that reviews one cited measurement has opted in, and its unreviewed ones are worth
+    listing; one that reviews none still hears of every review gone stale -- of which it has none."""
+    return any(c.latest for c in found)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -616,10 +617,10 @@ def _measurements_unreviewed(ctx: Any, target_id: str, blast: list[str], restate
     if not reached:
         return []
     if restates is False:
-        return [f"Cited measurements of it and its dependents ({len(reached)}): unaffected, their pins hold."]
+        return [f"Cited measurements of it and its dependents ({len(reached)}): unaffected, their reviews hold."]
     when = "are left unreviewed" if restates else "are left unreviewed if its statement or premises change"
     return [f"Cited measurements that {when} ({len(reached)}) -- re-read each contract's rule and "
-            "tests against the restated claim, then write the new pin:",
+            "tests against the restated claim, then record review(<branch>, target=<contract>):",
             bullet(f"{m.branch} cites {m.contract}" for m in reached)]
 
 
@@ -634,10 +635,10 @@ def _code_links_unpinned(root: Path, target_id: str, blast: list[str], restates:
     if not reached:
         return []
     if restates is False:
-        return [f"Code links to it or its dependents ({len(reached)}): unaffected, their pins hold."]
+        return [f"Code links to it or its dependents ({len(reached)}): unaffected, their reviews hold."]
     when = "become stale" if restates else "become stale if its statement or premises change"
     return [f"Code links that {when} ({len(reached)}) -- each region needs re-reading against its "
-            "claim and a new pin (stamp-monitor links):",
+            "claim and a new review (stamp-monitor links shows both diffs):",
             bullet(f"{bid} {kind} {target}" for bid, kind, target in reached)]
 
 
@@ -654,6 +655,119 @@ def _restates(node: Any, statement: str, premises: list[str] | None) -> bool | N
     same_statement = not statement or norm(statement.split()) in current
     same_premises = not premises or sorted(set(premises)) == sorted(set(node.premises))
     return not (same_statement and same_premises)
+
+
+def _uncommitted(root: Path, path: str) -> bool:
+    try:
+        out = subprocess.run(["git", "status", "--porcelain", "--", path], cwd=root, capture_output=True,
+                             text=True, timeout=30, stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return True
+    return out.returncode != 0 or bool(out.stdout.strip())
+
+
+def _worktree_claims(root: Path) -> Any:
+    """The declared graph of the working tree's consistency.yaml: a claim whose digest differs
+    there from HEAD's carries uncommitted edits, and a review of it would name a commit that does
+    not hold what its reviewer read."""
+    from .declarations import _parse
+    from .graph import ProofDAG
+
+    path = root / "consistency.yaml"
+    return ProofDAG.from_declarations(_parse(path.read_text(encoding="utf-8"))) if path.exists() else None
+
+
+@mcp.tool()
+def review(subject: str, target: str | None = None, outcome: str = "aligned", note: str = "") -> str:
+    """Record that you read a code link, or a cited measurement, against its claim -- at HEAD.
+
+    subject:  a CODE- region id, with target one node it relates to (omitted: every implements,
+              uses and checks relation it declares); or a BRN- branch, with target a CTR- contract
+              its derivation rule cites.
+    outcome:  aligned, or not_aligned with a note saying what does not hold.
+    note:     what you checked; the next reviewer starts from it.
+
+    A review names the commit it read and the digests of the code and the claim there (DEF-review),
+    so it is refused while the region's file, or the claim's declarations, carry uncommitted edits:
+    commit first. stamp-monitor links shows, for each link to review, the claim and the code diff
+    since its last review. A review is not a trial and moves no proof state.
+    """
+    from code_links import GRAMMAR_VERSION, link_state, resolve_revision
+
+    from .links import claim_pin, scan
+    from .measurements import cited_measurements
+
+    root = project_root()
+    outcome = outcome.strip().lower().replace(" ", "_").replace("-", "_")
+    if outcome not in ("aligned", "not_aligned"):
+        return f"unknown outcome {outcome!r}; expected aligned or not_aligned"
+    if outcome == "not_aligned" and not note.strip():
+        return "a not_aligned review needs a note saying what does not hold"
+    head = resolve_revision(root, "HEAD")
+    if head is None:
+        return "no commit at HEAD: a review names the commit it read, so commit first"
+    work = _worktree_claims(root)
+
+    def moved(node_id: str, digest: str) -> bool:
+        return work is not None and (node_id not in work.nodes or claim_pin(work, node_id) != digest)
+
+    store, actor = Store(root), _actor()
+    if subject.startswith("CODE-"):
+        index = scan(root, head, explain=False)
+        if index is None or not index.validated:
+            return f"no consistency.yaml at {head[:7]}: there is no claim to review a region against"
+        block = index.get_block(subject)
+        if block is None:
+            return (f"{subject} is not a region at {head[:7]}; a review reads committed code -- commit "
+                    "the region first, or check the id (stamp-monitor links lists them)")
+        if not block.valid:
+            return f"{subject} is malformed or shares its id at {head[:7]}; stamp-monitor links says why"
+        if _uncommitted(root, block.path):
+            return (f"{block.path} has uncommitted edits: commit it as it stands, then review -- a review "
+                    f"names the commit it read, and {head[:7]} is not what you are looking at")
+        relations = [r for r in block.relations if r.needs_pin and (target is None or r.target == target)]
+        if not relations:
+            return (f"{subject} declares no implements, uses or checks relation"
+                    + (f" to {target}" if target else ""))
+        claims = index.claims
+        for r in relations:
+            if r.target not in claims:
+                return f"{r.target} is not in the declared graph at {head[:7]}; repoint or remove the relation"
+            if moved(r.target, claims[r.target].pin):
+                return (f"{r.target}, or a node it rests on, has uncommitted edits in consistency.yaml: "
+                        "commit them first, so the review names the claim you read")
+        recorded = [store.append_review({
+            "kind": "link", "region": subject, "target": r.target, "relation": r.kind, "path": block.path,
+            "commit": head, "body": block.body_pin, "grammar": GRAMMAR_VERSION,
+            "claim": claims[r.target].pin, "outcome": outcome, "note": note.strip()}, actor=actor)
+            for r in relations]
+        after = scan(root, head, explain=False)
+        now = after.get_block(subject) if after else None
+        lines = [f"{rec['id']} recorded: {subject} {rec['relation']} {rec['target']} -- {outcome} at {head[:7]}"
+                 + (f" [{link_state(now, r, after.claims)}]" if now else "")
+                 for rec, r in zip(recorded, relations)]
+    elif subject.startswith("BRN-"):
+        if not target or not target.startswith("CTR-"):
+            return f'name the contract the review read: review("{subject}", target="CTR-...")'
+        ctx = Context.build(root)
+        found = [m for m in cited_measurements(ctx.decl) if m.branch == subject and m.contract == target]
+        if not found:
+            return f"{subject} is not declared at {head[:7]}, or its derivation rule there does not cite {target}"
+        m = found[0]
+        if m.expected is None:
+            return f"{subject} is not in the declared graph at {head[:7]}: it has no claim digest to review against"
+        if moved(subject, m.expected):
+            return (f"{subject}, or a node it rests on, has uncommitted edits in consistency.yaml: commit "
+                    "them first, so the review names the claim you read")
+        rec = store.append_review({"kind": "measurement", "branch": subject, "contract": target,
+                                   "commit": head, "claim": m.expected, "outcome": outcome,
+                                   "note": note.strip()}, actor=actor)
+        lines = [f"{rec['id']} recorded: {subject} cites {target} -- {outcome} at {head[:7]}"]
+    else:
+        return "subject is a CODE- region id, or a BRN- branch with target the CTR- contract it cites"
+    lines.append("A review is a ledger record, not a trial: it moves no proof state. Commit .consistency "
+                 "with your evidence.")
+    return "\n".join(lines)
 
 
 @mcp.tool()

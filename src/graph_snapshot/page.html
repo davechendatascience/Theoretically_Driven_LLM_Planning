@@ -663,7 +663,7 @@ button { font: inherit; color: inherit; }
   // Tagged code regions on a node: a list, never an edge -- code is not a premise of what it realizes.
   const regionsSection = (n) => n.regions && n.regions.length
     ? section(`Code regions · ${n.regions.length}`, el("ul", { class: "code-list" },
-        n.regions.map((r) => el("li", { text: `${r.id} · ${r.relation} · ${r.at} · ${r.state}` }))))
+        n.regions.map((r) => el("li", { text: `${r.id} · ${r.relation} · ${r.at} · ${r.state}` + (r.review ? ` — ${r.review}` : "") }))))
     : null;
   // References to the works a node came from: a list, never an edge -- a reference is not a premise.
   const referencesSection = (n) => n.references && n.references.length
@@ -691,7 +691,7 @@ button { font: inherit; color: inherit; }
       const users = inc[n.id].filter((i) => isClaim(N[i]));
       if (users.length) parts.push(section("Cited by", refs(users.sort())));
       if (n.measured && n.measured.length) parts.push(section("Cites the measures", el("ul", { class: "code-list" },
-        n.measured.map((m) => el("li", { text: `${m.contract} · ${m.state}` })))));
+        n.measured.map((m) => el("li", { text: `${m.contract} · ${m.state}` + (m.review ? ` — ${m.review}` : "") })))));
       else if (n.cites && n.cites.length) parts.push(section("Cites the measures", plainIds(n.cites)));
       if (n.gated_by) parts.push(section("Release gate", plainIds(n.gated_by)));
       if (referencesSection(n)) parts.push(referencesSection(n));
