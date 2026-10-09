@@ -648,9 +648,9 @@ definitions:
     meaning: >-
       A Lean certificate is a ledger record of one answer a Lean service gave
       when asked to check a Lean theorem formalizing a lemma or branch, kept
-      whole and recorded against that node, with the node's fingerprint and,
-      for each premise the node cites, that premise's statement. It is not a
-      trial. It is current exactly when its node is in the premise graph, its
+      whole and recorded against that node, with the node's fingerprint, for
+      each premise the node cites that premise's statement, and the Lean source
+      the service was sent. It is not a trial. It is current exactly when its node is in the premise graph, its
       node's fingerprint is the one recorded, and each premise its node cites
       has the statement recorded for it. It certifies its node exactly when it
       is current and, read off the answer it keeps, the service verified the
@@ -659,12 +659,14 @@ definitions:
       standard three is one the record names as standing for a premise its
       node cites, and the answer carries any digest its service computes of
       it. The probe served for a lemma or branch carries, beside what it
-      carries without certificates, the Lean statement checked and what each
-      axiom standing for a premise states, of the latest certificate recorded
-      on that node that certifies it, and of no other certificate. A policy
-      criterion requiring formal certification is met by a node exactly when a
-      certificate certifies it. Nothing checks that the Lean statement says
-      what the node's claim says: that is judged by the trials of the node.
+      carries without certificates, the Lean statement checked, what each
+      axiom standing for a premise states and the Lean source recorded, of the
+      latest certificate recorded on that node that certifies it, and of no
+      other certificate. A policy criterion requiring formal certification is
+      met by a node exactly when a certificate certifies it. Nothing checks
+      that the Lean statement says what the node's claim says, or that the
+      statements are consistent: that is judged by the trials of the node,
+      whatever the certificate.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -1352,8 +1354,9 @@ branches:
       certificates give every lemma and branch the same proof state. The probe
       served for a lemma or branch that a certificate certifies carries
       everything the probe for that node carries when no certificate certifies
-      it, and beside it the Lean statement checked and what each axiom standing
-      for a premise states, of exactly one certificate; the probe for a node no
+      it, and beside it the Lean statement checked, what each axiom standing
+      for a premise states and the Lean source recorded, of exactly one
+      certificate; the probe for a node no
       certificate certifies carries nothing of any certificate. So once a node,
       or a premise it cites, is restated, no certificate recorded before the
       restatement is served for it. A policy criterion requiring formal
@@ -1369,8 +1372,8 @@ branches:
       falsification trials, and a certificate, which proves a Lean statement
       and not that the statement is the claim, is not one. The probe clause is
       DEF-lean-certificate's: beside what it carries without certificates, the
-      probe carries the latest certifying certificate's Lean statement and
-      axiom statements, and no other certificate's. A certificate certifies only
+      probe carries the latest certifying certificate's Lean statement, axiom
+      statements and Lean source, and no other certificate's. A certificate certifies only
       while current, which by DEF-lean-certificate needs its node's
       fingerprint and the statements of the premises the node cites to be the
       recorded ones; by DEF-current-trial a fingerprint differs whenever the
