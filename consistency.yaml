@@ -650,7 +650,9 @@ definitions:
       when asked to check a Lean theorem formalizing a lemma or branch, kept
       whole and recorded against that node, with the node's fingerprint, for
       each premise the node cites that premise's statement, and the Lean source
-      the service was sent. It is not a trial. It is current exactly when its node is in the premise graph, its
+      the service was sent. It is not a trial, an amendment, a staged proposal
+      or a declaration: it is no candidate for admission to the premise graph,
+      and no node, premise or edge of it. It is current exactly when its node is in the premise graph, its
       node's fingerprint is the one recorded, and each premise its node cites
       has the statement recorded for it. It certifies its node exactly when it
       is current and, read off the answer it keeps, the service verified the
@@ -1304,7 +1306,9 @@ branches:
       nothing a source records and no source reference is among what it is
       computed from, so every proof state is the same. By DEF-source-reference
       the probe for a node is computed from the graph, the derivation rules, the
-      trials and the proof states alone, all the same, so it is the same. The
+      trials and Lean certificates recorded on the nodes and the proof states
+      alone; over the same ledger and the same graph these are all the same, so
+      it is the same. The
       reporting clause is AXM-references-carry-no-weight's, with dangling as
       DEF-source-reference defines it. evidence:
       CTR-consistency-declarations-gate
@@ -1351,36 +1355,49 @@ branches:
     claim_type: contract
     statement: >-
       Over the same declarations, two ledgers alike except in their Lean
-      certificates give every lemma and branch the same proof state. The probe
-      served for a lemma or branch that a certificate certifies carries
-      everything the probe for that node carries when no certificate certifies
-      it, and beside it the Lean statement checked, what each axiom standing
-      for a premise states and the Lean source recorded, of exactly one
-      certificate; the probe for a node no
-      certificate certifies carries nothing of any certificate. So once a node,
-      or a premise it cites, is restated, no certificate recorded before the
-      restatement is served for it. A policy criterion requiring formal
-      certification passes a node only while a certificate certifies it.
-    premises: [AXM-falsifiable-measurement, DEF-lean-certificate, DEF-proof-state, DEF-current-trial]
+      certificates build the same premise graph and give every lemma and branch
+      the same proof state. The probe served for a lemma or branch that a
+      certificate certifies carries everything the probe for that node carries
+      when no certificate certifies it, and beside it the Lean statement
+      checked, what each axiom standing for a premise states and the Lean
+      source recorded, of exactly one certificate; the probe for a lemma or
+      branch no certificate certifies carries nothing of any certificate. A
+      certificate is served for a node only while the node's fingerprint and
+      the statement of each premise it cites are the ones the certificate
+      recorded; so while a node's statement or cited premises, or the statement
+      of a premise it cites, differ from those a certificate recorded, that
+      certificate is not served for it. A policy criterion requiring formal
+      certification passes a node exactly when a certificate certifies it.
+    premises: [AXM-falsifiable-measurement, DEF-lean-certificate, DEF-premise-graph, DEF-proof-state, DEF-current-trial]
     derivation_rule: >-
-      By DEF-proof-state a proof state is computed from the node's place in the
-      premise graph, the admitted versions of it and the nodes it depends on,
-      and the trials recorded on them, and from nothing else the ledger says
-      about it; by DEF-lean-certificate a certificate is a ledger record and not
-      a trial, so ledgers alike except in certificates give the same proof
-      states. That is AXM-falsifiable-measurement's: consistency is measured by
-      falsification trials, and a certificate, which proves a Lean statement
-      and not that the statement is the claim, is not one. The probe clause is
-      DEF-lean-certificate's: beside what it carries without certificates, the
-      probe carries the latest certifying certificate's Lean statement, axiom
-      statements and Lean source, and no other certificate's. A certificate certifies only
+      By DEF-lean-certificate a certificate is a ledger record that is no trial,
+      amendment, staged proposal or declaration, no candidate for admission and
+      no node, premise or edge of the premise graph. By DEF-premise-graph a
+      build's candidates, which of them it admits and the edges it adds are
+      determined by the declarations at the head revision and the staged
+      proposals, so ledgers alike except in certificates build the same graph,
+      with every node's statement and cited premises the same. By
+      DEF-current-trial whether a trial is current is determined by its
+      validity after amendments, its target being in the graph, and its
+      target's fingerprint and the statements of the premises its target
+      cites, all the same, so the same trials are current. By DEF-proof-state a
+      proof state is computed from the node's place in the graph, the admitted
+      versions of it and the nodes it depends on, and the trials recorded on
+      them, and from nothing else the ledger says about it, so every proof
+      state is the same. That is AXM-falsifiable-measurement's: consistency is
+      measured by falsification trials, and a certificate, which proves a Lean
+      statement and not that the statement is the claim, is not one. The probe
+      clause is DEF-lean-certificate's, for a lemma or branch: beside what it
+      carries without certificates, the probe carries the latest certifying
+      certificate's Lean statement, axiom statements and Lean source, and no
+      other certificate's. A certificate certifies, and so is served, only
       while current, which by DEF-lean-certificate needs its node's
-      fingerprint and the statements of the premises the node cites to be the
+      fingerprint and the statement of each premise the node cites to be the
       recorded ones; by DEF-current-trial a fingerprint differs whenever the
-      node's statement or cited premises differ, so after a restatement of the
-      node, or of a premise it cites, no certificate recorded before it is
-      current, certifies, or is served. The policy clause is
-      DEF-lean-certificate's. evidence: CTR-lean-certificates
+      node's statement or cited premises differ. So while either, or a cited
+      premise's statement, differs from what a certificate recorded, it is not
+      current and not served; a restatement undone makes it current again. The
+      policy clause is DEF-lean-certificate's. evidence: CTR-lean-certificates
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
 policies:

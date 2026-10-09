@@ -191,8 +191,15 @@ def test_the_verifier_reads_the_statements_and_a_certificate_beside_them(project
     axioms it rests on, which premise each custom one stands for and what it states, and the Lean
     source the service checked. The certificate moves no proof state: the node is as open as it was."""
     before = status("probe", subject="LMA-compute-cap")
+    graph_before = json.loads(status("cycle"))
     out = certify_lean_prover(services)
     assert "CRT-0001 recorded for LMA-compute-cap: lean-prover VERIFIED -- CERTIFIED" in out
+    # The same premise graph and the same proof states, with the certificate named beside them.
+    graph_after = json.loads(status("cycle"))
+    assert graph_after["nodes"] == graph_before["nodes"]
+    assert ([(s["target_id"], s["state"], s["n_trials"]) for s in graph_after["slices"]]
+            == [(s["target_id"], s["state"], s["n_trials"]) for s in graph_before["slices"]])
+    assert [s["certified_by"] for s in graph_after["slices"]] == ["CRT-0001"]
 
     probe = status("probe", subject="LMA-compute-cap")
     for part in ("PREMISES:", "[AXIOM AXM-energy-budget]: Total system battery power is bounded at 100W.",
