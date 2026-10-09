@@ -373,6 +373,38 @@ components:
       - src/code_links/
       - src/consistency_belief/links.py
 
+  - id: CMP-lean-certificates
+    purpose: Obtain a Lean certificate for a lemma or branch from a Lean service, keep it whole, and serve it to the node's verifier beside the statements
+    testable_capability: >-
+      Records a Lean service's answer against its node's fingerprint and the statements of the
+      premises it cites; serves the Lean statement checked, and what each axiom standing for a
+      premise states, in the node's probe beside the statements, only while it certifies the node;
+      moves no proof state; sends only committed sources; never reads a key from a file git tracks
+      and never writes a service's address to the ledger
+    failure_modes:
+      - {id: FM-certificate-replaces-statements, observable: "a probe with a certificate lacks a premise, the claim or the derivation rule it served without one, or shows the proof or its file",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_the_verifier_reads_the_statements_and_a_certificate_beside_them"}
+      - {id: FM-certificate-moves-state, observable: "a node with a certificate and no trials reads other than an open obligation",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_the_verifier_reads_the_statements_and_a_certificate_beside_them"}
+      - {id: FM-restated-certificate-served, observable: "a certificate is served after its node, or a premise it cites, was restated",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_restatement_sets_the_certificate_aside"}
+      - {id: FM-failed-certificate-served, observable: "a certificate that failed, mismatched its statement or rests on an unmapped axiom is served",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_certificate_that_does_not_certify_is_recorded_and_never_served"}
+      - {id: FM-edited-certificate-served, observable: "a stored certificate edited after it was recorded still certifies",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_stored_certificate_edited_after_the_fact_stops_certifying"}
+      - {id: FM-uncommitted-source-sent, observable: "a Lean file with uncommitted edits is sent to a service",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_lean_source_must_be_committed_as_it_stands"}
+      - {id: FM-address-recorded, observable: "a service's address or key appears in the ledger",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_the_address_given_for_a_call_is_never_recorded"}
+      - {id: FM-tracked-key-read, observable: "a key is read from a configuration file git tracks",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_key_is_never_read_from_a_file_git_tracks"}
+      - {id: FM-formal-criterion-unchecked, observable: "a policy requiring formal certification passes a node no certificate certifies",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_policy_may_require_a_certificate_beside_proven"}
+    remediation: consistency_belief.lean's judge, failures and probe_block; server.certify
+    goal: GOL-sound-designs
+    code:
+      - src/consistency_belief/lean.py
+
 interfaces:
   - id: IFC-declarations__model
     producer: CMP-declarations
@@ -517,6 +549,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-code-links]
 
+  - id: CTR-lean-certificates
+    subject: CMP-lean-certificates
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-lean-certificates]
+
   # Integration: each interface's producer output run through its consumer, both sides at once.
   - id: CTR-ifc-declarations-model
     subject: IFC-declarations__model
@@ -649,6 +689,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py, uv.lock]
 
+  - id: TST-lean-certificates
+    layer: component
+    targets: [CMP-lean-certificates]
+    run: python tools/pytest_trials.py $OUT -- tests/test_lean_certificates.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py, uv.lock]
+
   - id: TST-ifc-declarations-model
     layer: interface
     targets: [IFC-declarations__model]
@@ -698,6 +746,7 @@ policies:
       - {slice: CTR-goal-set-stays-human, require: supported}
       - {slice: CTR-code-links-aligned, require: supported}
       - {slice: CTR-snapshot-shows-one-revision, require: supported}
+      - {slice: CTR-lean-certificates, require: supported}
       - {slice: CTR-ifc-declarations-model, require: supported}
       - {slice: CTR-ifc-model-diagnose, require: supported}
       - {slice: CTR-ifc-cdeclarations-proofdag, require: supported}

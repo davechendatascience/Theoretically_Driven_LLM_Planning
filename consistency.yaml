@@ -33,6 +33,7 @@ components:
   - {id: CMP-plugin, note: "the one plugin any project enables, pinned to a release"}
   - {id: CMP-code-links, note: "tagged code regions, pinned to the code and the claims they realize"}
   - {id: CMP-graph-snapshot, note: "the design graph at one revision, drawn as one page"}
+  - {id: CMP-lean-certificates, note: "Lean certificates from a Lean service, served to a node's verifier beside the statements"}
 
 axioms:
   - id: AXM-axiomatic-grounding
@@ -636,11 +637,34 @@ definitions:
       the ledger; and neither, nor anything a source records, is among what a
       proof state is computed from. The probe served for a node is computed
       from the premise graph, the derivation rules of the nodes in it, the
-      trials recorded on them and the proof states computed for them, and from
-      nothing else. A source reference is
+      trials and Lean certificates recorded on them and the proof states
+      computed for them, and from nothing else. A source reference is
       dangling at a revision exactly when no source with the id it names is
       declared at that revision. Nothing checks that a source says what a node
       that references it states.
+
+  - id: DEF-lean-certificate
+    term: Lean certificate
+    meaning: >-
+      A Lean certificate is a ledger record of one answer a Lean service gave
+      when asked to check a Lean theorem formalizing a lemma or branch, kept
+      whole and recorded against that node, with the node's fingerprint and,
+      for each premise the node cites, that premise's statement. It is not a
+      trial. It is current exactly when its node is in the premise graph, its
+      node's fingerprint is the one recorded, and each premise its node cites
+      has the statement recorded for it. It certifies its node exactly when it
+      is current and, read off the answer it keeps, the service verified the
+      theorem against the Lean statement the record binds the node to, the
+      proof uses no sorry, every axiom the proof rests on beyond Lean's
+      standard three is one the record names as standing for a premise its
+      node cites, and the answer carries any digest its service computes of
+      it. The probe served for a lemma or branch carries, beside what it
+      carries without certificates, the Lean statement checked and what each
+      axiom standing for a premise states, of the latest certificate recorded
+      on that node that certifies it, and of no other certificate. A policy
+      criterion requiring formal certification is met by a node exactly when a
+      certificate certifies it. Nothing checks that the Lean statement says
+      what the node's claim says: that is judged by the trials of the node.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -1320,6 +1344,42 @@ branches:
       is in the graph before and after it. evidence: CTR-proof-dag-invariants
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-lean-certificates-beside-the-statements
+    subject: CMP-lean-certificates
+    claim_type: contract
+    statement: >-
+      Over the same declarations, two ledgers alike except in their Lean
+      certificates give every lemma and branch the same proof state. The probe
+      served for a lemma or branch that a certificate certifies carries
+      everything the probe for that node carries when no certificate certifies
+      it, and beside it the Lean statement checked and what each axiom standing
+      for a premise states, of exactly one certificate; the probe for a node no
+      certificate certifies carries nothing of any certificate. So once a node,
+      or a premise it cites, is restated, no certificate recorded before the
+      restatement is served for it. A policy criterion requiring formal
+      certification passes a node only while a certificate certifies it.
+    premises: [AXM-falsifiable-measurement, DEF-lean-certificate, DEF-proof-state, DEF-current-trial]
+    derivation_rule: >-
+      By DEF-proof-state a proof state is computed from the node's place in the
+      premise graph, the admitted versions of it and the nodes it depends on,
+      and the trials recorded on them, and from nothing else the ledger says
+      about it; by DEF-lean-certificate a certificate is a ledger record and not
+      a trial, so ledgers alike except in certificates give the same proof
+      states. That is AXM-falsifiable-measurement's: consistency is measured by
+      falsification trials, and a certificate, which proves a Lean statement
+      and not that the statement is the claim, is not one. The probe clause is
+      DEF-lean-certificate's: beside what it carries without certificates, the
+      probe carries the latest certifying certificate's Lean statement and
+      axiom statements, and no other certificate's. A certificate certifies only
+      while current, which by DEF-lean-certificate needs its node's
+      fingerprint and the statements of the premises the node cites to be the
+      recorded ones; by DEF-current-trial a fingerprint differs whenever the
+      node's statement or cited premises differ, so after a restatement of the
+      node, or of a premise it cites, no certificate recorded before it is
+      current, certifies, or is served. The policy clause is
+      DEF-lean-certificate's. evidence: CTR-lean-certificates
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -1340,3 +1400,4 @@ policies:
       - {target: BRN-snapshot-shows-one-revision, require: proven, evidence: supported}
       - {target: BRN-references-carry-no-weight, require: proven, evidence: supported}
       - {target: BRN-proven-rests-on-proven, require: proven, evidence: supported}
+      - {target: BRN-lean-certificates-beside-the-statements, require: proven, evidence: supported}
