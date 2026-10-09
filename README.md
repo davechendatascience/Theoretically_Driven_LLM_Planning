@@ -751,7 +751,7 @@ plugin/                              the `tdlp` Claude Code plugin
   skills/adopt-goals/SKILL.md        setting up goals.yaml in a project that already uses TDLP
 ```
 
-A release: bump `version` in `pyproject.toml`, `plugin/.claude-plugin/plugin.json`, the marketplace
+A release: bump `version` in `pyproject.toml`, `__version__` in `src/component_belief/__init__.py`, `plugin/.claude-plugin/plugin.json`, the marketplace
 entry and the tag in `plugin/.mcp.json` together (`TST-plugin` fails if any disagree), commit, then
 `claude plugin tag plugin --push`.
 
@@ -801,7 +801,7 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
-### Unreleased · a Lean certificate beside the statements
+### 0.9.0 — 2026-10-09 · a Lean certificate beside the statements
 
 - **`certify()`** proves a lemma or branch in Lean before its verifier pass, an optional step.
   The committed source goes to a Lean service, which checks it once; its answer is kept whole in
