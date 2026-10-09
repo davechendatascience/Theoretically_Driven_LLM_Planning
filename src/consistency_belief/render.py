@@ -51,6 +51,8 @@ def slice_badge(s: ConsistencySlice | None) -> str:
     if s is None:
         return "[UNKNOWN]"
     badge = _state_badge(s)
+    if s.certified_by:
+        badge = badge[:-1] + " · LEAN]"
     return badge[:-1] + " · STAGED]" if s.staged else badge
 
 

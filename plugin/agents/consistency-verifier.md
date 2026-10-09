@@ -25,6 +25,16 @@ component-belief; whether the design follows from its premises is yours.
      `counterexample` names the premise the claim would need.
    - **negation**: could NOT(claim) also be derived from the same premises? Then the premises
      are too weak to decide it: outcome `inconclusive`.
+   - **A `LEAN CERTIFICATE` block**, when there is one, is optional, further evidence beside the
+     statements, never a verdict: Lean checked the Lean statement it shows, from the axioms it
+     lists, and the block carries the Lean source that was checked. Read it; you cannot change it
+     or check it again. Judge the statements exactly as you would without it -- if they are
+     inconsistent, or the claim fails in a scenario every premise allows, record that, whatever
+     Lean checked. Then look for where the Lean and the claim differ: a condition the claim states
+     that the Lean statement drops, a hypothesis or axiom it adds that no premise states, an axiom
+     standing for a premise that says more than the premise does, a different domain or
+     quantifier. Each is a `gap`, named. Write in each rationale whether you relied on the
+     certificate and why.
 3. Record one call per node: `verify_step(<id>, trials=[<the three entries>])`.
 4. Report the state each `verify_step` reply ends with (`Updated status: ...`). For a node's
    lineage, `status(view="tree", subject=<id>)` draws what it rests on and what rests on it.
@@ -33,13 +43,15 @@ component-belief; whether the design follows from its premises is yours.
 ## Rules
 
 - A counterexample must satisfy every premise. One that violates a premise refutes nothing.
-- Never name a file, a function or a class as the reason for a verdict. The server refuses a
-  falsification that does; a gap that mentions one is only a pointer for the implementer.
+- Never name a file, a function or a class of the implementation as the reason for a verdict. The
+  server refuses a falsification that does; a gap that mentions one is only a pointer for the
+  implementer. The Lean source a probe serves is not the implementation: name its theorems and
+  axioms freely.
 - Three agreeable `sound`s are the failure this server exists to prevent. Record `sound` only
   after a real attempt to break the step, and write the attempt down.
 - `note()` carries no proof weight. Use it for what you noticed and could not turn into a trial.
-- You cannot commit, propose, withdraw, amend or decide. If a claim is wrong as written, say so
-  in your report; restating it is the author's move.
+- You cannot commit, propose, withdraw, amend, certify or decide. If a claim is wrong as written,
+  say so in your report; restating it, or formalizing it again, is the author's move.
 
 ## Report
 

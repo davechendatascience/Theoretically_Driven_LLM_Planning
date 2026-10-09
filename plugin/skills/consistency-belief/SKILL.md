@@ -31,6 +31,34 @@ its tool list has no Read, Grep or Bash, so it cannot open a file even by habit,
 context is the probe text alone. Run it after `propose_branch`, after a restatement, and
 before reporting any node as proven. Read its report; do not re-verify in the main session.
 
+## Proving a step in Lean first (optional)
+
+Before handing a lemma or branch to the verifier, you may prove it in Lean and attach the
+certificate. The verifier still reads the statements; the probe adds, beside them, the Lean
+statement that was checked and what each axiom standing for a premise states.
+
+```
+certify("LMA-x", declaration="TDLP.lma_x", expected_statement="<its Lean type>",
+        files=["lean/TDLP/LmaX.lean"], workspace="lean",
+        premise_axioms={"AXM-y": "TDLP.axm_y"}, url="<the server you were given>")
+```
+
+- **Services.** `service="lean-prover"` (the default) is a Lean prover server: it hosts the
+  sources, audits every axiom and keeps a certificate. `service="axle"` is Axiom's AXLE:
+  `expected_statement` is then the formal statement, the theorem sorried out with its imports, and
+  it admits Lean's standard axioms only, so premises enter as hypotheses.
+- **The address is the user's to give.** Pass the server they named as `url=`. Never write an
+  address or a key into the repository: keys go in `LEAN_PROVER_API_KEY` / `AXLE_API_KEY`, or in an
+  untracked `.lean-services.yaml`. The ledger records neither.
+- **Commit the Lean files first.** Only committed sources are sent.
+- **An axiom stands for a premise the step cites, and says no more.** `premise_axioms` maps each
+  one; a proof resting on any other axiom does not certify. `axiom budget (x y : ℝ) : x + y ≤ 100`
+  claims it of every pair of reals, which is false and proves anything. The verifier is shown what
+  each axiom states, and a stand-in that says more than its premise is a gap.
+- **A certificate moves no proof state.** It is evidence for the verifier, and a policy criterion
+  can require one (`formal: certified`). Restating the node, or a premise it cites, sets it aside.
+  `status(view="certificates")` lists them all.
+
 ## Six rules
 
 1. **A probe is a search for a counterexample, not a confirmation.** One pass is one

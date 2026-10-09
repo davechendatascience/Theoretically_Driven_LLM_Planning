@@ -136,3 +136,22 @@ is optional: a project without one is still checked branch by branch, and a proj
    pins. Reviews live in `.consistency/reviews.yaml`, which a repository tracks even where it
    keeps its event ledgers local.
 
+## 12. Serve a Lean Certificate Beside the Statements, Never in Their Place
+
+1. Proving a lemma or branch in Lean is optional and is the author's step, before a verifier pass
+   (`certify`). A Lean service checks the committed source once; its answer is kept whole in the
+   ledger as a certificate (`DEF-lean-certificate`). No later read runs Lean.
+2. A certificate is not a trial and moves no proof state. Lean proves the Lean statement; whether
+   that statement says what the claim says is outside Lean and is judged by the node's trials.
+3. The probe serves the statements as before and, beside them, the Lean statement checked and what
+   each axiom standing for a premise states -- of the latest certificate that certifies the node,
+   and never the proof, the file or where it is kept.
+4. A certificate certifies only while current, bound like a trial to its node's fingerprint and the
+   statements of the premises it cites; only when its service verified the theorem against the
+   statement the record binds, without sorry; only when every non-standard axiom stands for a
+   premise the node cites; and only while its digest, where its service computes one, matches.
+5. Services are interchangeable behind one reading: `lean-prover` (a Lean prover server, which
+   audits every axiom and keeps the certificate) and `axle` (Axiom's AXLE, which admits Lean's
+   standard axioms only). Addresses and keys live outside the repository, and the ledger records
+   neither.
+

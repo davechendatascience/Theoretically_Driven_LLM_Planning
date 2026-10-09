@@ -57,6 +57,9 @@ class ConsistencySlice:
     # The lemmas and branches beneath it whose step is not verified, with their states: what a
     # conditional node waits on. Empty for any other state.
     waiting_on: list[tuple[str, str]] = field(default_factory=list)
+    # The id of the Lean certificate that currently certifies its claim, if one does. Shown beside
+    # the state, never part of it: a certificate moves no proof state (DEF-lean-certificate).
+    certified_by: str = ""
 
     @property
     def is_sound(self) -> bool:

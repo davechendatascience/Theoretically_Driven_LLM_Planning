@@ -247,6 +247,7 @@ fixed weight:
 | Server ran a declared test | `component_belief.run_test` | measured evidence (artifact, hash and content stamp captured) |
 | Server recorded a falsification probe | `consistency_belief.verify_step` | a deductive verification trial |
 | External import | `component_belief.ingest` | imported evidence (a declared test, and a local artifact the server copies and hashes) |
+| Lean service checked a theorem | `consistency_belief.certify` | **none on a proof state** — served to the verifier beside the statements |
 | Agent or human statement | `note` (both servers) | **zero** — recorded as `provenance=asserted` |
 
 ### 2. Declarations live in git, not in tools
@@ -364,6 +365,22 @@ declarations in [`consistency.yaml`](consistency.yaml).
   - Nothing checks that a source says what the node states.
   - `status(view="sources")` is the reference list. A reference naming no declared source, and a
     source nothing references, are reported.
+* **A Lean certificate is evidence beside the statements (optional).**
+  - Before a verifier pass, the author may prove a lemma or branch in Lean:
+    `certify("LMA-x", declaration=..., expected_statement=..., files=[...], url=...)` sends the
+    committed Lean source to a Lean service, which checks it once, and keeps the answer whole in
+    the ledger. Services: `lean-prover` (a Lean prover server, the default) and `axle` (Axiom's
+    AXLE).
+  - The verifier still reads the statements. The probe adds, beside them, the Lean statement that
+    was checked and what each axiom standing for a premise states (`premise_axioms`) — never the
+    proof or the file. Whether the Lean statement says what the claim says is the verifier's to
+    judge; a stand-in axiom that says more than its premise is a gap.
+  - A certificate moves no proof state. Like a trial it is bound to its node's fingerprint and the
+    statements of the premises it cites, so a restatement sets it aside. A policy criterion may
+    require one: `{target: BRN-x, require: proven, formal: certified}`.
+  - The service's address is given per call or in the environment, and keys stay in
+    `LEAN_PROVER_API_KEY` / `AXLE_API_KEY` or an untracked `.lean-services.yaml`; the ledger
+    records neither. `status(view="certificates")` lists every certificate and what it reads as now.
 * **The verifier reasons from declarations alone.** A trial establishes entailment from axioms, definitions, premises and claims — never from the source. A clause that cannot be judged without opening the code *is* the finding: the claim leans on a fact it does not cite. Implementation fidelity lands in component-belief, cited by contract id.
 
 ### The loop
@@ -380,17 +397,18 @@ recorded but does not close an obligation. `plugin/agents/consistency-verifier.m
 in a context that cannot open a file; `plugin/skills/consistency-belief/SKILL.md` says when to
 hand it work.
 
-### Tools (nine)
+### Tools (ten)
 
 | Tool | Does |
 |---|---|
-| `status` | 10 views: `tree`, `branches`, `axioms`, `sources`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `cycle`. `coverage` also gives each cited measurement's review state and the review to record, and lists the contracts no branch cites by what they measure; `sources` is the reference list, each source with the nodes that reference it |
+| `status` | 12 views: `tree`, `branches`, `axioms`, `sources`, `obligations`, `probe`, `contradictions`, `coverage`, `audit`, `reviews`, `certificates`, `cycle`. `coverage` also gives each cited measurement's review state and the review to record, and lists the contracts no branch cites by what they measure; `sources` is the reference list, each source with the nodes that reference it |
 | `propose_branch` | stages a branch or lemma; checks acyclicity and premises; warns when a claim names a file, class or call instead of what must hold of any implementation |
 | `verify_step` | records one pass of falsification trials, each bound to the statement it verified |
 | `amend` | reclassifies a mis-recorded trial (`invalid`, `quarantined`, `superseded`) by appending; the original and the reason stay |
 | `withdraw` | retires a staged proposal; refused for a declaration or anything a declared node cites |
 | `audit_change` | computes the blast radius of changing an axiom or lemma -- the steps citing it, which need a verifier pass, apart from those further down, which only wait -- and records the audit so impact, approval and re-verification form one chain. It also names, by id, the tagged code regions and cited measurements the change would leave unreviewed |
 | `note` | qualitative annotation; zero weight |
+| `certify` | optional, before a verifier pass: sends a lemma's or branch's committed Lean proof to a Lean service (`lean-prover` or `axle`) and keeps the answer whole as a certificate, which the probe serves beside the statements while it certifies the node; moves no proof state |
 | `review` | records that you read a code region, or a cited contract, against its claim at HEAD: the commit, the digests there, aligned or not aligned, and a note. Refused for uncommitted code or claims; a ledger record, never a line in the source |
 | `decide` | evaluates a policy; `evidence: supported` also requires each cited contract supported in component-belief; human approval for `ADOPT`; records the revision |
 
@@ -689,7 +707,7 @@ docs/
   graph_snapshot_mcp_design.md             the design graph at one revision, drawn as one page
   code_to_theory_tagging_design.md         tagged code regions: pins, alignment, adoption
 src/
-  consistency_belief/                deductive server (8 tools)
+  consistency_belief/                deductive server (10 tools)
     declarations.py                  git-HEAD loader, validation, the component join
     graph.py                         proof DAG kernel: acyclicity, grounding, blast radius
     model.py                         verification state (PROVEN, CONDITIONAL, REFUTED, OBLIGATION, STALE)
@@ -697,6 +715,7 @@ src/
     decide.py                        policy evaluation and the human approval gate
     views.py / render.py             proof tree, status and coverage views
     measurements.py                  cited measurements: reviews, review state, contracts no branch cites
+    lean.py                          Lean certificates: the services (lean-prover, axle), binding, what the probe serves
     links.py                         the theory side of code links: claim digests, reviews, what moved
     store.py                         append-only JSONL ledger in .consistency/
   component_belief/                  empirical server (6 tools)
@@ -772,6 +791,7 @@ The suites assert the invariants above, not the implementation:
 23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
 24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
 25. The order trials were recorded in decides no proof state, and no policy requiring proven passes a conditional branch.
+26. A Lean certificate is served to the verifier beside the statements, never in place of them, only while it certifies its node, and moves no proof state; no service address or key reaches the ledger.
 
 ---
 
@@ -780,6 +800,32 @@ The suites assert the invariants above, not the implementation:
 Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<version>`. Before
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
+
+### Unreleased · a Lean certificate beside the statements
+
+- **`certify()`** proves a lemma or branch in Lean before its verifier pass, an optional step.
+  The committed source goes to a Lean service, which checks it once; its answer is kept whole in
+  the ledger, bound to the node's fingerprint and the statements of the premises it cites.
+  - `lean-prover`, the default: a Lean prover server. The sources are committed to a repository
+    it hosts, it checks the declaration against `expected_statement` at that commit, audits every
+    axiom, and keeps a certificate with a digest. A gateway timeout is recovered by the request's
+    claim id, and `certificate_id=` adopts a certificate it already holds.
+  - `axle`: Axiom's AXLE, which checks a proof against a sorried formal statement and admits
+    Lean's standard axioms only.
+- **The verifier reads the statements, and the certificate beside them.** The probe adds the Lean
+  statement checked and what each axiom standing for a premise states, read from the committed
+  source. A live run showed why the axiom's statement matters: a stand-in written over every pair
+  of reals, `compute + motors ≤ 100`, is false and proves anything, and its name alone hides that.
+- **A certificate moves no proof state.** A restatement of its node, or of a premise the node
+  cites, sets it aside; a failed, mismatched or edited one is recorded and never served. A policy
+  criterion may require one: `formal: certified`.
+- **Addresses and keys stay out of the repository.** `certify(url=...)` takes the address the
+  user gives; keys come from the environment or an untracked `.lean-services.yaml`, refused when
+  git tracks it. The ledger records the service and its id for the check, never an address.
+- `status(view="certificates")`; a tree badge `· LEAN` marks a node a certificate certifies.
+- **Theory.** `DEF-lean-certificate` and `BRN-lean-certificates-beside-the-statements` are new;
+  `DEF-source-reference` was restated, since its probe clause now names certificates. That leaves
+  `BRN-references-carry-no-weight` stale until its next verifier pass.
 
 ### 0.8.1 — 2026-10-08 · reviews travel with the code, and a link's claim reads one layer
 

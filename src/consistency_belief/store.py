@@ -132,6 +132,20 @@ class Store:
                 target["validity_reason"] = amendment.get("reason", "")
         return list(trials.values())
 
+    # ---------- Lean certificates ----------
+
+    def append_certificate(self, record: dict[str, Any]) -> str:
+        """Keep a Lean certificate whole, beside the trials (DEF-lean-certificate): the evidence
+        travels with the ledger, and no later read runs Lean again."""
+        n = sum(1 for r in self.raw_records() if r.get("kind") == "certificate")
+        rec = {**record, "kind": "certificate", "id": sequential_id("CRT", n + 1), "timestamp": utc_now()}
+        self._append(self.evidence_path, rec)
+        return rec["id"]
+
+    def certificates(self) -> list[dict[str, Any]]:
+        """Every certificate record, oldest first."""
+        return [r for r in self.raw_records() if r.get("kind") == "certificate"]
+
     # ---------- notes ----------
 
     def append_note(self, subject: str, text: str, actor: str = "agent") -> dict[str, Any]:

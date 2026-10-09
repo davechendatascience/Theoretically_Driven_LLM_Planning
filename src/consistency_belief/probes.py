@@ -77,11 +77,12 @@ def premises_block(dag: ProofDAG, node: Any) -> str:
     return "\n".join(premises_text) or "(No premises declared — root or isolated node)"
 
 
-def probe_text(dag: ProofDAG, target_id: str, status: str = "") -> str:
+def probe_text(dag: ProofDAG, target_id: str, status: str = "", formal: list[str] | None = None) -> str:
     """Everything a verifier needs for one node, and nothing else: the premises with their
     statements, the claim, the derivation rule, the three strategies, and the one call that
     records them. Served by status(view="probe") so the verifier assembles nothing by hand and
-    has no reason to open a file."""
+    has no reason to open a file. `formal` is the Lean certificate certifying the claim, when one
+    does: served beside the statements, never in place of them."""
     node = dag.get(target_id)
     if not node:
         raise ValueError(f"unknown node {target_id!r}")
@@ -100,6 +101,7 @@ def probe_text(dag: ProofDAG, target_id: str, status: str = "") -> str:
         "DERIVATION RULE:",
         node.derivation_rule or "direct deduction",
         "",
+        *([*formal, ""] if formal else []),
         "STRATEGIES (one trial each; the same strategy repeated by the same actor adds nothing):",
         "  counterexample  a realizable scenario where every premise holds and the claim fails"
         " -> falsified (with the scenario), else sound",

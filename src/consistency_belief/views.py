@@ -14,6 +14,7 @@ from .declarations import (BOUNDARY_ID, COMPONENT_ID, DECLARATION_FILE, Declarat
                            load as load_declarations)
 from .graph import ProofDAG, ProofNode
 from .ids import content_hash
+from .lean import CERTIFIED, Certificate, current_certificates, judge, probe_block
 from .measurements import (NOT_REVIEWED, REVIEW_FAILED, UNREVIEWED, CitedMeasurement, cited_measurements,
                            uncited_by_kind)
 from .measurements import adopted as adopted_reviews
@@ -24,10 +25,10 @@ from .render import basis_line, bullet, envelope, render_ascii_dag, render_linea
 from .store import Store
 
 VIEWS = ("tree", "branches", "axioms", "sources", "obligations", "probe", "contradictions", "coverage", "audit",
-         "reviews", "cycle")
+         "reviews", "certificates", "cycle")
 
 #: The views that read status(subject=...); every other view ignores it, and says so.
-SUBJECT_VIEWS = ("tree", "branches", "probe", "audit", "reviews")
+SUBJECT_VIEWS = ("tree", "branches", "probe", "audit", "reviews", "certificates")
 
 #: States a verifier can still act on: the probe view serves these.
 OPEN_STATES = (OBLIGATION, STALE, DOUBTED)
@@ -41,6 +42,8 @@ class Context:
     dag: ProofDAG
     slices: list[ConsistencySlice]
     staged_issues: list[str] = field(default_factory=list)
+    #: The Lean certificate certifying each node's claim now, by node id (DEF-lean-certificate).
+    certified: dict[str, Certificate] = field(default_factory=dict)
 
     @classmethod
     def build(cls, root: Path, staged_nodes: list[Any] | None = None, revision: str = "HEAD") -> Context:
@@ -53,7 +56,13 @@ class Context:
 
         trials = store.effective_trials()
         slices = compute_consistency(dag, trials, legacy=HistoricalBuilds(root, store, revision).fingerprints)
-        return cls(root=root, store=store, decl=decl, dag=dag, slices=slices, staged_issues=staged_issues)
+        # Read after the proof states, and only beside them: a certificate moves none.
+        certified = current_certificates(dag, store.certificates())
+        for s in slices:
+            if s.target_id in certified:
+                s.certified_by = certified[s.target_id].id
+        return cls(root=root, store=store, decl=decl, dag=dag, slices=slices, staged_issues=staged_issues,
+                   certified=certified)
 
 
 class HistoricalBuilds:
@@ -214,6 +223,10 @@ def view_branches(ctx: Context, subject: str | None = None) -> str:
         if s.n_superseded or s.n_stale:
             lines.append(f"  not counted: {s.n_superseded} verified an earlier statement, "
                          f"{s.n_stale} predate a restated premise")
+        if s.target_id in ctx.certified:
+            c = ctx.certified[s.target_id]
+            lines.append(f"  lean: {c.id} via {c.service} certifies {c.declaration} : "
+                         f"{' '.join(c.reading.statement.split())}")
         if s.staged:
             lines.append("  staged: proposed, not declared at git HEAD -- declare it in consistency.yaml "
                          "and commit before it can support decide()")
@@ -265,6 +278,32 @@ def view_reviews(ctx: Context, subject: str | None = None) -> str:
                      f"{str(r.get('commit') or '')[:7]} by {r.get('actor') or '?'}{mark}")
         if r.get("note"):
             lines.append(f"    {r['note']}")
+    return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
+
+
+def view_certificates(ctx: Context, subject: str | None = None) -> str:
+    """Every Lean certificate recorded, newest first, as it reads now: certifying its node,
+    failed, or set aside by a restatement (DEF-lean-certificate). The probe serves only the
+    certifying one; this is where the rest are."""
+    records = [r for r in ctx.store.certificates() if not subject or r.get("target_id") == subject]
+    total = len(ctx.store.certificates())
+    lines = [f"Lean certificates ({len(records)}" + (f" of {subject}" if subject else "") + f", of {total} recorded)"
+             " -- a certificate moves no proof state; the probe serves the one certifying a node to its verifier",
+             ""]
+    if not records:
+        lines.append("None. certify(<node id>, declaration=..., expected_statement=..., files=[...]) proves a "
+                     "lemma or branch in Lean before its verifier pass.")
+    for record in reversed(records):
+        c = judge(ctx.dag, record)
+        r = c.reading
+        serving = ctx.certified.get(c.target_id)
+        mark = "  [served]" if serving is not None and serving.id == c.id else ""
+        lines.append(f"{c.id} {str(record.get('timestamp') or '')[:16]} {c.target_id} -- {c.state.upper()}"
+                     f" ({c.service} {r.status}) by {record.get('actor') or '?'}{mark}")
+        lines.append(f"    {c.declaration} : {' '.join(r.statement.split()) or '(no statement)'}")
+        lines.append(f"    {r.reference or '?'} · {r.environment}")
+        if c.why and c.state != CERTIFIED:
+            lines.append("    " + "; ".join(c.why))
     return envelope("\n".join(lines).rstrip(), basis_line(ctx.slices))
 
 
@@ -376,7 +415,8 @@ def view_probe(ctx: Context, subject: str | None = None) -> str:
                        else " -- ungrounded; its premises must be declared first")
         elif s and s.untried:
             status += f" untried: {', '.join(s.untried)}"
-        blocks.append(probe_text(ctx.dag, target, status))
+        formal = probe_block(ctx.certified[target]) if target in ctx.certified else None
+        blocks.append(probe_text(ctx.dag, target, status, formal))
     header = f"{len(targets)} probe(s). Judge each from its premises alone; record one verify_step per node."
     return envelope(header + "\n\n" + "\n\n".join(blocks), basis_line([slices[t] for t in targets if t in slices]))
 
@@ -761,6 +801,7 @@ def view_cycle(ctx: Context) -> dict[str, Any]:
                 "n_superseded": s.n_superseded,
                 "n_stale": s.n_stale,
                 "waiting_on": [list(w) for w in s.waiting_on],
+                "certified_by": s.certified_by,
             }
             for s in ctx.slices
         ],

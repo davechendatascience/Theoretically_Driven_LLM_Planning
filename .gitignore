@@ -14,3 +14,8 @@ venv/
 # The design-trial ledger .consistency/ is committed for the same reason as
 # .belief/: verification records are part of the baseline they verified.
 .consistency/cache/
+
+# Lean services (certify): addresses and API keys stay on this machine. The server refuses to
+# read a key from a file git tracks.
+.lean-services.yaml
+leanProver-api-key

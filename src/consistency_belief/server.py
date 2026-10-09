@@ -28,6 +28,7 @@ from .views import (
     view_audit,
     view_axioms,
     view_branches,
+    view_certificates,
     view_contradictions,
     view_coverage,
     view_cycle,
@@ -107,6 +108,15 @@ planned (a design declared before anything is built, which is allowed) and broke
 a component that belief.yaml no longer declares, so the design governs nothing). Design may precede
 implementation; what may not happen silently is a design left behind by a component that was
 removed or renamed.
+
+Proving a lemma or branch in Lean is an optional step before its verifier pass: certify(<id>,
+declaration=..., expected_statement=..., files=[...], service="lean-prover" | "axle") sends the
+committed Lean source to a Lean service, which checks it once; its answer is kept whole in the
+ledger as an additional certificate. It is optional, further evidence. The verifier still reads the
+statements: the probe serves them as always, and beside them the Lean statement that was checked,
+the axioms it rests on and the Lean source. A certificate moves no proof state: Lean proves the Lean
+statement, and whether it says what the claim says, or whether the statements are consistent at
+all, is the verifier's to judge. A restatement of the node, or of a premise it cites, sets it aside.
 
 A declaration may reference the sources it came from, as a paper cites its references: list each
 under `sources:` (id, title, authors, year, and a doi, arxiv, isbn or url where it has one) and
@@ -192,6 +202,8 @@ def status(
                        and lemmas they reach, and which other components share that ground)
       reviews        - every review of a code link or a cited measurement, newest first, the latest
                        of each marked; subject=<CODE-, node, BRN- or CTR- id> narrows it
+      certificates   - every Lean certificate certify() recorded, newest first: certifying its
+                       node, failed, or set aside by a restatement; subject=<node id> narrows it
       cycle          - full state as structured JSON
     """
     if view not in VIEWS:
@@ -235,6 +247,8 @@ def _status(view: str, subject: str | None) -> str:
         return view_audit(ctx, subject)
     if view == "reviews":
         return view_reviews(ctx, subject)
+    if view == "certificates":
+        return view_certificates(ctx, subject)
     if view == "cycle":
         return json.dumps(view_cycle(ctx), indent=2, default=str)
 
@@ -784,6 +798,153 @@ def review(subject: str, target: str | None = None, outcome: str = "aligned", no
     return "\n".join(lines)
 
 
+def _committed_source(root: Path, path: str) -> tuple[str, str] | str:
+    """A Lean file as HEAD holds it, with its blob id, or why it cannot be sent: a certificate names
+    the commit it checked, so the file must be committed as it stands."""
+    if _uncommitted(root, path):
+        return f"{path} is not committed as it stands: commit it, then certify -- the certificate names what it checked"
+    try:
+        blob = subprocess.run(["git", "rev-parse", f"HEAD:{path}"], cwd=root, capture_output=True, text=True,
+                              timeout=30, stdin=subprocess.DEVNULL, check=False)
+        text = subprocess.run(["git", "show", f"HEAD:{path}"], cwd=root, capture_output=True, timeout=30,
+                              stdin=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"git could not read {path}: {exc}"
+    if blob.returncode != 0 or text.returncode != 0:
+        return f"{path} is not in the commit at HEAD"
+    return text.stdout.decode("utf-8", errors="replace"), blob.stdout.strip()
+
+
+@mcp.tool()
+def certify(
+    target_id: str,
+    declaration: str,
+    expected_statement: str = "",
+    files: list[str] | None = None,
+    service: str = "lean-prover",
+    url: str = "",
+    workspace: str = "",
+    premise_axioms: dict[str, str] | None = None,
+    environment: str = "",
+    timeout_seconds: int = 300,
+    certificate_id: str | None = None,
+) -> str:
+    """Prove a lemma or branch in Lean before its verifier pass -- an optional, additional certificate.
+
+    Sends the committed Lean source to a Lean service, which checks it once; its answer is kept
+    whole in the ledger, bound to the node's statement and the statements of the premises it cites.
+    It is optional, further evidence. The verifier still reads the statements: the probe serves them
+    as always and, beside them, the Lean statement that was checked, the axioms it rests on and the
+    Lean source. A certificate moves no proof state; whether the Lean statement says what the claim
+    says, and whether the statements are consistent, is the verifier's to judge, in its trials.
+
+    target_id:          the lemma or branch the theorem formalizes.
+    declaration:        the theorem's name, e.g. TDLP.lma_compute_cap.
+    expected_statement: what the node binds to. lean-prover: the declaration's type, which the
+                        server matches; axle: the formal statement, the theorem with its proof
+                        sorried out (`theorem t (h : ...) : ... := by sorry`, with its imports).
+    files:              the Lean sources, project paths under `workspace`, committed as they stand;
+                        the first holds the declaration, the rest are what it imports (axle: one).
+    service:            lean-prover (the Lean prover server, the default) or axle (Axiom's AXLE).
+    url:                the service's address for this call, as the person directing you gave it;
+                        otherwise the configured one. Never written to the ledger or the repository.
+    workspace:          the project directory that is the Lean workspace root ("" = the project).
+    premise_axioms:     {premise id: Lean axiom}, lean-prover only: each premise the node cites that
+                        a Lean `axiom` stands for. The proof may rest on these and Lean's standard
+                        axioms only. axle admits no axiom of its own: state premises as hypotheses.
+    environment:        lean-prover: default (Mathlib + Physlib), mathlib, lean or workspace; axle:
+                        e.g. lean-4.34.0, the newest when empty.
+    certificate_id:     lean-prover only: instead of files, adopt a certificate the server holds,
+                        fetched from it by id -- after a gateway timeout, or one checked elsewhere.
+
+    Keys stay outside git: LEAN_PROVER_API_KEY, AXLE_API_KEY (optional), or a section per service in
+    an untracked .lean-services.yaml (url:, key:, repo:).
+    status(view="certificates") lists every certificate and what it reads as now.
+    """
+    from .lean import CERTIFIED, LeanError, Request, axiom_statements, judge, load_service
+
+    root = project_root()
+    ctx = Context.build(root)
+    node = ctx.dag.get(target_id)
+    if node is None:
+        return f"unknown target {target_id!r}"
+    if node.kind not in ("lemma", "branch", "change"):
+        return f"{target_id} is a root: it is declared, not proven. Certify a lemma or branch."
+    mapping = {str(k): str(v).strip() for k, v in (premise_axioms or {}).items()}
+    wrong = sorted(k for k in mapping if k not in node.premises)
+    if wrong:
+        return (f"{', '.join(wrong)} not among the premises {target_id} cites ({', '.join(sorted(node.premises))}): "
+                "a Lean axiom may stand only for a premise the step cites. Nothing was recorded.")
+    if any(not v for v in mapping.values()) or len(set(mapping.values())) != len(mapping):
+        return "each premise stands for its own Lean axiom, named. Nothing was recorded."
+    checker, why = load_service(root, service, url)
+    if checker is None:
+        return why + ". Nothing was recorded."
+
+    sources: dict[str, str] = {}
+    hosted: dict[str, str] = {}
+    stated: dict[str, str] = {}
+    fingerprint = node.fingerprint()
+    try:
+        if certificate_id:
+            answer = checker.fetch(certificate_id)
+            bound = str((answer.get("planning_binding") or {}).get("claim_id") or "")
+            # A certificate certify() requested names the statement it was requested for; it binds
+            # to that statement, not to whatever the node says now.
+            if bound.startswith(f"{target_id}@"):
+                fingerprint = bound.split("@", 1)[1].split("#", 1)[0]
+        else:
+            if not files:
+                return "name the Lean files (the first holds the declaration), or a certificate_id to adopt"
+            if not expected_statement.strip():
+                return ("expected_statement is required: it is the Lean statement this node binds to, and the "
+                        "service checks the proof against it")
+            base = workspace.replace("\\", "/").strip().strip("/")
+            for path in files:
+                path = path.replace("\\", "/").removeprefix("./")
+                if base and not path.startswith(base + "/"):
+                    return f"{path} is not under the workspace {base}/. Nothing was recorded."
+                got = _committed_source(root, path)
+                if isinstance(got, str):
+                    return got + ". Nothing was recorded."
+                text, blob = got
+                hosted[path[len(base) + 1:] if base else path] = text
+                sources[path] = blob
+            stated = axiom_statements(hosted, list(mapping.values()))
+            answer = checker.check(Request(
+                target_id=target_id, claim=node.statement, fingerprint=fingerprint, declaration=declaration,
+                expected_statement=expected_statement.strip(), files=hosted, premise_axioms=mapping,
+                environment=environment.strip(), timeout_seconds=int(timeout_seconds)))
+    except LeanError as exc:
+        return f"{service}: {exc}. Nothing was recorded."
+
+    record = {
+        "target_id": target_id, "statement_sha": fingerprint, "read": ctx.dag.premise_statements(target_id),
+        "staged": node.staged, "service": service, "declaration": declaration,
+        "expected_statement": expected_statement.strip(), "premise_axioms": mapping, "axiom_statements": stated,
+        "environment": environment,
+        # The source itself, so the verifier can read what was checked from the ledger alone.
+        "sources": sources, "lean_files": hosted, "project_commit": git_head(root),
+        "adopted": bool(certificate_id), "actor": _actor(), "certificate": answer,
+    }
+    record["id"] = ctx.store.append_certificate(record)
+    c = judge(ctx.dag, record)
+    r = c.reading
+    ctx.store.append_event("certify", {"target_id": target_id, "certificate": record["id"], "service": service,
+                                       "state": c.state, "status": r.status, "reference": r.reference},
+                           actor=_actor())
+    lines = [f"{record['id']} recorded for {target_id}: {service} {r.status} -- {c.state.upper()}",
+             f"  {declaration} : {' '.join(r.statement.split()) or '(no statement)'}",
+             f"  {r.reference or '?'} · {r.environment}"]
+    if c.state == CERTIFIED:
+        lines.append(f"The probe of {target_id} now serves this Lean statement, its axioms and the Lean source "
+                     "beside the statements. Hand it to the consistency-verifier: it judges the statements as "
+                     "before, with this as further evidence. The certificate itself moves no proof state.")
+    else:
+        lines.append("Not served to the verifier: " + "; ".join(c.why))
+    return envelope("\n".join(lines), basis_line(Context.build(root).slices))
+
+
 @mcp.tool()
 def note(subject: str, text: str) -> str:
     """Record qualitative engineering notes or commentary.
@@ -827,7 +988,8 @@ def decide(
     # not it made it into the graph; any other id is a decision over the whole policy.
     node_ids = ctx.decl.all_node_ids() | {p["id"] for p in ctx.store.staged_proposals()}
     target = change_id if (ctx.dag.get(change_id) or change_id in node_ids) else None
-    verdict = evaluate_consistency_policy(ctx.dag, policy, ctx.slices, target_id=target, beliefs=beliefs)
+    verdict = evaluate_consistency_policy(ctx.dag, policy, ctx.slices, target_id=target, beliefs=beliefs,
+                                          certified={nid: c.id for nid, c in ctx.certified.items()})
     head = git_head(root)
 
     needs_approval = verdict.status == ADOPT

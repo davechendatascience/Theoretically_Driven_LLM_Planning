@@ -734,6 +734,9 @@ def validate(decl: Declarations) -> list[Issue]:
             target = crit.get("target") or crit.get("branch")
             if target and target not in all_ids:
                 issues.append(Issue("UNKNOWN_TARGET", pid, f"criterion names unknown target {target!r}"))
+            if crit.get("formal") not in (None, "certified"):
+                issues.append(Issue("BAD_CRITERION", pid,
+                                    f"formal must be certified, not {crit.get('formal')!r}"))
             required = crit.get("evidence")
             if required and required not in EVIDENCE_STATES:
                 issues.append(Issue(

@@ -8,6 +8,10 @@ A criterion may also carry `evidence: <state>`: the contracts the branch's deriv
 cites must then be in that state in component-belief. That is the one gate over both
 ledgers -- a design proven over a refuted measurement is proven of nothing, and one proven
 over no measurement is argued, not built.
+
+A criterion may carry `formal: certified`: the node must then have a Lean certificate certifying
+its claim now (DEF-lean-certificate). A certificate moves no proof state, so this is a requirement
+beside `proven`, never in place of it.
 """
 
 from __future__ import annotations
@@ -60,6 +64,7 @@ def evaluate_consistency_policy(
     slices: list[ConsistencySlice],
     target_id: str | None = None,
     beliefs: dict[str, str] | None = None,
+    certified: dict[str, str] | None = None,
 ) -> DecisionVerdict:
     reasons: list[str] = []
     obligations: list[str] = []
@@ -112,6 +117,12 @@ def evaluate_consistency_policy(
                 obligations.append(f"{branch}: the policy requires it, and it is not in the proof "
                                    "graph (a premise it cites is unknown, removed or on a cycle)")
             continue
+        if criterion.get("formal"):
+            if certified and branch in certified:
+                evidence.append(f"{branch} lean={certified[branch]}")
+            else:
+                obligations.append(f"{branch} has no Lean certificate certifying its claim (the policy requires "
+                                   "formal: certified); certify() it, or one was set aside by a restatement")
         # The joint gate, for criteria that ask for it.
         required = criterion.get("evidence")
         if not required:
