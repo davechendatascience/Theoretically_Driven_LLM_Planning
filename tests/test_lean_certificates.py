@@ -318,6 +318,8 @@ def test_a_held_certificate_is_adopted_by_id_and_binds_to_the_statement_it_was_r
     probe = status("probe", subject="LMA-compute-cap")
     assert "(not recorded -- a step resting on an axiom you cannot read is a gap)" in probe
     assert "LEAN SOURCE: not recorded with this certificate (adopted by id)." in probe
+    # Two certify the node; the probe carries exactly one, the latest.
+    assert probe.count("LEAN CERTIFICATE") == 1 and "CRT-0002" in probe and "CRT-0001" not in probe
     restate(project, "cannot exceed 40W", "stays at or below 40W")
     out = certify_lean_prover(services, certificate_id=cid, files=None, expected_statement="")
     assert "-- SET ASIDE" in out and "LMA-compute-cap was restated since" in out
