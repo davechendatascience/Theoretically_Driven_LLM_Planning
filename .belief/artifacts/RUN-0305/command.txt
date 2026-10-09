@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0305\result.json -- acceptance/test_design_gate_reads_evidence.py -q -p no:asyncio
+exit=0
+test=TST-acceptance-design-gate@a25a0aaf
+at=2026-10-09T09:16:44+00:00

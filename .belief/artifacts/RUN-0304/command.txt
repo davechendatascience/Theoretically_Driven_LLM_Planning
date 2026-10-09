@@ -1,0 +1,4 @@
+python tools/pytest_trials.py C:\Users\ychen\OneDrive\文件\GitHub\Theoretically_Driven_LLM_Planning\.belief\artifacts\RUN-0304\result.json -- acceptance/test_any_project.py -q -p no:asyncio
+exit=0
+test=TST-acceptance-any-project@d80f9ae1
+at=2026-10-09T09:15:47+00:00

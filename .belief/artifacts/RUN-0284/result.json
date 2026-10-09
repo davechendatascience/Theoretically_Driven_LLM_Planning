@@ -1,0 +1,184 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_the_verifier_reads_the_statements_and_a_certificate_beside_them"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_certificate_does_not_stop_the_verifier_refuting_the_statements"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_the_address_given_for_a_call_is_never_recorded"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_restatement_sets_the_certificate_aside"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_certificate_that_does_not_certify_is_recorded_and_never_served[cert0-Lean did not verify it (PROOF_FAILED)]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_certificate_that_does_not_certify_is_recorded_and_never_served[cert1-the declaration's statement is not the expected one]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_certificate_that_does_not_certify_is_recorded_and_never_served[cert2-no premise stands for: TDLP.anything_goes]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_stored_certificate_edited_after_the_fact_stops_certifying"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_request_that_cannot_bind_is_refused_before_anything_is_sent[kw0-a Lean axiom may stand only for a premise the step cites]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_request_that_cannot_bind_is_refused_before_anything_is_sent[kw1-expected_statement is required]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_request_that_cannot_bind_is_refused_before_anything_is_sent[kw2-is not under the workspace lean/]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_request_that_cannot_bind_is_refused_before_anything_is_sent[kw3-unknown service 'coq']"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_lean_source_must_be_committed_as_it_stands"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_certificate_the_gateway_lost_is_found_by_its_claim_id"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_held_certificate_is_adopted_by_id_and_binds_to_the_statement_it_was_requested_for"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_axle_is_a_service_too"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_the_default_service_is_lean_prover_and_needs_an_address"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_key_is_never_read_from_a_file_git_tracks"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_a_policy_may_require_a_certificate_beside_proven"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": false
+      },
+      "conditions": {
+        "case": "tests.test_lean_certificates::test_live_round_trip_against_a_lean_prover_server"
+      },
+      "outcome": "not_applicable"
+    }
+  ]
+}
