@@ -4,6 +4,38 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.10.0 — 2026-10-17 · a research board, one level below the goals
+
+- **research-board**, a fifth server, keeps research directions for the human's goals. A
+  direction serves a goal in `goals.yaml`; a trail is a paper, the passage quoted from it, and the
+  tweak it suggests to a component in `belief.yaml`. Eight tools: `board` and `ledger` read;
+  `open_direction`, `add_trail` and `feedback` are open to scouts; `approve`, `spend` and `reflect`
+  are the director's.
+- **Research earns, work spends, and a result follows its spend.** A trail earns points for a
+  paper new to its direction, quoted, on a declared component. Building or testing for a direction
+  costs points, and a result counts for a direction only from runs the server measured after the
+  spend, against the contracts the spend named when it was made. Work without spending is always
+  allowed; its results belong to no direction. A spend is refused on a direction not approved,
+  short of its cost, or with a settled result nobody has reflected on.
+- **The rules are a file.** `research.yaml` holds the focus goal, the cost of each action, what a
+  trail earns and how many scouts run at once, read from HEAD; the board names the commit that last
+  changed it. This repository's focus is `GOL-sound-designs`.
+- **The play is a ledger, and the board a page.** `.research/ledger.jsonl` is append-only;
+  balances and results are computed on every read, never written. `.research/BOARD.md` is
+  rewritten after each move for reading without a server.
+- **Scouts read no code.** The `research-scout` agent holds the board's research moves, `status`
+  on the other two servers, WebSearch and WebFetch, and nothing that opens a file or runs a command.
+  `ledger(run=...)` serves a run's captured output beside its records, since a contract keeps only
+  its declared metrics; feedback goes to a direction, trail or spend, so the next scout reads it.
+- **Theory.** `AXM-attribution-follows-commitment`, `DEF-research-ledger` and
+  `BRN-research-results-follow-their-spend` are new, the branch proven in three rounds.
+  - Round one refuted it (`TRL-0421`): a run recorded before a spend, imported again after it,
+    entered the spend's result. Results now read measured records only, and a spend fixes its
+    contracts when it is made.
+  - Round two doubted it (`TRL-0425`): nothing said the page the board rewrites is no trial record.
+  - Round three found no break (`TRL-0427`–`TRL-0429`).
+- **Acceptance.** `GOL-any-project`'s suite expects five servers (`dfa6ac4`, the human's commit).
+
 ## 0.9.0 — 2026-10-09 · a Lean certificate beside the statements
 
 - **`certify()`** proves a lemma or branch in Lean before its verifier pass, an optional step.
