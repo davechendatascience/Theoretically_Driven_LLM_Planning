@@ -416,6 +416,8 @@ components:
       earns a trail its points only for a paper new to its direction and a component belief.yaml
       declares, and takes them back when the trail is rejected; refuses a spend on a direction
       not approved, one short of its cost, and one with a settled result not yet reflected on;
+      takes a point from a direction for each idle hour -- one in which a test it paid for waited
+      on its result and no research was recorded -- at the rate the spend fixed when it was made;
       takes its rules from research.yaml at HEAD; serves the ledgers and a run's captured output
       and never a source file; and writes nothing outside .research/, and nothing at all where a
       declaration names a file there
@@ -432,6 +434,10 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_rejected_trail_loses_its_points"}
       - {id: FM-spend-ungated, observable: "a spend is recorded on an unapproved direction, beyond the balance, or before a settled result is reflected on",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_needs_approval_balance_and_reflection"}
+      - {id: FM-idle-misclocked, observable: "a direction is charged for an hour in which research was recorded, or in which no test it paid for waited on a result",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_an_idle_hour_costs_the_direction_waiting_on_a_result"}
+      - {id: FM-idle-repriced, observable: "a change to research.yaml reprices the idle hours of a spend already made",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_keeps_the_idle_terms_it_was_made_under"}
       - {id: FM-worktree-rules, observable: "an uncommitted edit to research.yaml changes a cost, or goes unmentioned",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_rules_take_effect_from_head"}
       - {id: FM-code-served, observable: "ledger() returns a file outside the ledgers and a run's captured output",

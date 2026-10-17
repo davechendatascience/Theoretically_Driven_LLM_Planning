@@ -651,12 +651,21 @@ free; its results belong to no direction.
 | `add_trail(direction, paper, tweak, component, quote, at, expect)` | all | earns the rules' points for a paper new to the direction, quoted, on a declared component; otherwise kept, earning nothing, with the reason |
 | `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, or an answer, addressed to a direction, trail or spend |
 | `approve(target, approved, why, rank)` | director | a direction must be approved before anything is spent on it; `rank` orders them; a rejected trail's points stop counting |
-| `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names; runs measured on them afterwards are the direction's result |
+| `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names and the idle terms; runs measured on them afterwards are the direction's result |
 | `reflect(direction, decision, why)` | director | continue, halt or pivot; required after a result settles, before the next spend |
 
 * **Rules in `research.yaml`, read from HEAD.** `focus` (the goal pursued now), `costs` per
-  action, what a trail `earn`s, and how many `scouts` run at once. An uncommitted edit changes no
-  cost and is named on the board, and the board names the commit that last changed the rules.
+  action, what a trail `earn`s, what an `idle` hour costs, and how many `scouts` run at once. An
+  uncommitted edit changes no cost and is named on the board, and the board names the commit that
+  last changed the rules.
+* **An idle hour costs the direction waiting on a result.** From a spend on a contract until its
+  result says something (anything but insufficient or no evidence), or the direction is halted,
+  every hour in which nobody records research costs that direction `idle.per_hour` points (default
+  1). Research means a trail, a new direction or a scout's feedback; each keeps research running
+  for `idle.running_minutes` (default 30). The director's own moves do not count. Idle time is
+  totalled, so a point goes at the first idle hour, a second at the second, and so on. A spend keeps
+  the idle terms in effect when it was made, so a later edit of the rules reprices nothing already
+  waited. A spend that changes code and names no contract waits on nothing.
 * **Play in `.research/ledger.jsonl`, append-only.** Directions, trails, spends and feedback. A
   balance and a result are never written: both are computed from the ledgers each time they are
   read. `.research/BOARD.md` is the board with every open direction's detail, rewritten after each
@@ -680,14 +689,22 @@ free; its results belong to no direction.
 focus: GOL-grasp: The arm picks up the object it is asked for
   measured by CTR-pick-success: supported
 
-rules: research.yaml at f1393db 2026-10-17 research rules · costs: research 0, implement 1, test 1, training_run 3 · a trail earns 1 · up to 2 scouts
+rules: research.yaml at 0c49b56 2026-10-17 research rules · costs: research 0, implement 1, test 1, training_run 3 · a trail earns 1 · an idle hour costs a direction waiting on a result 1 (research runs 30m after each record) · up to 2 scouts
 
 ## Needs reflection (a result settled)
 - **DIR-principal-axes** · balance 0 (earned 1, spent 1) · 1 trail · 1 spend · rank 1
-  idea: Sample grasp approaches from the object's principal axes
+  idea: Sample grasp approaches from principal axes
   assessment: cheapest decisive test: the pick eval, 1 point
-  SPD-0001 · test -> TST-pick · 1 point · at f1393db · expect: the pick eval still passes
+  SPD-0001 · test -> TST-pick · 1 point · at 0c49b56 · expect: the pick eval still passes
       result: CTR-pick-success supported (1 record after the spend: RUN-0002)
+
+## Active (a result pending)
+- **DIR-reach-first** · balance 0 (earned 2, spent 1, idle 1) · 2 trails · 1 spend · rank 2
+  idea: Rank grasp candidates by IK reachability before scoring them
+  assessment: cheapest decisive test: the IK check, 1 point
+  SPD-0002 · test -> TST-grasp-ik · 1 point · at 0c49b56 · expect: more poses reachable
+      result: CTR-grasp-reachable no evidence (0 records after the spend)
+  idle 1h 10m waiting on a result with no research running: 1 point; idle now, on SPD-0002 -- the next point in 49m
 
 ## Proposed (waiting for the director)
 - **DIR-bigger-net** · balance 0 (earned 0, spent 0) · 0 trails · 0 spends
@@ -696,12 +713,16 @@ rules: research.yaml at f1393db 2026-10-17 research rules · costs: research 0, 
 next:
   - reflect("DIR-principal-axes", continue|halt|pivot, why): SPD-0001 settled
   - approve("DIR-bigger-net", True|False, why, rank=...): proposed, 0 point(s) of research behind it
+  - research is idle while DIR-reach-first waits on a result: send a scout now -- the next idle point is taken in 49m, and any trail, new direction or scout's feedback stops the clock for 30m
+  - results pending on DIR-reach-first: run them (run_test), and meanwhile send up to 2 scouts, in the background -- one per direction (board(direction=...)), or one to look for a new direction
 ```
 
 The `research` skill is the director's loop: `board()`, scouts in the background while results
 are pending, `approve`, `spend`, build and `run_test`, `reflect`. The board above is the
 test fixture's grasping project: `RUN-0001` passed before the spend and is not the direction's;
-`RUN-0002`, measured after it, is.
+`RUN-0002`, measured after it, is. `DIR-reach-first` is read 100 minutes after its spend, on the
+fixture's clock: its trails kept research running for the first 30, and the 70 idle minutes since
+have cost it a point.
 
 ---
 
@@ -831,7 +852,7 @@ src/
     page.py / page.html              the one self-contained page, and where it may be written
     server.py / cli.py               MCP server; the same snapshot from a shell
   research_board/                    research directions for a goal (8 tools)
-    board.py                         the rules from HEAD, the ledger, balances, results after each spend
+    board.py                         the rules from HEAD, the ledger, balances, results after each spend, idle hours
     play.py                          the moves, and the rules each is checked against
     page.py / reading.py             the board, a direction's brief and BOARD.md; ledger() for scouts
   stamp_monitor/                     read-only monitor (4 tools)
@@ -893,6 +914,6 @@ The suites assert the invariants above, not the implementation:
 22. Staleness gives every trial the verdict it would get alone, judged once per run.
 23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
 24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
-25. A result counts for a research direction only from runs the server measured after a spend on it, against the contracts the spend named; a trail earns only for a new, quoted paper on a declared component; recording writes nothing outside `.research/`, and nothing at all where a declaration names a file there.
+25. A result counts for a research direction only from runs the server measured after a spend on it, against the contracts the spend named; a trail earns only for a new, quoted paper on a declared component; an idle hour is charged only while a test paid for waits and no research is recorded, at the rate its spend fixed; recording writes nothing outside `.research/`, and nothing at all where a declaration names a file there.
 25. The order trials were recorded in decides no proof state, and no policy requiring proven passes a conditional branch.
 26. A Lean certificate is served to the verifier beside the statements, never in place of them, only while it certifies its node, and moves no proof state; no service address or key reaches the ledger.

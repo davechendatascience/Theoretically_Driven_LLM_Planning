@@ -26,7 +26,9 @@ ledger in .research/, with a page beside it, BOARD.md, for the human.
 Research is free and earns points; work for a direction costs them. A result counts for a direction
 only from runs recorded after points were spent on it: spend(direction, action, target) first, then
 build and run_test. Work done without spending is always allowed -- its results belong to no
-direction.
+direction. While a test paid for waits on its result, keep research running: every hour in which no
+trail, new direction or scout's feedback is recorded costs the waiting direction points (idle in
+research.yaml; each record keeps research running for its running_minutes).
 
 The director is the main agent: it approves or rejects directions and trails (approve), spends, and
 reflects after a result settles (reflect: continue, halt or pivot). Scouts are research-scout
@@ -154,7 +156,8 @@ def spend(direction: str, action: str, target: str, expect: str = "") -> str:
     target: what the work is on: a CMP- to implement, or a CTR-/TST- whose results will count for
             this direction from now on.
     Refused on a direction not approved, short of the cost, or with a settled result nobody has
-    reflected on yet.
+    reflected on yet. From a spend on a contract until its result is in, each hour with no research
+    recorded on the board costs this direction the idle points the rules set now.
     """
     return _move(play.spend, direction, action, target, expect)
 

@@ -2,10 +2,11 @@
 
 Every number the board shows is computed here from three inputs: research.yaml at HEAD, the
 research ledger, and component-belief's evidence ledger. Nothing that can be computed is stored: a
-direction's balance is summed from its trails and spends each time it is read, and a spend's result
-is read from the evidence recorded after the spend (DEF-research-ledger). The one stored number is
-what a trail earned, fixed by the rules in effect when it was recorded, so a later change of rules
-does not reprice old research.
+direction's balance is summed from its trails, its spends and its idle hours each time it is read,
+and a spend's result is read from the evidence recorded after the spend (DEF-research-ledger). The
+stored numbers are what a trail earned and what a spend cost and fixed for its idle hours, each set
+by the rules in effect when it was recorded, so a later change of rules reprices nothing already
+on the board.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +29,9 @@ BOARD_FILE = "BOARD.md"
 DEFAULT_COSTS = {"research": 0, "implement": 1, "test": 1, "dataset_eval": 1, "training_run": 3}
 DEFAULT_EARN = 1
 DEFAULT_SCOUTS = 3
-RULE_KEYS = ("focus", "costs", "earn", "scouts")
+DEFAULT_IDLE_PER_HOUR = 1       # points an idle hour costs a direction waiting on a result
+DEFAULT_RUNNING_MINUTES = 30    # how long research counts as running after a research record
+RULE_KEYS = ("focus", "costs", "earn", "scouts", "idle")
 
 NOTE, QUESTION, ANSWER = "note", "question", "answer"
 APPROVED, REJECTED = "approved", "rejected"
@@ -42,6 +45,9 @@ NO_EVIDENCE = "no evidence"
 #: just below supported -- a spend whose contracts have not all run has not shown support.
 _RANK = {"refuted": 0, "stale": 1, "contested": 2, "insufficient_evidence": 3, NO_EVIDENCE: 4, "supported": 5}
 SETTLED = ("supported", "refuted", "contested")
+#: A spend waits on its result while the result reads one of these: its test has not come back
+#: with enough to say anything yet.
+WAITING = ("insufficient_evidence", NO_EVIDENCE)
 
 # Direction states, in the order the board lists them.
 NEEDS_REFLECTION = "needs reflection"
@@ -53,9 +59,14 @@ HALTED = "halted"
 DIRECTION_STATES = (NEEDS_REFLECTION, ACTIVE, READY, EARNING, PROPOSED, HALTED, REJECTED)
 
 
+def clock() -> datetime:
+    """The board's one clock: what records are stamped with and what idle time is counted to."""
+    return datetime.now(timezone.utc)
+
+
 def utc_now() -> str:
     """Microseconds, so two records made in one second keep their order."""
-    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+    return clock().isoformat(timespec="microseconds")
 
 
 def when(stamp: Any) -> datetime | None:
@@ -87,6 +98,8 @@ class Rules:
     costs: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_COSTS))
     earn: int = DEFAULT_EARN
     scouts: int = DEFAULT_SCOUTS
+    idle_per_hour: int = DEFAULT_IDLE_PER_HOUR
+    running_minutes: int = DEFAULT_RUNNING_MINUTES
     source: str = "defaults"
     changed: str = ""              # the last commit that changed research.yaml: "<sha> <date> <subject>"
     issues: list[str] = field(default_factory=list)
@@ -157,6 +170,23 @@ def load_rules(root: Path) -> Rules:
             rules.issues.append(f"MALFORMED {RULES_FILE}: scouts must be 1 or more; {DEFAULT_SCOUTS} is in effect")
         else:
             rules.scouts = scouts
+    if "idle" in data:
+        raw = data["idle"]
+        given = raw if isinstance(raw, dict) else {"per_hour": raw}
+        if "per_hour" in given:
+            if _count(given["per_hour"]) is None:
+                rules.issues.append(f"MALFORMED {RULES_FILE}: idle.per_hour must be a whole number of points, "
+                                    f"0 or more; {DEFAULT_IDLE_PER_HOUR} is in effect")
+            else:
+                rules.idle_per_hour = given["per_hour"]
+        if "running_minutes" in given:
+            if not _count(given["running_minutes"]):
+                rules.issues.append(f"MALFORMED {RULES_FILE}: idle.running_minutes must be 1 or more; "
+                                    f"{DEFAULT_RUNNING_MINUTES} is in effect")
+            else:
+                rules.running_minutes = given["running_minutes"]
+        for key in sorted(set(given) - {"per_hour", "running_minutes"}):
+            rules.issues.append(f"UNREAD {RULES_FILE}: `idle.{key}` is not a rule this version reads")
     return rules
 
 
@@ -195,6 +225,15 @@ def direction_id(name: str) -> str:
     return f"DIR-{slug}" if slug else ""
 
 
+def is_research(record: dict[str, Any]) -> bool:
+    """What shows research running: a direction opened, a trail, or feedback a scout left. The
+    director's verdicts, reflections, answers and notes are not research."""
+    kind = record.get("kind")
+    if kind in ("direction", "trail"):
+        return True
+    return kind == "feedback" and record.get("type") in FEEDBACK_KINDS and record.get("by") != "director"
+
+
 # ---------- results ----------
 
 def targeted_contracts(decl: Any, target: str) -> list[str]:
@@ -216,16 +255,34 @@ class Result:
     counted: dict[str, int] = field(default_factory=dict)
     runs: dict[str, list[str]] = field(default_factory=dict)
     settled_at: datetime | None = None
+    waited_until: datetime | None = None       # the first moment it read other than WAITING; None: still waiting
 
     @property
     def status(self) -> str:
-        if not self.states:
-            return ""
-        return min(self.states.values(), key=lambda state: _RANK.get(state, 3))
+        return _weakest(self.states)
 
     @property
     def settled(self) -> bool:
         return self.status in SETTLED
+
+
+def _weakest(states: dict[str, str]) -> str:
+    if not states:
+        return ""
+    return min(states.values(), key=lambda state: _RANK.get(state, 3))
+
+
+def _states(decl: Any, records: list[dict[str, Any]], contracts: list[str], staleness: Any) -> dict[str, str]:
+    from component_belief.model import compute_slices
+
+    states: dict[str, str] = {}
+    for sl in compute_slices(decl, records, contracts, staleness=staleness):
+        seen = states.get(sl.contract_id)
+        if seen is None or _RANK.get(sl.state, 3) < _RANK.get(seen, 3):
+            states[sl.contract_id] = sl.state
+    for cid in contracts:
+        states.setdefault(cid, NO_EVIDENCE)
+    return states
 
 
 def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend: dict[str, Any]) -> Result:
@@ -239,9 +296,12 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     Records keep whole seconds and a spend keeps microseconds, so a record made in the same second
     as the spend reads as made before it. That errs the safe way: a result never rests on a run
     that may have finished before the points were committed (AXM-attribution-follows-commitment).
-    """
-    from component_belief.model import compute_slices
 
+    When the spend stopped waiting is found by reading the result again over the records recorded
+    by each moment, in the order they were recorded, up to the first that says something. Code
+    changed since reads as stale, which is not waiting: a test that came back is not in flight,
+    whatever has happened to the code since, so a doubt about when errs toward charging less idle.
+    """
     result = Result()
     contracts = [c for c in spend.get("contracts", []) if c in decl.contracts]
     since = when(spend.get("timestamp"))
@@ -250,19 +310,107 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     after = [t for t in trials
              if t.get("contract_id") in contracts and t.get("provenance") == "measured"
              and (when(t.get("timestamp")) or since) > since]
-    slices = compute_slices(decl, after, contracts, staleness=staleness)
-    for sl in slices:
-        seen = result.states.get(sl.contract_id)
-        if seen is None or _RANK.get(sl.state, 3) < _RANK.get(seen, 3):
-            result.states[sl.contract_id] = sl.state
+    result.states = _states(decl, after, contracts, staleness)
     for cid in contracts:
-        result.states.setdefault(cid, NO_EVIDENCE)
         mine = [t for t in after if t.get("contract_id") == cid]
         result.counted[cid] = len(mine)
         result.runs[cid] = sorted({str(t.get("run_id")) for t in mine if t.get("run_id")})
     moments = [m for m in (when(t.get("timestamp")) for t in after) if m is not None]
     result.settled_at = max(moments) if moments else None
+    for moment in sorted(set(moments)):
+        by_then = [t for t in after if (when(t.get("timestamp")) or moment) <= moment]
+        if _weakest(_states(decl, by_then, contracts, staleness)) not in WAITING:
+            result.waited_until = moment
+            break
     return result
+
+
+# ---------- idle hours ----------
+
+@dataclass
+class Idle:
+    """A direction's idle time: the hours a spend on it waited on a result while no research was
+    running anywhere on the board, each priced at the rate its spend fixed (DEF-research-ledger)."""
+
+    seconds: float = 0.0           # idle time, counted once however many spends waited through it
+    cost: float = 0.0              # idle time priced, in point-hours: rate x hours, summed
+    waiting_on: list[str] = field(default_factory=list)    # the spends waiting now
+    idle_now: bool = False         # idle at this moment: the clock is running
+    rate_now: int = 0
+
+    @property
+    def points(self) -> int:
+        """Whole points: one at the first idle hour, two at the second, ..."""
+        return int((self.cost + 1e-6) // 3600)
+
+    @property
+    def next_point_in(self) -> float | None:
+        """Seconds until the next point, if the clock runs on at the present rate."""
+        if not self.idle_now or not self.rate_now:
+            return None
+        return (3600 - (self.cost % 3600)) / self.rate_now
+
+
+def idle_stretches(start: datetime, end: datetime, research: list[datetime],
+                   running: timedelta) -> list[tuple[datetime, datetime]]:
+    """The parts of [start, end) no research record ran over; each runs `running` after it.
+    `research` is in the order recorded."""
+    stretches: list[tuple[datetime, datetime]] = []
+    cursor = start
+    for moment in research:
+        if moment >= end:
+            break
+        if moment + running <= cursor:
+            continue
+        if moment > cursor:
+            stretches.append((cursor, moment))
+        cursor = max(cursor, moment + running)
+        if cursor >= end:
+            return stretches
+    if cursor < end:
+        stretches.append((cursor, end))
+    return stretches
+
+
+def _closed_after(d: Direction, since: datetime) -> datetime | None:
+    """The first halt, pivot or rejection of a direction recorded after `since`."""
+    for item in d.feedback:
+        if item.get("about") == d.id and item.get("type") in (HALT, PIVOT, REJECTED):
+            moment = when(item.get("timestamp"))
+            if moment is not None and moment > since:
+                return moment
+    return None
+
+
+def direction_idle(d: Direction, results: dict[str, Result], research: list[datetime], now: datetime) -> Idle:
+    """A spend waits from when it is recorded until its result first says something, or its
+    direction is halted or rejected; while one waits and no research record falls within its
+    running time, the direction is idle. A spend recorded before idle hours were priced fixed no
+    rate, and costs nothing."""
+    idle = Idle()
+    segments: list[tuple[datetime, datetime, int]] = []
+    for spend in d.spends:
+        terms = spend.get("idle") or {}
+        rate, running = _count(terms.get("per_hour")), _count(terms.get("running_minutes"))
+        result = results.get(spend["id"])
+        start = when(spend.get("timestamp"))
+        if not rate or not running or result is None or not result.states or start is None:
+            continue
+        ends = [now] + [m for m in (result.waited_until, _closed_after(d, start)) if m is not None]
+        end = min(ends)
+        if end == now and start < now:
+            idle.waiting_on.append(spend["id"])
+        for a, b in idle_stretches(start, end, research, timedelta(minutes=running)):
+            segments.append((a, b, rate))
+    bounds = sorted({moment for a, b, _ in segments for moment in (a, b)})
+    for lo, hi in zip(bounds, bounds[1:]):
+        rate = max((r for a, b, r in segments if a <= lo and hi <= b), default=0)
+        if rate:
+            idle.seconds += (hi - lo).total_seconds()
+            idle.cost += rate * (hi - lo).total_seconds()
+            if hi == now:
+                idle.idle_now, idle.rate_now = True, rate
+    return idle
 
 
 # ---------- the board ----------
@@ -277,6 +425,7 @@ class Direction:
     decision: dict[str, Any] | None = None      # the latest continue, halt or pivot
     state: str = PROPOSED
     unreflected: list[str] = field(default_factory=list)   # spends whose result settled since the last decision
+    idle: Idle | None = None                    # computed with the results; None on a board built without them
 
     @property
     def id(self) -> str:
@@ -311,6 +460,8 @@ class Board:
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
     evidence_error: str = ""
+    now: datetime = field(default_factory=clock)
+    research_until: datetime | None = None    # research counts as running until then, by the rules now
 
     # ---- what a record is worth ----
 
@@ -327,10 +478,14 @@ class Board:
     def spent(self, d: Direction) -> int:
         return sum(int(s.get("cost") or 0) for s in d.spends)
 
+    def idle_points(self, d: Direction) -> int:
+        return d.idle.points if d.idle else 0
+
     def balance(self, d: Direction) -> int:
         """DEF-research-ledger: the points its trails earned, less those of rejected trails, less
-        the costs of its spends -- all read from the research ledger, never written to it."""
-        return self.earned(d) - self.spent(d)
+        the costs of its spends, less what its idle hours have cost by now -- computed from the
+        research ledger and the evidence ledger, never written to either."""
+        return self.earned(d) - self.spent(d) - self.idle_points(d)
 
     def direction_of(self, research_id: str) -> str:
         """The direction a research id belongs to, or "" when it names none."""
@@ -386,8 +541,11 @@ def head_reads(root: Path) -> tuple[Any, Rules]:
 
 
 def build(root: Path, *, with_results: bool = True) -> Board:
+    """The board as it reads now. Without results it has no idle hours either -- when a spend stops
+    waiting is read from its result -- so its balances leave them out; the moves check against such
+    a board only what no balance decides."""
     decl, rules = head_reads(root)
-    board = Board(root=root, rules=rules, decl=decl, records=read_ledger(root))
+    board = Board(root=root, rules=rules, decl=decl, records=read_ledger(root), now=clock())
     for record in board.records:
         kind = record.get("kind")
         rid = record.get("id")
@@ -441,6 +599,13 @@ def build(root: Path, *, with_results: bool = True) -> Board:
                 board.measures.setdefault(cid, NO_EVIDENCE)
         except Exception as exc:                  # a ledger this server does not own
             board.evidence_error = f"component-belief's evidence could not be read ({exc}); no result is shown"
+
+        research = sorted(m for m in (when(r.get("timestamp")) for r in board.records if is_research(r))
+                          if m is not None)
+        if research:
+            board.research_until = research[-1] + timedelta(minutes=board.rules.running_minutes)
+        for d in board.directions.values():
+            d.idle = direction_idle(d, board.results, research, board.now)
 
     cheapest = board.rules.cheapest_paid()
     for d in board.directions.values():

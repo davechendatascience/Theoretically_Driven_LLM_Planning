@@ -34,10 +34,36 @@ def _plural(n: int, word: str) -> str:
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
+def _duration(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m" if hours else f"{minutes}m"
+
+
 def _rules_line(rules: B.Rules) -> str:
     where = f"{B.RULES_FILE} at {rules.changed}" if rules.source == "HEAD" else "defaults (no research.yaml committed)"
     costs = ", ".join(f"{action} {cost}" for action, cost in rules.costs.items())
-    return f"rules: {where} · costs: {costs} · a trail earns {rules.earn} · up to {rules.scouts} scouts"
+    idle = (f"an idle hour costs a direction waiting on a result {rules.idle_per_hour} "
+            f"(research runs {rules.running_minutes}m after each record)" if rules.idle_per_hour
+            else "idle hours cost nothing")
+    return f"rules: {where} · costs: {costs} · a trail earns {rules.earn} · {idle} · up to {rules.scouts} scouts"
+
+
+def _balance(board: B.Board, d: B.Direction) -> str:
+    idled = board.idle_points(d)
+    return (f"balance {board.balance(d)} (earned {board.earned(d)}, spent {board.spent(d)}"
+            + (f", idle {idled}" if idled else "") + ")")
+
+
+def _idle_line(d: B.Direction) -> str:
+    """How long the direction has waited with no research running, and whether it still is."""
+    idle = d.idle
+    if idle is None or not idle.seconds:
+        return ""
+    line = f"idle {_duration(idle.seconds)} waiting on a result with no research running: {_plural(idle.points, 'point')}"
+    if idle.idle_now and idle.next_point_in is not None:
+        line += f"; idle now, on {', '.join(idle.waiting_on)} -- the next point in {_duration(idle.next_point_in)}"
+    return line
 
 
 def _goal_lines(board: B.Board, goal_id: str) -> list[str]:
@@ -75,7 +101,7 @@ def _summary(board: B.Board, d: B.Direction, focus: str) -> list[str]:
     head = f"- **{d.id}**"
     if d.goal != focus:
         head += f" · for {d.goal}"
-    head += (f" · balance {board.balance(d)} (earned {board.earned(d)}, spent {board.spent(d)})"
+    head += (f" · {_balance(board, d)}"
              f" · {_plural(len(d.trails), 'trail')} · {_plural(len(d.spends), 'spend')}")
     if d.rank:
         head += f" · rank {d.rank}"
@@ -88,6 +114,8 @@ def _summary(board: B.Board, d: B.Direction, focus: str) -> list[str]:
         return lines
     for spend in d.spends:
         lines.append("  " + _spend_line(board, spend).replace("\n", "\n  "))
+    if idle := _idle_line(d):
+        lines.append(f"  {idle}")
     return lines
 
 
@@ -104,6 +132,13 @@ def _next(board: B.Board) -> list[str]:
                    f"feedback(\"{q.get('about')}\", text, kind=\"answer\", reply_to=\"{q['id']}\")")
     pending = [d for d in board.directions.values() if d.state == B.ACTIVE]
     live = [d for d in board.ordered() if d.state in (B.ACTIVE, B.READY, B.EARNING, B.PROPOSED)]
+    idling = [d for d in board.ordered() if d.idle and d.idle.idle_now]
+    if idling:
+        soonest = min(d.idle.next_point_in or 3600 for d in idling)
+        out.append(f"research is idle while {', '.join(d.id for d in idling)} wait"
+                   f"{'s' if len(idling) == 1 else ''} on a result: send a scout now -- the next idle point "
+                   f"is taken in {_duration(soonest)}, and any trail, new direction or scout's feedback "
+                   f"stops the clock for {board.rules.running_minutes}m")
     if pending:
         out.append(f"results pending on {', '.join(d.id for d in pending)}: run them (run_test), and meanwhile "
                    f"send up to {board.rules.scouts} scouts, in the background -- one per direction "
@@ -182,9 +217,10 @@ def _feedback_line(item: dict[str, Any]) -> str:
 
 
 def _direction_detail(board: B.Board, d: B.Direction) -> list[str]:
-    lines = [f"state: {d.state} · balance {board.balance(d)} (earned {board.earned(d)}, spent {board.spent(d)})"
-             + (f" · rank {d.rank}" if d.rank else ""),
-             f"idea: {d.record.get('idea')}"]
+    lines = [f"state: {d.state} · {_balance(board, d)}" + (f" · rank {d.rank}" if d.rank else "")]
+    if idle := _idle_line(d):
+        lines.append(idle)
+    lines.append(f"idea: {d.record.get('idea')}")
     if d.record.get("assessment"):
         lines.append(f"assessment: {d.record['assessment']}")
     if d.record.get("pivot_from"):
@@ -223,6 +259,10 @@ def render_brief(board: B.Board, d: B.Direction) -> str:
     lines += ["", _rules_line(board.rules),
               f"A trail earns {board.rules.earn} for a paper new to this direction, quoted, whose tweak "
               "names a component above."]
+    if board.rules.idle_per_hour:
+        lines.append(f"While a test waits on its result, an hour with no trail, new direction or scout's "
+                     f"feedback recorded costs the waiting direction {board.rules.idle_per_hour}: record "
+                     "each trail as you have it, not all at the end.")
     return "\n".join(lines)
 
 

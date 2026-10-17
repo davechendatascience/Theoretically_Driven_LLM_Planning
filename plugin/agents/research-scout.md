@@ -46,6 +46,10 @@ and what came of it, and the literature. Whether a tweak fits the code is the di
   bring the same paper back in different words.
 - Points come from new papers, quoted, on declared components. Ten thin trails help nobody, and the
   director rejects them.
+- Record each trail when you have read its paper, not all at the end. While a test waits on its
+  result, every hour with no research recorded costs the waiting direction a point, and each trail,
+  new direction or question keeps research running for a while (the brief says how long). A note
+  left only to stop that clock is not research: say something the next scout can use, or nothing.
 - You cannot approve, spend or reflect: those are the director's moves.
 
 ## Report

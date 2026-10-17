@@ -16,4 +16,8 @@ costs:                        # points an action takes from a direction's balanc
 earn:
   trail: 1                    # a trail citing a paper new to its direction, quoted, on a declared component
 
+idle:                         # while a test paid for waits on its result, keep research running
+  per_hour: 1                 # points each idle hour costs the waiting direction; 0 turns it off
+  running_minutes: 30         # how long a trail, a new direction or a scout's feedback keeps research running
+
 scouts: 3                     # research scouts at once, in the background

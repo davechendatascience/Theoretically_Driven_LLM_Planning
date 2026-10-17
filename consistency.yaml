@@ -710,9 +710,21 @@ definitions:
       it after the spend was recorded, and from no other record; a spend that
       targets no contract has no result. For each direction the board shows
       the results of the spends recorded on that direction and no other
-      result. A direction's balance is the points earned by its trails that
-      were not rejected, less the costs of its spends, all read from the
-      research ledger. Where a component's code claims a file in .research/,
+      result. A research record is a direction, a trail, or feedback not left
+      by the director. A spend also fixes, when it is recorded, the points an
+      idle hour costs and how long research counts as running after a
+      research record. A spend that targets a contract waits from when it is
+      recorded until the first moment at which its result, computed as above
+      from the records recorded by then, is neither insufficient evidence nor
+      no evidence, or until its direction is halted or rejected. A direction
+      is idle at a moment when a spend on it waits then and no research
+      record was recorded within that spend's running time before it. A
+      direction's balance at a moment is the points earned by its trails that
+      were not rejected, less the costs of its spends, less the whole points
+      its idle time up to that moment costs, each stretch of it priced at the
+      highest rate fixed by a spend waiting through it; it is computed from
+      the research ledger and the evidence ledger, and recorded in neither.
+      Where a component's code claims a file in .research/,
       or a declared test names one on its run line or among what it reads,
       the board records nothing. Otherwise recording to it appends one record
       to the research ledger and rewrites one page in .research/, and changes

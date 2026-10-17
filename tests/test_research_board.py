@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -30,6 +30,33 @@ def research(goals_repo: Path, monkeypatch) -> Path:
     git(goals_repo, "commit", "-q", "-m", "research rules")
     monkeypatch.setenv("RESEARCH_BOARD_ROOT", str(goals_repo))
     return goals_repo
+
+
+class Clock:
+    """The board's clock, moved by hand: it stamps every research record and is what idle time is
+    counted to. Evidence keeps the real time, so it starts hours in the past."""
+
+    def __init__(self) -> None:
+        self.at = datetime.now(timezone.utc) - timedelta(hours=6)
+
+    def __call__(self) -> datetime:
+        return self.at
+
+    def advance(self, **delta: float) -> None:
+        self.at += timedelta(**delta)
+
+
+@pytest.fixture
+def clock(monkeypatch) -> Clock:
+    fake = Clock()
+    monkeypatch.setattr(B, "clock", fake)
+    return fake
+
+
+def idle(repo: Path, did: str) -> tuple[int, int, bool]:
+    """(idle minutes, idle points, idle now) for a direction, as the board reads now."""
+    d = B.build(repo).directions[did]
+    return round(d.idle.seconds / 60), d.idle.points, d.idle.idle_now
 
 
 def measure(repo: Path, test_id: str = "TST-pick") -> str:
@@ -195,6 +222,65 @@ def test_a_spend_needs_approval_balance_and_reflection(research):
     assert direction(research, "DIR-axes").state == B.HALTED
     with pytest.raises(play.Refused, match="halted"):
         play.spend(research, "DIR-axes", "implement", "CMP-grasp")
+
+
+# ---------- idle hours ----------
+
+def test_an_idle_hour_costs_the_direction_waiting_on_a_result(research, clock):
+    did = funded(research, trails=3)                      # research recorded at t0 runs until t0+30m
+    play.spend(research, did, "implement", "CMP-grasp")   # names no contract, so waits on nothing
+    clock.advance(hours=2)
+    assert idle(research, did) == (0, 0, False)
+
+    play.spend(research, did, "test", "TST-pick")         # t0+2h: waits on CTR-pick-success
+    clock.advance(minutes=90)
+    assert idle(research, did) == (90, 1, True)
+    b = B.build(research)
+    assert b.balance(b.directions[did]) == 3 - 2 - 1
+    page = render_board(b)
+    assert "idle 1h 30m waiting on a result" in page and "send a scout now" in page
+    assert "record each trail as you have it" in render_brief(b, b.directions[did])
+
+    play.feedback(research, did, "is the pick eval seeded?", kind="question", by="scout-1")
+    question = B.read_ledger(research)[-1]["id"]
+    clock.advance(minutes=30)
+    assert idle(research, did) == (90, 1, False)          # a scout's question kept research running
+    play.feedback(research, did, "three seeds", kind="answer", reply_to=question)   # the director's: not research
+    clock.advance(minutes=30)
+    assert idle(research, did) == (120, 2, True)
+    with pytest.raises(play.Refused, match="idle hours took 2"):
+        play.spend(research, did, "test", "TST-pick")
+
+    clock.at = datetime.now(timezone.utc)                 # about t0+6h, in the evidence's time
+    next_second()
+    measure(research)                                     # the result is in, and the clock stops there
+    clock.advance(hours=3)
+    minutes, points, idle_now = idle(research, did)
+    assert 210 <= minutes < 215 and points == 3 and not idle_now
+    assert direction(research, did).state == B.NEEDS_REFLECTION
+
+
+def test_a_spend_keeps_the_idle_terms_it_was_made_under(research, clock):
+    did = funded(research, trails=4)
+    play.spend(research, did, "test", "TST-pick")         # t0, under one point an idle hour
+    assert B.read_ledger(research)[-1]["idle"] == {"per_hour": 1, "running_minutes": 30}
+
+    (research / B.RULES_FILE).write_text(RULES + "idle: {per_hour: 0}\n", encoding="utf-8")
+    git(research, "commit", "-qam", "idle hours are free now")
+    clock.advance(minutes=90)
+    assert idle(research, did) == (60, 1, True)           # priced as when the spend was made
+    assert "idle hours cost nothing" in render_board(B.build(research))
+
+    other = funded(research, "second-axis")               # research at t0+90m runs until t0+2h
+    play.spend(research, other, "test", "TST-grasp-ik")   # made under the new rules
+    assert B.read_ledger(research)[-1]["idle"]["per_hour"] == 0
+    clock.advance(hours=3)
+    assert idle(research, other)[1] == 0
+    assert idle(research, did) == (60 + 150, 3, True)
+
+    play.reflect(research, did, "halt", "the eval is not coming back")
+    clock.advance(hours=5)
+    assert idle(research, did) == (210, 3, False)         # a closed direction waits on nothing
 
 
 def test_rules_take_effect_from_head(goals_repo, monkeypatch):

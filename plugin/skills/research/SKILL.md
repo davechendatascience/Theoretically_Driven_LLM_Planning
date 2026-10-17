@@ -31,6 +31,12 @@ board() → scouts (background) → approve → spend → build, run_test → bo
    build, and run the target's tests with `run_test`. Only results recorded after the spend count
    for the direction. Work without spending is always allowed, but its results belong to no
    direction.
+   **Keep scouts out while a test you paid for waits on its result.** Every hour with no research
+   recorded on the board (a trail, a new direction, a scout's feedback) costs the waiting direction
+   a point. Each record keeps research running for `running_minutes`. Send scouts when you spend,
+   and send the next one when one returns. The board's `next:` line says when the clock is running
+   and when the next point goes. The clock stops when the result is in, or when you halt the
+   direction.
 5. **Reflect when a result settles:** `reflect(direction, continue|halt|pivot, why)`. Nothing more
    is spent on that direction until you do. A pivot halts it; open the next one with
    `open_direction(..., pivot_from=...)`.
@@ -47,9 +53,12 @@ board() → scouts (background) → approve → spend → build, run_test → bo
 ## The rules are yours to tune
 
 `research.yaml` holds `focus` (the goal being pursued), `costs` (points per action), `earn` (what a
-trail earns) and `scouts`. It takes effect when committed, and the board names the commit that last
-changed it, so a cost lowered to get a spend through is visible to the human. Change the rules
-when a reflection shows they are wrong, and say so in the commit.
+trail earns), `idle` (`per_hour`: points an idle hour costs, 0 for none; `running_minutes`: how long
+a research record keeps research running) and `scouts`. It takes effect when committed, and the
+board names the commit that last changed it, so a cost lowered to get a spend through is visible to
+the human. A spend keeps the idle terms in effect when it was made, so changing them later reprices
+no hour already waited. Change the rules when a reflection shows they are wrong, and say so in the
+commit.
 
 ## Rules
 

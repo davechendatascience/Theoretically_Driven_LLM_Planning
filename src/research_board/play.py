@@ -202,15 +202,22 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
         cost = costs[action]
         balance = board.balance(d)
         if balance < cost:
-            raise Refused(f"{action} costs {cost} and {d.id} holds {balance}: {cost - balance} more "
-                          "point(s) of research first (add_trail)")
+            idled = board.idle_points(d)
+            raise Refused(f"{action} costs {cost} and {d.id} holds {balance}"
+                          + (f" (idle hours took {idled})" if idled else "")
+                          + f": {cost - balance} more point(s) of research first (add_trail)")
         commit = (B.git(root, "rev-parse", "--short", "HEAD") or "").strip()
         contracts = B.targeted_contracts(decl, target)        # fixed now; a later declaration adds none
+        rules = board.rules                                   # so are the idle terms: a later rule reprices none
         record, _ = _record(root, board, "spend", {
             "direction": d.id, "action": action, "target": target, "contracts": contracts,
-            "expect": expect.strip(), "cost": cost, "commit": commit, "by": "director"})
+            "expect": expect.strip(), "cost": cost, "commit": commit, "by": "director",
+            "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes}})
     counts = (f"Runs measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
               if contracts else f"{target} names no contract, so this spend has no result of its own.")
+    if contracts and rules.idle_per_hour:
+        counts += (f" Until the result is in, every hour with no research recorded costs {d.id} "
+                   f"{rules.idle_per_hour} point{'s' if rules.idle_per_hour != 1 else ''}: keep scouts out.")
     return f"{record['id']}: {action} -> {target} for {d.id}, {cost} point(s); balance {balance - cost}. {counts}"
 
 
