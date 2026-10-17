@@ -8,8 +8,8 @@ result exists only once a tool has measured it, and a design holds only once it 
 attempts to refute it.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-dark.png">
-  <img alt="Goal snapshot of this repository at 4ab014f: 19 of 19 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-v0.10.0-dark.png">
+  <img alt="Goal snapshot of this repository at 4ab014f: 19 of 19 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-v0.10.0-light.png">
 </picture>
 
 <sub>**This repository, drawn by its own plugin.** An AI agent built TDLP under TDLP, so the repo is
