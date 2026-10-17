@@ -693,8 +693,9 @@ definitions:
       The append-only records the research board keeps in .research/, a
       directory that holds no declaration file and no part of the ledger
       DEF-ledger names: directions, trails, spends and feedback, each stamped
-      with the time it was recorded. None of them is a trial record. A
-      direction is a line of research. A spend is recorded on one direction
+      with the time it was recorded. None of them is a trial record, and
+      neither is the page the board writes beside them. A direction is a line
+      of research. A spend is recorded on one direction
       and names, when it is recorded, the contracts it targets: the contract
       it names, or each contract the test it names can measure at the head
       revision then, or none; that set does not change afterwards. A spend
@@ -1477,11 +1478,12 @@ branches:
       counting for a line of research only when no such commitment was
       recorded before it, bars none of them. Beliefs: by DEF-research-ledger,
       recording appends one record to the research ledger, which is no trial
-      record, appends no record to the ledger DEF-ledger names, of any
-      provenance, and changes no declaration; and where a component's code
-      claims a file in .research/ or a declared test names one, it records
-      nothing. Belief-eligible evidence, by DEF-belief-eligible, is a trial
-      record, measured or imported; recording appends no trial record, so by
+      record, rewrites one page, which is none either, appends no record to
+      the ledger DEF-ledger names, of any provenance, and changes no
+      declaration; and where a component's code claims a file in .research/
+      or a declared test names one, it records nothing. Belief-eligible
+      evidence, by DEF-belief-eligible, is a trial record, measured or
+      imported; recording records no trial record anywhere, so by
       AXM-no-belief-write-path, under which a measured belief changes only
       through belief-eligible evidence, no measured belief moves. Proof
       states: by AXM-commit-is-approval every proof state the servers report
