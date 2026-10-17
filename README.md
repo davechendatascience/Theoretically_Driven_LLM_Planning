@@ -98,7 +98,8 @@ goal, not at every step.
 
 ## What's in the box
 
-One plugin, `tdlp`, with four MCP servers, two workflow skills and a verifier subagent:
+One plugin, `tdlp`, with five MCP servers, three workflow skills, a verifier subagent and a
+research scout:
 
 | Server | Answers | In plain words |
 |---|---|---|
@@ -106,6 +107,7 @@ One plugin, `tdlp`, with four MCP servers, two workflow skills and a verifier su
 | **consistency-belief** | Does the design follow? | checks that each design decision follows from the stated requirements |
 | **stamp-monitor** | Is the evidence still current? | traces what a change touched, and flags tampering and skipped steps |
 | **graph-snapshot** | What does the whole design look like? | draws goals, requirements, claims and components as one page (the picture above) |
+| **research-board** | What should we try next? | keeps research directions for a goal: the papers behind each, the tweak each suggests, what was spent testing it and what came of it |
 
 ---
 
@@ -122,7 +124,7 @@ claude plugin install tdlp@davechendatascience-marketplace --scope project
 claude
 ```
 
-The first start builds the four servers and can take a minute or two. This repo's
+The first start builds the five servers and can take a minute or two. This repo's
 `.claude/settings.json` already raises the connect timeout to allow for it. Then ask in plain
 words, and the agent picks the tools:
 
@@ -133,6 +135,7 @@ words, and the agent picks the tools:
 | "Why is BRN-goal-guard proven?" | its proof tree, down to the requirements it rests on | `status(view="tree", subject=...)` |
 | "What did the v0.9.0 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="4463d1c~1")` |
 | "What should be tested next?" | this round's tests, and why every other test was skipped | `status(view="plan")` |
+| "Send scouts to look for research directions on GOL-sound-designs." | directions on the research board, each with the papers behind it and the tweaks they suggest, in `.research/BOARD.md` | `board()`, the `research-scout` agent |
 
 **Then break something**, to watch evidence expire:
 
@@ -187,6 +190,7 @@ of thing:
 | **stamp**, **stale** | the fingerprint of the exact files a result was measured on / a result whose files have changed since: kept, not counted |
 | **insufficient** | too little data for a verdict, reported as such |
 | **policy**, **decide** | the release criteria / the call that checks them and records the decision |
+| **direction** (`DIR-`), **trail**, **spend** | a line of research toward a goal / a paper and the tweak it suggests to a component / points committed to a direction before its work is done. Only results recorded after a spend count for its direction |
 
 ---
 

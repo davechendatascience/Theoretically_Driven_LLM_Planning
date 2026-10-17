@@ -19,7 +19,8 @@ from component_belief.project import project_root
 
 REPO = Path(__file__).resolve().parents[1]
 PLUGIN = REPO / "plugin"
-ROOT_VARS = ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT", "GRAPH_SNAPSHOT_ROOT")
+ROOT_VARS = ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT", "GRAPH_SNAPSHOT_ROOT",
+             "RESEARCH_BOARD_ROOT")
 
 
 def _json(path: Path) -> dict:
@@ -54,13 +55,14 @@ class TestProjectRoot:
         from component_belief import server as component
         from consistency_belief import server as consistency
         from graph_snapshot import server as snapshot
+        from research_board import server as research
         from stamp_monitor import server as monitor
 
         for var in ROOT_VARS:
             monkeypatch.delenv(var, raising=False)
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         roots = {component.project_root(), consistency.project_root(), monitor.project_root(),
-                 snapshot.project_root()}
+                 snapshot.project_root(), research.project_root()}
         assert roots == {tmp_path.resolve()}
 
 
@@ -78,7 +80,8 @@ class TestManifest:
         tag, so the code a project runs is the code this version shipped."""
         tag = f"{MANIFEST['name']}--v{MANIFEST['version']}"
         scripts = PYPROJECT["project"]["scripts"]
-        assert set(SERVERS) == {"component-belief", "consistency-belief", "stamp-monitor", "graph-snapshot"}
+        assert set(SERVERS) == {"component-belief", "consistency-belief", "stamp-monitor", "graph-snapshot",
+                                "research-board"}
         for name, server in SERVERS.items():
             args = server["args"]
             source = args[args.index("--from") + 1]
@@ -109,9 +112,34 @@ class TestManifest:
         registered = {t.name for t in asyncio.run(consistency.mcp.list_tools())}
         assert {n.removeprefix(prefix) for n in names} <= registered
 
+    def test_the_scout_holds_no_code_tool_and_no_director_tool(self):
+        """A scout reads the board, the ledgers and the web, never the code: no Read, Grep, Glob or
+        Bash, and none of the director's moves (approve, spend, reflect). Every server tool it
+        names is one its server registers, under the plugin's name for it."""
+        from component_belief import server as component
+        from consistency_belief import server as consistency
+        from research_board import server as research
+
+        text = (PLUGIN / "agents" / "research-scout.md").read_text(encoding="utf-8")
+        names = [t.strip() for t in re.search(r"^tools:(.*)$", text, re.M).group(1).split(",")]
+        assert not {"Read", "Grep", "Glob", "Bash", "Edit", "Write", "NotebookEdit"} & set(names), names
+        servers = {"research-board": research, "component-belief": component, "consistency-belief": consistency}
+        held = {}
+        for name in names:
+            if name in ("WebSearch", "WebFetch"):
+                continue
+            server, _, tool = name.removeprefix(f"mcp__plugin_{MANIFEST['name']}_").partition("__")
+            assert server in servers, name
+            held.setdefault(server, set()).add(tool)
+        for server, tools in held.items():
+            registered = {t.name for t in asyncio.run(servers[server].mcp.list_tools())}
+            assert tools <= registered, (server, tools - registered)
+        assert held["research-board"] == {"board", "ledger", "open_direction", "add_trail", "feedback"}
+        assert held.get("component-belief", set()) <= {"status"} and held.get("consistency-belief", set()) <= {"status"}
+
     def test_every_skill_is_where_the_plugin_loads_it(self):
         skills = sorted(p.parent.name for p in (PLUGIN / "skills").glob("*/SKILL.md"))
-        assert skills == ["adopt-goals", "component-belief", "consistency-belief"]
+        assert skills == ["adopt-goals", "component-belief", "consistency-belief", "research"]
         for name in skills:
             front = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8").split("---")[1]
             assert f"name: {name}" in front

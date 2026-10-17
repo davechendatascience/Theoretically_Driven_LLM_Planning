@@ -4,7 +4,8 @@ The full manual: installing and moving projects, the principles, every tool of e
 the ledgers join, and the systems-engineering mapping. The [README](../README.md) is the short
 version; release notes are in [CHANGELOG.md](../CHANGELOG.md).
 
-Four MCP servers that hold an LLM agent's engineering work to account, and show it.
+Five MCP servers that hold an LLM agent's engineering work to account, show it, and keep the
+research behind it.
 
 | Server | Asks | Grounded in | Ledger |
 |---|---|---|---|
@@ -12,11 +13,13 @@ Four MCP servers that hold an LLM agent's engineering work to account, and show 
 | **component-belief** | Does the built thing **work**? | declared tests, run by the server itself | `.belief/` |
 | **stamp-monitor** | Is the evidence still **current and intact**, was the loop followed, and does the tagged code still match its claims? | both ledgers, their stamps, tagged code, and git | reads only |
 | **graph-snapshot** | What does the **whole design** look like at this revision? | the three declaration files at one commit, and the proof states | reads only; writes one page |
+| **research-board** | What should we **try next** for a goal? | papers read by scouts that cannot open the code; results read from component-belief | `.research/` |
 
 The first two are paired: a design branch names the component it governs, and cites the contract
 that measures it — so neither a proof about nothing nor code nobody justified can hide. The third
 watches the joins between them and writes nothing. The fourth draws the joined graph as one page a
-person can read.
+person can read. The fifth keeps research directions for the goals, and moves nothing in the other
+ledgers.
 
 ```
      consistency-belief (deductive)                  component-belief (empirical)
@@ -35,6 +38,7 @@ person can read.
 [component-belief](#component-belief-does-it-work) ·
 [stamp-monitor](#stamp-monitor-is-the-evidence-still-current) ·
 [graph-snapshot](#graph-snapshot-what-does-the-whole-design-look-like) ·
+[research-board](#research-board-what-should-we-try-next) ·
 [How the ledgers join](#how-the-ledgers-join) · [Systems-engineering view](#the-systems-engineering-view) ·
 [Reference](#reference)
 
@@ -42,7 +46,8 @@ person can read.
 
 ## Quick start
 
-The four servers, the two workflow skills and the `consistency-verifier` subagent ship as one
+The five servers, the three workflow skills, and the `consistency-verifier` and `research-scout`
+subagents ship as one
 Claude Code plugin, `tdlp`, pinned to a release tag. Add this repository as a marketplace once per
 machine, then enable the plugin in each project that uses it:
 
@@ -57,7 +62,7 @@ add the marketplace once and run the same install; a project that lists the plug
 does not fetch it on its own.
 
 * **Which project.** Every server reads the project Claude Code reports (`${CLAUDE_PROJECT_DIR}`),
-  so all four describe the same repository.
+  so all five describe the same repository.
 * **Which version.** The servers install with `uvx` from the tag `tdlp--v<version>`, so edits here
   reach a project only when a release is tagged and the plugin updated
   (`claude plugin update tdlp@davechendatascience-marketplace`).
@@ -178,14 +183,14 @@ The marketplace was named `tdlp` until `956a80e`; it is now `davechendatascience
    `mcp__plugin_tdlp_component-belief__run_test`, and likewise for the other two servers.
 6. Check each `run:` line's interpreter. A plain `python` now resolves to the project's `.venv`
    when it has one; a conda environment needs naming (`conda run -n env python ...`).
-7. Restart the session (or `/reload-plugins`). `claude mcp list` should show four
+7. Restart the session (or `/reload-plugins`). `claude mcp list` should show five
    `plugin:tdlp:*` servers as connected, and `status(view="belief")` your own contracts.
 
 Nothing in the ledgers moves. `belief.yaml`, `consistency.yaml`, `.belief/` and `.consistency/` are
 read as they are, and evidence stays current, because staleness is judged by content, not by which
 server recorded it.
 
-To work on the harness itself, install it editable and register the servers by hand, all four at
+To work on the harness itself, install it editable and register the servers by hand, all five at
 the **same** project root: the joins exist only when the ledgers describe one repository.
 
 ```bash
@@ -214,13 +219,18 @@ pip install -e .          # or: uv sync
       "command": "uv",
       "args": ["--directory", "/path/to/Theoretically_Driven_LLM_Planning", "run", "graph-snapshot-mcp"],
       "env": {"GRAPH_SNAPSHOT_ROOT": "/path/to/your/project"}
+    },
+    "research-board": {
+      "command": "uv",
+      "args": ["--directory", "/path/to/Theoretically_Driven_LLM_Planning", "run", "research-board-mcp"],
+      "env": {"RESEARCH_BOARD_ROOT": "/path/to/your/project"}
     }
   }
 }
 ```
 
 Or run them directly: `PYTHONPATH=src python -m consistency_belief.server` (likewise
-`component_belief.server`, `stamp_monitor.server`, `graph_snapshot.server`).
+`component_belief.server`, `stamp_monitor.server`, `graph_snapshot.server`, `research_board.server`).
 
 Then declare your system in two committed files and work the loops:
 
@@ -617,6 +627,84 @@ The same snapshot runs from a shell: `graph-snapshot [--focus ID]`.
 
 ---
 
+## research-board: what should we try next?
+
+Declared as `AXM-attribution-follows-commitment`, `DEF-research-ledger` and
+`BRN-research-results-follow-their-spend`.
+
+The other four check work once it is proposed. None of them says what is worth trying for a goal,
+or keeps the reading that suggested it. The research board does, one level below the goals: each
+**direction** serves one goal in `goals.yaml`, and each **trail** is a paper and the tweak it
+suggests to a component in `belief.yaml`.
+
+It is a game with one rule that matters. Research is free and earns points for a direction. Work
+for a direction costs points, and **a result counts for a direction only from runs the server
+measured after points were spent on it**. A result seen first and claimed afterwards predicted
+nothing; spending first is a preregistration a reader can check. Working without the board stays
+free; its results belong to no direction.
+
+| Tool | Who | Does |
+|---|---|---|
+| `board(direction)` | all | every direction in the order to act on it; with a `DIR-` id, that direction's brief: the goal, every trail, spend, result and feedback, the closed directions, and the components a tweak can name |
+| `ledger(run, contract, node)` | all | records from all three ledgers, and what a run captured (stdout, stderr, `result.json`, the command); never a source file |
+| `open_direction(name, goal, idea, assessment)` | all | a new direction for a goal, at 0 points |
+| `add_trail(direction, paper, tweak, component, quote, at, expect)` | all | earns the rules' points for a paper new to the direction, quoted, on a declared component; otherwise kept, earning nothing, with the reason |
+| `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, or an answer, addressed to a direction, trail or spend |
+| `approve(target, approved, why, rank)` | director | a direction must be approved before anything is spent on it; `rank` orders them; a rejected trail's points stop counting |
+| `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names; runs measured on them afterwards are the direction's result |
+| `reflect(direction, decision, why)` | director | continue, halt or pivot; required after a result settles, before the next spend |
+
+* **Rules in `research.yaml`, read from HEAD.** `focus` (the goal pursued now), `costs` per
+  action, what a trail `earn`s, and how many `scouts` run at once. An uncommitted edit changes no
+  cost and is named on the board, and the board names the commit that last changed the rules.
+* **Play in `.research/ledger.jsonl`, append-only.** Directions, trails, spends and feedback. A
+  balance and a result are never written: both are computed from the ledgers each time they are
+  read. `.research/BOARD.md` is the board with every open direction's detail, rewritten after each
+  move, for reading in an editor or on GitHub.
+* **A result is measured, and after its spend.** Only records the server measured itself count,
+  so an import of an earlier run cannot become a direction's result, and a spend fixes its
+  contracts when it is made, so a test that later measures more adds nothing to it. A record made
+  in the spend's own second reads as made before it.
+* **Scouts read no code.** The `research-scout` agent holds the board's research moves,
+  `status` on the other two servers, WebSearch and WebFetch, and no tool that opens a file or runs
+  a command. A scout who reads the implementation studies the current architecture and finds
+  reasons for it. What a scout cannot answer from `ledger(run=...)` it asks the director; a question
+  only the director can answer means the contract dropped a metric the research needs.
+* **Moves nothing else.** Recording writes the ledger and the page in `.research/` and nothing
+  else: no evidence, no trial, no declaration, no commit. Where a component claims or a test names
+  a file there, it records nothing.
+
+```text
+# Research board
+
+focus: GOL-grasp: The arm picks up the object it is asked for
+  measured by CTR-pick-success: supported
+
+rules: research.yaml at f1393db 2026-10-17 research rules · costs: research 0, implement 1, test 1, training_run 3 · a trail earns 1 · up to 2 scouts
+
+## Needs reflection (a result settled)
+- **DIR-principal-axes** · balance 0 (earned 1, spent 1) · 1 trail · 1 spend · rank 1
+  idea: Sample grasp approaches from the object's principal axes
+  assessment: cheapest decisive test: the pick eval, 1 point
+  SPD-0001 · test -> TST-pick · 1 point · at f1393db · expect: the pick eval still passes
+      result: CTR-pick-success supported (1 record after the spend: RUN-0002)
+
+## Proposed (waiting for the director)
+- **DIR-bigger-net** · balance 0 (earned 0, spent 0) · 0 trails · 0 spends
+  idea: A larger grasp network
+
+next:
+  - reflect("DIR-principal-axes", continue|halt|pivot, why): SPD-0001 settled
+  - approve("DIR-bigger-net", True|False, why, rank=...): proposed, 0 point(s) of research behind it
+```
+
+The `research` skill is the director's loop: `board()`, scouts in the background while results
+are pending, `approve`, `spend`, build and `run_test`, `reflect`. The board above is the
+test fixture's grasping project: `RUN-0001` passed before the spend and is not the direction's;
+`RUN-0002`, measured after it, is.
+
+---
+
 ## How the ledgers join
 
 `consistency.yaml` opens with the components its designs govern, and each branch names one of them
@@ -671,12 +759,13 @@ the coverage view says so.
 
 ## The systems-engineering view
 
-Read as a V-model, the four servers cover stakeholder needs down to component test, joined by
+Read as a V-model, the five servers cover stakeholder needs down to component test, joined by
 traceability and configuration control. The human owns the top of the V; the agent owns the rest.
 
 | Stage | Artifact | Method |
 |---|---|---|
 | Needs and validation | goals and the interfaces between them in `goals.yaml`, each with the contract that says it is met; `status(view="goals")` | test (typically `layer: e2e`), criteria committed by the human |
+| Research | directions for a goal in `.research/`, each trail a paper and the tweak it suggests to a component; the rules in `research.yaml` | literature, read by scouts that cannot open the code; a result counts for a direction only from runs measured after a spend on it |
 | Requirements | axioms and definitions in `consistency.yaml`, each axiom naming the goal whose requirement it states (`goal:`) | inspection, at commit; `status(view="coverage")` traces each goal to its axioms |
 | Architecture | components and interfaces in `belief.yaml`; lemmas; design claims over an interface (`subject: IFC-...`) or a goal | analysis by probe; set difference for unbacked assumptions |
 | Component design | branches, each with premises and `evidence: CTR-...` | analysis by `verify_step`, from the declarations only |
@@ -687,7 +776,7 @@ traceability and configuration control. The human owns the top of the V; the age
 | Configuration control | declarations from git HEAD; a content stamp on every run, covering declared inputs git ignores by their content on disk; evidence stale once a file it rests on changes; every decision names its revision | mechanical |
 | Change control | `audit_change` (with the code links and cited measurements a change leaves unreviewed), STALE on restatement, `amend`, `decide`; `stamp-monitor impact`; the goal guard | mechanical, plus the human's commit of `goals.yaml` |
 | Configuration audit | `stamp-monitor audit`, `workflow` and `links`; `graph-snapshot` for the whole design at one revision | mechanical, read-only |
-| Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file | structural |
+| Independence | the verifier reads `status(view="probe")` and nothing else; the `consistency-verifier` agent cannot open a file; the `research-scout` reads the board, the ledgers and the web, never the code | structural |
 | Release gate | `POL-consistency-gate`: each branch proven **and** its cited contract supported; the goals policy in `goals.yaml` | both ledgers, and the human's goals |
 
 Every stage now has a home. This repository applies each to itself: every axiom names its goal,
@@ -731,7 +820,7 @@ src/
     model.py                         belief slices; gate and rate contracts
     staleness.py                     content stamps and freshness (shared with the other servers); a run judged once
     runner.py / readlog.py           test execution in the project's environment, artifact capture, the read hook
-    project.py                       which project root all four servers read
+    project.py                       which project root all five servers read
     diagnose.py / planning.py        bottleneck ranking; round test selection
     decide.py                        policy evaluation and the human approval gate
     stamps.py / views.py / render.py the artifacts view; status views
@@ -741,6 +830,10 @@ src/
     snapshot.py                      the join, the revision it pins, the gaps
     page.py / page.html              the one self-contained page, and where it may be written
     server.py / cli.py               MCP server; the same snapshot from a shell
+  research_board/                    research directions for a goal (8 tools)
+    board.py                         the rules from HEAD, the ledger, balances, results after each spend
+    play.py                          the moves, and the rules each is checked against
+    page.py / reading.py             the board, a direction's brief and BOARD.md; ledger() for scouts
   stamp_monitor/                     read-only monitor (4 tools)
     impact.py                        a change traced through both ledgers
     audit.py                         stamp, artifact and ledger integrity
@@ -752,11 +845,13 @@ tests/                               the suites belief.yaml declares as tests
 .claude-plugin/marketplace.json      this repository as the `davechendatascience-marketplace`, listing `tdlp`
 plugin/                              the `tdlp` Claude Code plugin
   .claude-plugin/plugin.json         name and version (one version: plugin, marketplace, package, tag)
-  .mcp.json                          the four servers, installed with uvx from tag tdlp--v<version>
+  .mcp.json                          the five servers, installed with uvx from tag tdlp--v<version>
   agents/consistency-verifier.md     verifier subagent: consistency-belief tools only, no file access
+  agents/research-scout.md           research scout: the board's research moves, status, the web; no file access
   skills/component-belief/SKILL.md   the empirical loop, four rules
   skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate, reviewing what a branch cites, linking code
   skills/adopt-goals/SKILL.md        setting up goals.yaml in a project that already uses TDLP
+  skills/research/SKILL.md           the research loop: scouts, approve, spend, reflect
 ```
 
 A release: bump `version` in `pyproject.toml`, `__version__` in `src/component_belief/__init__.py`, `plugin/.claude-plugin/plugin.json`, the marketplace
@@ -798,5 +893,6 @@ The suites assert the invariants above, not the implementation:
 22. Staleness gives every trial the verdict it would get alone, judged once per run.
 23. A source reference changes no premise graph, fingerprint, proof state or probe, whatever its source's id; a dangling reference and an unreferenced source are reported.
 24. The tree for one node draws its lineage alone, and a parameter a status view ignores is named.
+25. A result counts for a research direction only from runs the server measured after a spend on it, against the contracts the spend named; a trail earns only for a new, quoted paper on a declared component; recording writes nothing outside `.research/`, and nothing at all where a declaration names a file there.
 25. The order trials were recorded in decides no proof state, and no policy requiring proven passes a conditional branch.
 26. A Lean certificate is served to the verifier beside the statements, never in place of them, only while it certifies its node, and moves no proof state; no service address or key reaches the ledger.

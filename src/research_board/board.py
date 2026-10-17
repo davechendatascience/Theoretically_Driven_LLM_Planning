@@ -1,0 +1,489 @@
+"""The rules, the ledger, and everything the board computes from them.
+
+Every number the board shows is computed here from three inputs: research.yaml at HEAD, the
+research ledger, and component-belief's evidence ledger. Nothing that can be computed is stored: a
+direction's balance is summed from its trails and spends each time it is read, and a spend's result
+is read from the evidence recorded after the spend (DEF-research-ledger). The one stored number is
+what a trail earned, fixed by the rules in effect when it was recorded, so a later change of rules
+does not reprice old research.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+import yaml
+
+RULES_FILE = "research.yaml"
+RESEARCH_DIR = ".research"
+LEDGER_FILE = "ledger.jsonl"
+BOARD_FILE = "BOARD.md"
+
+DEFAULT_COSTS = {"research": 0, "implement": 1, "test": 1, "dataset_eval": 1, "training_run": 3}
+DEFAULT_EARN = 1
+DEFAULT_SCOUTS = 3
+RULE_KEYS = ("focus", "costs", "earn", "scouts")
+
+NOTE, QUESTION, ANSWER = "note", "question", "answer"
+APPROVED, REJECTED = "approved", "rejected"
+CONTINUE, HALT, PIVOT = "continue", "halt", "pivot"
+FEEDBACK_KINDS = (NOTE, QUESTION, ANSWER)
+VERDICTS = (APPROVED, REJECTED)
+DECISIONS = (CONTINUE, HALT, PIVOT)
+
+NO_EVIDENCE = "no evidence"
+#: A spend's status is its weakest contract's state: DEF-contract-state's order, with no evidence
+#: just below supported -- a spend whose contracts have not all run has not shown support.
+_RANK = {"refuted": 0, "stale": 1, "contested": 2, "insufficient_evidence": 3, NO_EVIDENCE: 4, "supported": 5}
+SETTLED = ("supported", "refuted", "contested")
+
+# Direction states, in the order the board lists them.
+NEEDS_REFLECTION = "needs reflection"
+ACTIVE = "active"
+READY = "ready"
+EARNING = "earning"
+PROPOSED = "proposed"
+HALTED = "halted"
+DIRECTION_STATES = (NEEDS_REFLECTION, ACTIVE, READY, EARNING, PROPOSED, HALTED, REJECTED)
+
+
+def utc_now() -> str:
+    """Microseconds, so two records made in one second keep their order."""
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def when(stamp: Any) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(stamp))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def git(root: Path, *args: str) -> str | None:
+    """stdout, or None when git fails. stdin is closed: an inherited MCP stdio pipe hangs any
+    child that reads it."""
+    try:
+        out = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=15,
+                             encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout if out.returncode == 0 else None
+
+
+# ---------- the rules ----------
+
+@dataclass
+class Rules:
+    """research.yaml as committed at HEAD, or the defaults when nothing is committed."""
+
+    focus: str = ""
+    costs: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_COSTS))
+    earn: int = DEFAULT_EARN
+    scouts: int = DEFAULT_SCOUTS
+    source: str = "defaults"
+    changed: str = ""              # the last commit that changed research.yaml: "<sha> <date> <subject>"
+    issues: list[str] = field(default_factory=list)
+
+    def cheapest_paid(self) -> int | None:
+        paid = [cost for cost in self.costs.values() if cost > 0]
+        return min(paid) if paid else None
+
+
+def _count(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def load_rules(root: Path) -> Rules:
+    """The rules take effect from HEAD, like every declaration: an uncommitted edit changes no
+    cost, and is named so nobody mistakes it for one that did."""
+    rules = Rules()
+    committed = git(root, "show", f"HEAD:{RULES_FILE}")
+    path = root / RULES_FILE
+    worktree = path.read_text(encoding="utf-8") if path.exists() else None
+    if committed is None:
+        if worktree is not None:
+            rules.issues.append(f"UNCOMMITTED {RULES_FILE}: rules take effect only once committed; "
+                                "the defaults are in effect")
+        return rules
+    rules.source = "HEAD"
+    if worktree is not None and worktree.replace("\r\n", "\n") != committed.replace("\r\n", "\n"):
+        rules.issues.append(f"PENDING {RULES_FILE}: the working tree differs from HEAD; "
+                            "the uncommitted edits are not in effect")
+    rules.changed = (git(root, "log", "-1", "--format=%h %cs %s", "--", RULES_FILE) or "").strip()
+    try:
+        data = yaml.safe_load(committed) or {}
+    except yaml.YAMLError as exc:
+        rules.issues.append(f"MALFORMED {RULES_FILE}: {exc}; the defaults are in effect")
+        return rules
+    if not isinstance(data, dict):
+        rules.issues.append(f"MALFORMED {RULES_FILE}: expected a mapping; the defaults are in effect")
+        return rules
+
+    for key in sorted(set(data) - set(RULE_KEYS)):
+        rules.issues.append(f"UNREAD {RULES_FILE}: `{key}` is not a rule this version reads")
+    if "focus" in data:
+        rules.focus = str(data["focus"] or "")
+    if "costs" in data:
+        raw = data["costs"]
+        if isinstance(raw, dict):
+            rules.costs = {}
+            for action, cost in raw.items():
+                if _count(cost) is None:
+                    rules.issues.append(f"MALFORMED {RULES_FILE}: costs.{action} must be a whole number "
+                                        f"of points, 0 or more; `{action}` cannot be spent on")
+                else:
+                    rules.costs[str(action)] = cost
+        else:
+            rules.issues.append(f"MALFORMED {RULES_FILE}: costs must map an action to its points; "
+                                "the default costs are in effect")
+    if "earn" in data:
+        raw = data["earn"]
+        earn = _count(raw.get("trail") if isinstance(raw, dict) else raw)
+        if earn is None:
+            rules.issues.append(f"MALFORMED {RULES_FILE}: earn.trail must be a whole number of points, "
+                                f"0 or more; {DEFAULT_EARN} is in effect")
+        else:
+            rules.earn = earn
+    if "scouts" in data:
+        scouts = _count(data["scouts"])
+        if not scouts:
+            rules.issues.append(f"MALFORMED {RULES_FILE}: scouts must be 1 or more; {DEFAULT_SCOUTS} is in effect")
+        else:
+            rules.scouts = scouts
+    return rules
+
+
+# ---------- the ledger ----------
+
+def research_dir(root: Path) -> Path:
+    return root / RESEARCH_DIR
+
+
+def ledger_path(root: Path) -> Path:
+    return research_dir(root) / LEDGER_FILE
+
+
+def read_ledger(root: Path) -> list[dict[str, Any]]:
+    path = ledger_path(root)
+    if not path.exists():
+        return []
+    records = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line:
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return records
+
+
+def paper_key(paper: str) -> str:
+    """Two citations of one paper match however they are punctuated or cased."""
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", paper.lower()).split())
+
+
+def direction_id(name: str) -> str:
+    slug = re.sub(r"[^0-9a-z]+", "-", name.strip().lower().removeprefix("dir-")).strip("-")
+    return f"DIR-{slug}" if slug else ""
+
+
+# ---------- results ----------
+
+def targeted_contracts(decl: Any, target: str) -> list[str]:
+    """A contract names itself; a test names each contract it can measure; anything else -- a
+    component an implementation spend targets -- names none, and has no result."""
+    if target in decl.contracts:
+        return [target]
+    if target in decl.tests:
+        return sorted(cid for cid, contract in decl.contracts.items() if target in contract.evaluable_by)
+    return []
+
+
+@dataclass
+class Result:
+    """A spend's result: for each contract it targets, the state its slices read when they are
+    computed from the records recorded against it after the spend, and from no other record."""
+
+    states: dict[str, str] = field(default_factory=dict)
+    counted: dict[str, int] = field(default_factory=dict)
+    runs: dict[str, list[str]] = field(default_factory=dict)
+    settled_at: datetime | None = None
+
+    @property
+    def status(self) -> str:
+        if not self.states:
+            return ""
+        return min(self.states.values(), key=lambda state: _RANK.get(state, 3))
+
+    @property
+    def settled(self) -> bool:
+        return self.status in SETTLED
+
+
+def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend: dict[str, Any]) -> Result:
+    """The evidence a spend may claim is the measured evidence recorded after it, against the
+    contracts it named when it was recorded (DEF-research-ledger).
+
+    Measured only: the server recorded it from a run it captured itself, so it is the first record
+    of its measurement. An imported record can carry a measurement made long before the spend, and
+    a declaration that later widens a test's reach adds no contract to a spend already made.
+
+    Records keep whole seconds and a spend keeps microseconds, so a record made in the same second
+    as the spend reads as made before it. That errs the safe way: a result never rests on a run
+    that may have finished before the points were committed (AXM-attribution-follows-commitment).
+    """
+    from component_belief.model import compute_slices
+
+    result = Result()
+    contracts = [c for c in spend.get("contracts", []) if c in decl.contracts]
+    since = when(spend.get("timestamp"))
+    if not contracts or since is None:
+        return result
+    after = [t for t in trials
+             if t.get("contract_id") in contracts and t.get("provenance") == "measured"
+             and (when(t.get("timestamp")) or since) > since]
+    slices = compute_slices(decl, after, contracts, staleness=staleness)
+    for sl in slices:
+        seen = result.states.get(sl.contract_id)
+        if seen is None or _RANK.get(sl.state, 3) < _RANK.get(seen, 3):
+            result.states[sl.contract_id] = sl.state
+    for cid in contracts:
+        result.states.setdefault(cid, NO_EVIDENCE)
+        mine = [t for t in after if t.get("contract_id") == cid]
+        result.counted[cid] = len(mine)
+        result.runs[cid] = sorted({str(t.get("run_id")) for t in mine if t.get("run_id")})
+    moments = [m for m in (when(t.get("timestamp")) for t in after) if m is not None]
+    result.settled_at = max(moments) if moments else None
+    return result
+
+
+# ---------- the board ----------
+
+@dataclass
+class Direction:
+    record: dict[str, Any]
+    trails: list[dict[str, Any]] = field(default_factory=list)
+    spends: list[dict[str, Any]] = field(default_factory=list)
+    feedback: list[dict[str, Any]] = field(default_factory=list)
+    verdict: dict[str, Any] | None = None       # the latest approval or rejection
+    decision: dict[str, Any] | None = None      # the latest continue, halt or pivot
+    state: str = PROPOSED
+    unreflected: list[str] = field(default_factory=list)   # spends whose result settled since the last decision
+
+    @property
+    def id(self) -> str:
+        return self.record["id"]
+
+    @property
+    def goal(self) -> str:
+        return str(self.record.get("goal", ""))
+
+    @property
+    def rank(self) -> int | None:
+        if self.verdict and self.verdict.get("type") == APPROVED:
+            return self.verdict.get("rank")
+        return None
+
+    @property
+    def approved(self) -> bool:
+        return bool(self.verdict) and self.verdict.get("type") == APPROVED
+
+
+@dataclass
+class Board:
+    root: Path
+    rules: Rules
+    decl: Any
+    records: list[dict[str, Any]]
+    directions: dict[str, Direction] = field(default_factory=dict)
+    trails: dict[str, dict[str, Any]] = field(default_factory=dict)
+    spends: dict[str, dict[str, Any]] = field(default_factory=dict)
+    feedback: dict[str, dict[str, Any]] = field(default_factory=dict)
+    results: dict[str, Result] = field(default_factory=dict)
+    trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
+    evidence_error: str = ""
+
+    # ---- what a record is worth ----
+
+    def rejected(self, trail_id: str) -> dict[str, Any] | None:
+        verdict = self.trail_verdicts.get(trail_id)
+        return verdict if verdict and verdict.get("type") == REJECTED else None
+
+    def points(self, trail: dict[str, Any]) -> int:
+        return 0 if self.rejected(trail["id"]) else int(trail.get("points") or 0)
+
+    def earned(self, d: Direction) -> int:
+        return sum(self.points(t) for t in d.trails)
+
+    def spent(self, d: Direction) -> int:
+        return sum(int(s.get("cost") or 0) for s in d.spends)
+
+    def balance(self, d: Direction) -> int:
+        """DEF-research-ledger: the points its trails earned, less those of rejected trails, less
+        the costs of its spends -- all read from the research ledger, never written to it."""
+        return self.earned(d) - self.spent(d)
+
+    def direction_of(self, research_id: str) -> str:
+        """The direction a research id belongs to, or "" when it names none."""
+        if research_id in self.directions:
+            return research_id
+        for table in (self.trails, self.spends, self.feedback):
+            if research_id in table:
+                return str(table[research_id].get("direction", ""))
+        return ""
+
+    def open_questions(self) -> list[dict[str, Any]]:
+        answered = {f.get("reply_to") for f in self.feedback.values() if f.get("type") == ANSWER}
+        return [f for f in self.feedback.values() if f.get("type") == QUESTION and f["id"] not in answered]
+
+    def ordered(self) -> list[Direction]:
+        """The board's order: what waits on the director, what waits on a run, what can be tried
+        next -- the director's rank first, then the most research behind it -- what is still
+        earning, the proposals by their research, and last the directions closed."""
+        def key(d: Direction) -> tuple:
+            rank = d.rank if isinstance(d.rank, int) else 10**6
+            return (DIRECTION_STATES.index(d.state), rank, -self.balance(d), d.record.get("timestamp", ""))
+        return sorted(self.directions.values(), key=key)
+
+
+#: The declarations and rules last read for each project, keyed by HEAD and the declaration files'
+#: stats: both are read from HEAD and compared with the working tree, so they change only when one
+#: of those does. A git process costs a tenth of a second on some machines, and every move reads
+#: the board twice.
+_READS: dict[str, tuple[tuple, Any, Rules]] = {}
+_DECLARATION_FILES = ("belief.yaml", "goals.yaml", RULES_FILE)
+
+
+def _stat(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def head_reads(root: Path) -> tuple[Any, Rules]:
+    """component-belief's declarations and the research rules, as committed at HEAD."""
+    from component_belief.declarations import load as load_components
+
+    key = ((git(root, "rev-parse", "HEAD") or "").strip(),
+           *(_stat(root / name) for name in _DECLARATION_FILES))
+    seen = _READS.get(str(root))
+    if seen is not None and seen[0] == key:
+        return seen[1], seen[2]
+    decl, rules = load_components(root), load_rules(root)
+    _READS[str(root)] = (key, decl, rules)
+    return decl, rules
+
+
+def build(root: Path, *, with_results: bool = True) -> Board:
+    decl, rules = head_reads(root)
+    board = Board(root=root, rules=rules, decl=decl, records=read_ledger(root))
+    for record in board.records:
+        kind = record.get("kind")
+        rid = record.get("id")
+        if not rid:
+            continue
+        if kind == "direction":
+            board.directions[rid] = Direction(record=record)
+        elif kind == "trail":
+            board.trails[rid] = record
+        elif kind == "spend":
+            board.spends[rid] = record
+        elif kind == "feedback":
+            board.feedback[rid] = record
+
+    for trail in board.trails.values():
+        if (d := board.directions.get(str(trail.get("direction")))) is not None:
+            d.trails.append(trail)
+    for spend in board.spends.values():
+        if (d := board.directions.get(str(spend.get("direction")))) is not None:
+            d.spends.append(spend)
+    for item in board.feedback.values():          # the ledger's order is the order recorded
+        about = str(item.get("about", ""))
+        kind = item.get("type")
+        if kind in VERDICTS and about in board.trails:
+            board.trail_verdicts[about] = item
+        if (d := board.directions.get(str(item.get("direction")))) is not None:
+            d.feedback.append(item)
+            if kind in VERDICTS and about == d.id:
+                d.verdict = item
+            elif kind in DECISIONS and about == d.id:
+                d.decision = item
+
+    if with_results:
+        try:
+            from component_belief.model import compute_slices
+            from component_belief.staleness import CodeStaleness
+            from component_belief.store import Store
+
+            trials = Store(root).effective_trials()
+            staleness = CodeStaleness(root)
+            for sid, spend in board.spends.items():
+                board.results[sid] = spend_result(board.decl, trials, staleness, spend)
+            # what each goal's measure reads now, on all its evidence: context for a direction, never
+            # one of its results
+            measures = sorted({g.measure for g in board.decl.goals.values() if g.measure in board.decl.contracts})
+            for sl in compute_slices(board.decl, trials, measures, staleness=staleness) if measures else []:
+                seen = board.measures.get(sl.contract_id)
+                if seen is None or _RANK.get(sl.state, 3) < _RANK.get(seen, 3):
+                    board.measures[sl.contract_id] = sl.state
+            for cid in measures:
+                board.measures.setdefault(cid, NO_EVIDENCE)
+        except Exception as exc:                  # a ledger this server does not own
+            board.evidence_error = f"component-belief's evidence could not be read ({exc}); no result is shown"
+
+    cheapest = board.rules.cheapest_paid()
+    for d in board.directions.values():
+        decided = when(d.decision.get("timestamp")) if d.decision else None
+        for spend in d.spends:
+            result = board.results.get(spend["id"])
+            if result and result.settled and (decided is None or (result.settled_at and result.settled_at > decided)):
+                d.unreflected.append(spend["id"])
+        if d.verdict and d.verdict.get("type") == REJECTED:
+            d.state = REJECTED
+        elif d.decision and d.decision.get("type") in (HALT, PIVOT):
+            d.state = HALTED
+        elif not d.approved:
+            d.state = PROPOSED
+        elif d.unreflected:
+            d.state = NEEDS_REFLECTION
+        elif any(board.results.get(s["id"]) and not board.results[s["id"]].settled
+                 and board.results[s["id"]].states for s in d.spends):
+            d.state = ACTIVE
+        elif cheapest is None or board.balance(d) >= cheapest:
+            d.state = READY
+        else:
+            d.state = EARNING
+    return board
+
+
+def research_files(root: Path) -> set[str]:
+    """Every file in .research/ now, and the two the board writes, as repository paths."""
+    paths = {f"{RESEARCH_DIR}/{LEDGER_FILE}", f"{RESEARCH_DIR}/{BOARD_FILE}"}
+    directory = research_dir(root)
+    if directory.is_dir():
+        paths |= {p.relative_to(root).as_posix() for p in directory.rglob("*") if p.is_file()}
+    return paths
+
+
+def naming_research(root: Path, decl: Any) -> list[str]:
+    """The components whose code claims a file in .research/, and the tests that name one on their
+    run line or among what they read -- matched exactly as staleness matches them. Evidence would
+    rest on such a file, and recording would move it, so the board records nothing while any
+    declaration names one (DEF-research-ledger)."""
+    from component_belief.staleness import named_paths
+
+    probe = research_files(root)
+    hits = [cid for cid, comp in decl.components.items() if named_paths("", list(comp.code), probe)]
+    hits += [tid for tid, test in decl.tests.items() if named_paths(test.run, list(test.reads), probe)]
+    return sorted(hits)

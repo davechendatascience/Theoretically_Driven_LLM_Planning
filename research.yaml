@@ -1,0 +1,19 @@
+# The rules of the research board (research-board MCP). Read from git HEAD like every declaration:
+# an edit takes effect when committed, and the board names the commit that last changed it.
+#
+# Research is free and earns points for a direction; work for a direction costs them; a result
+# counts for a direction only from runs recorded after points were spent on it.
+
+focus: GOL-sound-designs      # the goal being pursued now
+
+costs:                        # points an action takes from a direction's balance
+  research: 0
+  implement: 1
+  test: 1
+  dataset_eval: 1
+  training_run: 3
+
+earn:
+  trail: 1                    # a trail citing a paper new to its direction, quoted, on a declared component
+
+scouts: 3                     # research scouts at once, in the background

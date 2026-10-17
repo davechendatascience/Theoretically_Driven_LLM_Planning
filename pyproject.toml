@@ -22,6 +22,7 @@ stamp-monitor-mcp = "stamp_monitor.server:main"
 stamp-monitor = "stamp_monitor.cli:main"
 graph-snapshot-mcp = "graph_snapshot.server:main"
 graph-snapshot = "graph_snapshot.cli:main"
+research-board-mcp = "research_board.server:main"
 tdlp-guard = "component_belief.goals:guard_main"
 
 [tool.setuptools.packages.find]

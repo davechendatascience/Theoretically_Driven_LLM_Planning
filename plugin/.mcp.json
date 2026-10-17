@@ -45,6 +45,17 @@
         "GRAPH_SNAPSHOT_ROOT": "${CLAUDE_PROJECT_DIR}",
         "UV_LINK_MODE": "copy"
       }
+    },
+    "research-board": {
+      "command": "uvx",
+      "args": [
+        "--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.9.0",
+        "research-board-mcp"
+      ],
+      "env": {
+        "RESEARCH_BOARD_ROOT": "${CLAUDE_PROJECT_DIR}",
+        "UV_LINK_MODE": "copy"
+      }
     }
   }
 }
