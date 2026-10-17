@@ -1,0 +1,121 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_result_recorded_before_the_spend_is_not_the_directions"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_only_records_the_server_measured_are_a_result"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_spend_keeps_the_contracts_it_named"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_trail_earns_only_for_a_new_paper_on_a_declared_component"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_rejected_trail_loses_its_points"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_spend_needs_approval_balance_and_reflection"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_rules_take_effect_from_head"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_the_ledger_serves_records_and_run_output_never_a_source_file"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_feedback_reaches_the_next_scout"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_recording_writes_only_inside_research"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_declaration_naming_research_files_stops_recording[component]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_a_declaration_naming_research_files_stops_recording[test]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_research_board::test_the_server_registers_two_reads_and_six_moves"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

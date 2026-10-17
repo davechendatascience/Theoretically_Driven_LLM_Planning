@@ -1,0 +1,11 @@
+[
+ "pyproject.toml",
+ "src/component_belief/__init__.py",
+ "src/component_belief/declarations.py",
+ "src/component_belief/expr.py",
+ "src/component_belief/ids.py",
+ "src/component_belief_mcp.egg-info/entry_points.txt",
+ "tests/conftest.py",
+ "tests/test_declarations.py",
+ "tools/pytest_trials.py"
+]
