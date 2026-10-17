@@ -9,12 +9,12 @@ attempts to refute it.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-dark.png">
-  <img alt="Goal snapshot of this repository at 245ef34: 18 of 18 design branches and 4 of 4 lemmas proven, 13 of 13 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-light.png">
+  <img alt="Goal snapshot of this repository at 4ab014f: 19 of 19 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-light.png">
 </picture>
 
 <sub>**This repository, drawn by its own plugin.** An AI agent built TDLP under TDLP, so the repo is
 its own demo. The picture is a goal snapshot, `snapshot(focus="GOL-sound-designs")`, taken at
-`245ef34` (v0.9.0, 2026-10-09): every design claim proven, every component covered by a design,
+`4ab014f` (v0.10.0, 2026-10-17): every design claim proven, every component covered by a design,
 and on the left the ten requirements one of its four goals rests on. A snapshot names its commit
 and does not update; take one yourself in the [tour](#try-it-in-five-minutes).</sub>
 
@@ -39,13 +39,13 @@ What that looks like, from this repo's own tools:
 ```text
 status(view="goals")
 GOL-sound-designs  MET -- A design claim counts as proven only after falsification probes judged from ...
-  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0302 (+65 stale)
+  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0328 (+65 stale)
 
 status(view="tree")
-basis: verification_trials×69 set=8b3c8d · proven=22 obligations=0 refuted=0
+basis: verification_trials×72 set=bc86df · proven=23 obligations=0 refuted=0
 ```
 
-`RUN-0302` is the run the verdict rests on. `+65 stale` counts older results kept on record that no
+`RUN-0328` is the run the verdict rests on. `+65 stale` counts older results kept on record that no
 longer count, because what they measured has changed since.
 
 ### 2. Systems-engineered: a V-model, with you at the top
@@ -53,13 +53,13 @@ longer count, because what they measured has changed since.
 Every stage of the classic V has a home, and each is checked by something other than the agent's
 word. Your part is the top row. The agent owns the rest.
 
-| Stage | Declared | Checked by | This repo at `245ef34` |
+| Stage | Declared | Checked by | This repo at `4ab014f` |
 |---|---|---|---|
 | **Needs** (yours) | goals, and the interfaces between them, in `goals.yaml` | acceptance tests the agent may not edit | 4 goals, 1 interface: **5/5 met** |
-| **Requirements** | axioms and definitions, each axiom naming the goal it serves | every design claim must trace back to them | 17 axioms, 26 definitions, every axiom traced to a goal |
-| **Architecture** | components and the interfaces between them, in `belief.yaml` | interface tests | 13 components, 4 interfaces: **4/4 supported** |
-| **Design** | lemmas and design decisions, each argued from the requirements | refutation attempts by an independent verifier | 22 claims: **22/22 proven**, 0 refuted |
-| **Build and test** | the files each component owns | component tests, run by the server | 13 contracts: **13/13 supported**, 455 cases |
+| **Requirements** | axioms and definitions, each axiom naming the goal it serves | every design claim must trace back to them | 18 axioms, 27 definitions, every axiom traced to a goal |
+| **Architecture** | components and the interfaces between them, in `belief.yaml` | interface tests | 14 components, 4 interfaces: **4/4 supported** |
+| **Design** | lemmas and design decisions, each argued from the requirements | refutation attempts by an independent verifier | 23 claims: **23/23 proven**, 0 refuted |
+| **Build and test** | the files each component owns | component tests, run by the server | 14 contracts: **14/14 supported**, 469 cases |
 | **Configuration control** | declarations read from the committed revision only | each result stamped with the file contents it ran on | uncommitted edits change no verdict |
 
 It is traced end to end. A design decision names the component it governs and cites the test
@@ -133,7 +133,7 @@ words, and the agent picks the tools:
 | "Are this repo's goals met?" | each goal met, not met, insufficient or stale, with the run that says so | `status(view="goals")` |
 | "Take a goal snapshot of GOL-sound-designs." | `.graph-snapshot/snapshot.html`, the page at the top of this README; open it in a browser and click around | `snapshot(focus=...)` |
 | "Why is BRN-goal-guard proven?" | its proof tree, down to the requirements it rests on | `status(view="tree", subject=...)` |
-| "What did the v0.9.0 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="4463d1c~1")` |
+| "What did the v0.10.0 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="f4c3323")` |
 | "What should be tested next?" | this round's tests, and why every other test was skipped | `status(view="plan")` |
 | "Send scouts to look for research directions on GOL-sound-designs." | directions on the research board, each with the papers behind it and the tweaks they suggest, in `.research/BOARD.md` | `board()`, the `research-scout` agent |
 
