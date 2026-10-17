@@ -596,3 +596,7 @@
 {"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0428"}, "session": "", "timestamp": "2026-10-17T08:29:28+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0429"}, "session": "", "timestamp": "2026-10-17T08:29:28+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"subject": "BRN-research-results-follow-their-spend"}, "session": "", "timestamp": "2026-10-17T08:29:32+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "counterexample", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0430"}, "session": "", "timestamp": "2026-10-17T13:09:13+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0431"}, "session": "", "timestamp": "2026-10-17T13:09:13+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0432"}, "session": "", "timestamp": "2026-10-17T13:09:13+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"subject": "BRN-research-results-follow-their-spend"}, "session": "", "timestamp": "2026-10-17T13:09:22+00:00", "tool": "note"}

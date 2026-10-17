@@ -1,0 +1,12 @@
+[
+ "pyproject.toml",
+ "src/component_belief/__init__.py",
+ "src/component_belief/declarations.py",
+ "src/component_belief/expr.py",
+ "src/component_belief/ids.py",
+ "src/component_belief/model.py",
+ "src/component_belief/stats.py",
+ "tests/conftest.py",
+ "tests/test_interfaces.py",
+ "tools/pytest_trials.py"
+]
