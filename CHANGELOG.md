@@ -4,7 +4,7 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
-## Unreleased
+## 0.11.0 — 2026-10-17 · idle hours on the research board
 
 - **research-board: idle hours cost the direction waiting on a result.** From a spend on a
   contract until its result says something, or the direction is halted, each hour with no research
@@ -14,7 +14,11 @@ change itself; an `evidence:` commit recording the suites' runs follows each.
   `research.yaml` sets both, and `per_hour: 0` turns it off. A spend keeps the terms in effect
   when it was made, so a later edit reprices nothing, and spends made before this version cost
   nothing idle. The board shows idle time on each direction, and a `next:` line while the clock
-  runs says when the next point goes. DEF-research-ledger restates the balance.
+  runs says when the next point goes.
+- **The theory.** DEF-research-ledger restates the balance, adding idle time. That left
+  BRN-research-results-follow-their-spend stale, and the file-blind verifier proved it again in
+  one round (TRL-0430..0432): idle hours are read from a spend's result, computed only from
+  records made after the spend, so nothing a direction shows rests on an earlier measurement.
 
 ## 0.10.0 — 2026-10-17 · a research board, one level below the goals
 
