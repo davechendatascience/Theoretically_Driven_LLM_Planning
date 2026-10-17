@@ -34,6 +34,7 @@ components:
   - {id: CMP-code-links, note: "tagged code regions, pinned to the code and the claims they realize"}
   - {id: CMP-graph-snapshot, note: "the design graph at one revision, drawn as one page"}
   - {id: CMP-lean-certificates, note: "Lean certificates from a Lean service, served to a node's verifier beside the statements"}
+  - {id: CMP-research-board, note: "research directions for a goal, the papers behind them, and what was spent testing them"}
 
 axioms:
   - id: AXM-axiomatic-grounding
@@ -284,6 +285,22 @@ axioms:
       person can follow back to where a root came from; it must never become a
       way to make a claim count. A reference to nothing, or a source nothing
       uses, is a citation that has come apart from what it cites.
+
+  - id: AXM-attribution-follows-commitment
+    domain: epistemic
+    goal: GOL-honest-evidence
+    statement: >-
+      A measurement counts for a line of research only when a commitment to
+      test that line by that measurement was recorded before the measurement
+      was. A measurement recorded earlier counts for no line of research,
+      whatever it shows.
+    rationale: >-
+      A result seen first and claimed afterwards is a hypothesis fitted to its
+      data: it reads as a prediction confirmed and predicted nothing. Recording
+      the commitment before the run is what a preregistration does, and it is
+      the one ordering a reader can check from the records alone. Work that
+      commits to no line of research may still run anything; its results count
+      for none.
 
 definitions:
   - id: DEF-proof-obligation
@@ -669,6 +686,31 @@ definitions:
       that the Lean statement says what the node's claim says, or that the
       statements are consistent: that is judged by the trials of the node,
       whatever the certificate.
+
+  - id: DEF-research-ledger
+    term: Research ledger
+    meaning: >-
+      The append-only records the research board keeps in .research/, a
+      directory that holds no declaration file and no part of the ledger
+      DEF-ledger names: directions, trails, spends and feedback, each stamped
+      with the time it was recorded. A spend is recorded on one direction and
+      targets a contract, a test and through it each contract that test can
+      measure, or neither; it records a commitment to test its direction by
+      each contract it targets. The result of a spend on a contract it targets
+      is the state DEF-contract-state gives that contract when its slices are
+      computed from the trial records in the evidence ledger recorded against
+      it after the spend was recorded, and from no other record; a spend that
+      targets no contract has no result. For each direction the board shows
+      the results of the spends recorded on that direction and no other
+      result. A direction's balance is the points earned by its trails that
+      were not rejected, less the costs of its spends, all read from the
+      research ledger. Where a component's code claims a file in .research/,
+      or a declared test names one on its run line or among what it reads, the
+      board records nothing. Otherwise recording to it appends one record to
+      the research ledger and rewrites one page in .research/, and changes
+      nothing else: it appends no record to the ledger DEF-ledger names, of
+      any provenance, changes no declaration, makes no commit and does not
+      move the head revision.
 
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
@@ -1400,6 +1442,54 @@ branches:
       policy clause is DEF-lean-certificate's. evidence: CTR-lean-certificates
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-research-results-follow-their-spend
+    subject: CMP-research-board
+    claim_type: contract
+    statement: >-
+      Every result the research board shows for a direction is computed only
+      from trial records recorded after a spend on that direction, targeting
+      the contract they were recorded against, was recorded; so none rests on
+      a measurement AXM-attribution-follows-commitment bars from counting for
+      that direction. Recording to the research board changes no measured
+      belief and no proof state.
+    premises: [AXM-attribution-follows-commitment, AXM-no-belief-write-path, DEF-research-ledger, DEF-belief-eligible, DEF-proof-state, DEF-premise-graph, DEF-current-trial, DEF-ledger]
+    derivation_rule: >-
+      Results: by DEF-research-ledger, for each direction the board shows the
+      results of the spends recorded on that direction and no other result;
+      the result of a spend on a contract it targets is computed from the
+      trial records recorded against that contract after the spend was
+      recorded, and from no other record; and a spend records a commitment to
+      test its direction by each contract it targets. So every record a result
+      shown for a direction rests on was recorded after a commitment to test
+      that direction by the contract it was recorded against had been
+      recorded, and AXM-attribution-follows-commitment, which bars a
+      measurement from counting for a line of research only when no such
+      commitment preceded it, bars none of them. Beliefs: by
+      DEF-research-ledger, recording appends no record to the ledger
+      DEF-ledger names, of any provenance, and changes no declaration; and
+      where a component's code claims a file in .research/ or a declared test
+      names one, it records nothing. Belief-eligible evidence, by
+      DEF-belief-eligible, is a trial record, measured or imported -- a record
+      in the ledger DEF-ledger names. Recording appends none, so by
+      AXM-no-belief-write-path, under which a measured belief changes only
+      through belief-eligible evidence, no measured belief moves. Proof
+      states: by DEF-proof-state a node's proof state is computed from its
+      place in the premise graph and, for it and each node it depends on, the
+      version the build admitted -- its declaration at the head revision, or,
+      for an id not declared there, its staged proposal -- and the trials
+      recorded on it, and from nothing else belief.yaml or the ledger says
+      about it. Recording changes no declaration, makes no commit, does not
+      move the head revision and appends no record to the ledger, so it
+      stages, restates or withdraws no proposal, and by DEF-premise-graph
+      neither the graph nor the version of a node it admits changes. By
+      DEF-current-trial whether a trial is current depends on its validity
+      after amendments, its target being in the premise graph, and what it
+      recorded of its target and of the premises its target cites; recording
+      appends no trial and no amendment and leaves the graph unchanged, so
+      which trials are current is unchanged. So no proof state changes.
+      evidence: CTR-research-board
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -1421,3 +1511,4 @@ policies:
       - {target: BRN-references-carry-no-weight, require: proven, evidence: supported}
       - {target: BRN-proven-rests-on-proven, require: proven, evidence: supported}
       - {target: BRN-lean-certificates-beside-the-statements, require: proven, evidence: supported}
+      - {target: BRN-research-results-follow-their-spend, require: proven, evidence: supported}

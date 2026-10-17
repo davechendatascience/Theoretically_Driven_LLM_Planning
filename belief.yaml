@@ -260,11 +260,12 @@ components:
       - src/component_belief/goals.py
 
   - id: CMP-plugin
-    purpose: Ship the four servers, the two workflow skills and the verifier as one Claude Code plugin any project can enable, at a pinned version
+    purpose: Ship the five servers, the three workflow skills, the verifier and the research scout as one Claude Code plugin any project can enable, at a pinned version
     testable_capability: >-
       Every server installs from the release tag of the plugin's own version and reads the
       project Claude Code reports; the verifier holds only consistency-belief tools its server
-      registers; every server resolves the same project root
+      registers; the research scout holds no tool that opens a file or runs a command and none
+      of the director's; every server resolves the same project root
     failure_modes:
       - {id: FM-wrong-root, observable: "a server enabled in one project reads another project's ledger, or an empty one",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_every_server_resolves_the_same_project"}
@@ -272,6 +273,8 @@ components:
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_every_server_installs_from_this_versions_tag"}
       - {id: FM-toolless-verifier, observable: "the verifier names a tool its server does not register",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_the_verifier_holds_only_tools_its_server_registers"}
+      - {id: FM-scout-reads-code, observable: "the research scout holds a tool that opens a source file or runs a command, or one of the director's",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_the_scout_holds_no_code_tool_and_no_director_tool"}
     remediation: component_belief.project.project_root; plugin/.mcp.json; plugin/agents/consistency-verifier.md
     goal: GOL-any-project
     code:
@@ -404,6 +407,40 @@ components:
     goal: GOL-sound-designs
     code:
       - src/consistency_belief/lean.py
+
+  - id: CMP-research-board
+    purpose: Keep the research directions for a goal -- the papers behind each, the tweak each suggests to a component, what was spent testing it, the results that followed, and the feedback between scouts and the director -- on one board a person can read
+    testable_capability: >-
+      Shows for a direction only results computed from evidence recorded after a spend on it;
+      earns a trail its points only for a paper new to its direction and a component belief.yaml
+      declares, and takes them back when the trail is rejected; refuses a spend on a direction
+      not approved, one short of its cost, and one with a settled result not yet reflected on;
+      takes its rules from research.yaml at HEAD; serves the ledgers and a run's captured output
+      and never a source file; and writes nothing outside .research/, and nothing at all where a
+      declaration names a file there
+    failure_modes:
+      - {id: FM-result-before-spend, observable: "a result recorded before a spend is shown for that spend's direction",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_result_recorded_before_the_spend_is_not_the_directions"}
+      - {id: FM-points-for-nothing, observable: "a trail earns points for a paper its direction already cites, or for a component belief.yaml does not declare",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_trail_earns_only_for_a_new_paper_on_a_declared_component"}
+      - {id: FM-rejection-ignored, observable: "a rejected trail's points still count toward its direction's balance",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_rejected_trail_loses_its_points"}
+      - {id: FM-spend-ungated, observable: "a spend is recorded on an unapproved direction, beyond the balance, or before a settled result is reflected on",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_needs_approval_balance_and_reflection"}
+      - {id: FM-worktree-rules, observable: "an uncommitted edit to research.yaml changes a cost, or goes unmentioned",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_rules_take_effect_from_head"}
+      - {id: FM-code-served, observable: "ledger() returns a file outside the ledgers and a run's captured output",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_ledger_serves_records_and_run_output_never_a_source_file"}
+      - {id: FM-feedback-lost, observable: "an approval, a rejection, a reflection or a question is missing from its direction's brief",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_feedback_reaches_the_next_scout"}
+      - {id: FM-writes-elsewhere, observable: "recording to the board changes a file outside .research/",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_recording_writes_only_inside_research"}
+      - {id: FM-board-is-evidence, observable: "the board records while a component's code or a declared test names a file in .research/",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_declaration_naming_research_files_stops_recording"}
+    remediation: research_board.board (rules, ledger, balances and results); research_board.page; the tools in research_board/server.py
+    goal: GOL-honest-evidence
+    code:
+      - src/research_board/
 
 interfaces:
   - id: IFC-declarations__model
@@ -590,6 +627,14 @@ contracts:
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-ifc-proofdag-views]
 
+  - id: CTR-research-board
+    subject: CMP-research-board
+    claim_type: capability
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-research-board]
+
 tests:
   - id: TST-declarations
     layer: component
@@ -729,6 +774,14 @@ tests:
     capture: [case]
     reads: [tests/conftest.py, uv.lock]
 
+  - id: TST-research-board
+    layer: component
+    targets: [CMP-research-board]
+    run: python tools/pytest_trials.py $OUT -- tests/test_research_board.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [tests/conftest.py, pyproject.toml, uv.lock]
+
 priors: []
 
 policies:
@@ -747,6 +800,7 @@ policies:
       - {slice: CTR-code-links-aligned, require: supported}
       - {slice: CTR-snapshot-shows-one-revision, require: supported}
       - {slice: CTR-lean-certificates, require: supported}
+      - {slice: CTR-research-board, require: supported}
       - {slice: CTR-ifc-declarations-model, require: supported}
       - {slice: CTR-ifc-model-diagnose, require: supported}
       - {slice: CTR-ifc-cdeclarations-proofdag, require: supported}
