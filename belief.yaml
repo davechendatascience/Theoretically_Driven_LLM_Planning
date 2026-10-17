@@ -411,7 +411,8 @@ components:
   - id: CMP-research-board
     purpose: Keep the research directions for a goal -- the papers behind each, the tweak each suggests to a component, what was spent testing it, the results that followed, and the feedback between scouts and the director -- on one board a person can read
     testable_capability: >-
-      Shows for a direction only results computed from evidence recorded after a spend on it;
+      Shows for a direction only results computed from measured evidence recorded after a spend on
+      it, against the contracts the spend named when it was made;
       earns a trail its points only for a paper new to its direction and a component belief.yaml
       declares, and takes them back when the trail is rejected; refuses a spend on a direction
       not approved, one short of its cost, and one with a settled result not yet reflected on;
@@ -421,6 +422,10 @@ components:
     failure_modes:
       - {id: FM-result-before-spend, observable: "a result recorded before a spend is shown for that spend's direction",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_result_recorded_before_the_spend_is_not_the_directions"}
+      - {id: FM-import-counted, observable: "an imported record, or one not measured by the server, enters a spend's result",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_only_records_the_server_measured_are_a_result"}
+      - {id: FM-targets-drift, observable: "a declaration made after a spend adds a contract to that spend's result",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_keeps_the_contracts_it_named"}
       - {id: FM-points-for-nothing, observable: "a trail earns points for a paper its direction already cites, or for a component belief.yaml does not declare",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_trail_earns_only_for_a_new_paper_on_a_declared_component"}
       - {id: FM-rejection-ignored, observable: "a rejected trail's points still count toward its direction's balance",
