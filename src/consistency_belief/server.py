@@ -9,8 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from component_belief.project import project_root as resolve_root
-from mcp.server.fastmcp import FastMCP
+from component_belief.project import ProjectServer, project_root as resolve_root
 
 from .decide import ADOPT, active_policy, evaluate_consistency_policy
 from .graph import ProofNode
@@ -127,7 +126,7 @@ that a source says what the node states. status(view="sources") lists them; a re
 declared source, and a source nothing references, are reported.
 """
 
-mcp = FastMCP("consistency-belief", instructions=INSTRUCTIONS)
+mcp = ProjectServer("consistency-belief", instructions=INSTRUCTIONS)
 
 
 _MEASUREMENT = re.compile(r"\b\d+(?:\.\d+)?\s*(?:%|mm|cm|m|ms|s|rad|deg|N|J|Hz|steps?|episodes?|/\s*\d+)\b")

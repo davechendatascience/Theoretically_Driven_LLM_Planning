@@ -2,7 +2,8 @@
 
 **Make your AI coding agent prove it.**
 
-TDLP is a Claude Code plugin that turns an agent's work into a verifiable engineering process. You
+TDLP is a Claude Code plugin, which also runs on [Codex and Antigravity](#use-it-with-codex-or-antigravity),
+that turns an agent's work into a verifiable engineering process. You
 set the goals. The agent designs, builds and tests on its own, and nothing it *says* counts: a
 result exists only once a tool has measured it, and a design holds only once it has survived
 attempts to refute it.
@@ -166,6 +167,62 @@ drafts a `goals.yaml` for you, and stops. You review it and commit it yourself. 
 
 Setup details, moving an older install, and running from source are in the
 [guide](docs/guide.md#quick-start).
+
+## Use it with Codex or Antigravity
+
+The plugin is Claude Code's format. Codex and Antigravity run the same five servers from their own
+MCP config, and the verifier and the research scout from their own agent files. All of these are in
+[`clients/`](clients/), pinned to the same release as the plugin. Fetch them once:
+
+```bash
+git clone https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning ~/tdlp
+```
+
+**Codex.** Add the servers and the two agents for every project:
+
+```bash
+cat ~/tdlp/clients/codex/config.toml >> ~/.codex/config.toml
+mkdir -p ~/.codex/agents && cp ~/tdlp/clients/codex/agents/*.toml ~/.codex/agents/
+```
+
+Start `codex` from your project; the servers read the directory Codex starts in. To keep this to
+one project, put both under that project's `.codex/` instead (Codex reads it once you trust the
+project). Codex passes a server only the variables its config names, plus `HOME`, `PATH` and a few
+other basics. If your tests need any other variable, forward it with
+`env_vars = ["NAME"]` in the `[mcp_servers.component-belief]` table.
+
+**Antigravity.** Copy the five entries under `mcpServers` in
+[`clients/antigravity/mcp_config.json`](clients/antigravity/mcp_config.json) into
+`~/.gemini/config/mcp_config.json`. Then add the two agents to your project:
+
+```bash
+mkdir -p .agents/agents && cp ~/tdlp/clients/antigravity/agents/*.md .agents/agents/
+```
+
+The servers ask Antigravity which workspace is open and read that one. The first start at a release
+builds the servers, which takes a minute or two, on either agent.
+
+**Then**, in each clone, install the goal guard and ask the agent to send the verifier or a scout by
+name, for example "have consistency-verifier verify the open obligations":
+
+```bash
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0" tdlp-guard install
+```
+
+What differs between the three:
+
+| | Claude Code | Codex | Antigravity |
+|---|---|---|---|
+| Servers, and the loop each one names in its instructions | plugin | `config.toml` | `mcp_config.json` |
+| Which project the servers read | the one Claude Code names | the directory Codex starts in | the workspace Antigravity names |
+| Workflow skills (`/tdlp:adopt-goals` and the rest) | yes | no | no |
+| Verifier and scout: tools taken away | all but their own few server tools | the shell | every file and command tool |
+| Verifier and scout: tdlp tools in reach | only their own | all; their prompt names their own | all; their prompt names their own |
+| How the goal guard knows an agent's commit | the `Co-Authored-By: Claude` trailer | the `Co-authored-by: Codex` trailer | `ANTIGRAVITY_AGENT=1` on the agent's commands; the guard adds the trailer |
+
+On Codex and Antigravity a subagent shares the session's MCP servers, so nothing stops the verifier
+from calling a tool outside its three except its prompt. What it can't do is read your code, and on
+Claude Code it holds nothing else.
 
 ---
 

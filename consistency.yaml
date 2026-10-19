@@ -439,8 +439,11 @@ definitions:
   - id: DEF-agent-commit
     term: Agent commit
     meaning: >-
-      A commit whose message carries the agent's trailer, Co-Authored-By:
-      Claude. Every other commit is the human's.
+      A commit whose message carries an agent's trailer: Co-Authored-By:
+      Claude, which Claude Code writes on its commits; Co-Authored-By: Codex,
+      which Codex writes on its; or Co-Authored-By: Antigravity, which the
+      guard writes on a commit made by a command an Antigravity agent ran,
+      Antigravity writing none of its own. Every other commit is the human's.
 
   - id: DEF-release
     term: Release

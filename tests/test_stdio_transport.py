@@ -31,11 +31,15 @@ TIMEOUT_S = 60
 class Client:
     """A minimal JSON-RPC client over the server's stdio."""
 
-    def __init__(self, cwd: Path, env_extra: dict[str, str] | None = None):
+    def __init__(self, cwd: Path, env_extra: dict[str, str] | None = None, roots: list[str] | None = None,
+                 env_drop: tuple[str, ...] = ()):
         import os
-        env = dict(os.environ)
+        env = {k: v for k, v in os.environ.items() if k not in env_drop}
         env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
         env.update(env_extra or {})
+        #: The workspace this client names when the server asks (roots/list), as Antigravity does;
+        #: None declares no roots at all, as Codex does.
+        self.roots = roots
         self.proc = subprocess.Popen(
             [sys.executable, "-u", "-m", "component_belief.server"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -43,7 +47,8 @@ class Client:
         )
         self._id = 0
         self._send({"jsonrpc": "2.0", "id": self._next(), "method": "initialize",
-                    "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                    "params": {"protocolVersion": "2024-11-05",
+                               "capabilities": {} if roots is None else {"roots": {"listChanged": True}},
                                "clientInfo": {"name": "test", "version": "1"}}})
         self._await(1)
         self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
@@ -66,6 +71,10 @@ class Client:
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
+            if msg.get("method") == "roots/list":
+                self._send({"jsonrpc": "2.0", "id": msg["id"],
+                            "result": {"roots": [{"uri": uri} for uri in self.roots or []]}})
+                continue
             if msg.get("id") == msg_id:
                 return msg
         raise AssertionError(f"no response to id={msg_id} within {TIMEOUT_S}s")
@@ -76,6 +85,10 @@ class Client:
                     "params": {"name": tool, "arguments": arguments}})
         result = self._await(msg_id)["result"]
         return "".join(part.get("text", "") for part in result.get("content", []))
+
+    def roots_changed(self, roots: list[str]) -> None:
+        self.roots = roots
+        self._send({"jsonrpc": "2.0", "method": "notifications/roots/list_changed"})
 
     def close(self) -> None:
         self.proc.kill()
@@ -147,3 +160,54 @@ def test_six_tools_over_stdio(client):
     assert sorted(t["name"] for t in tools) == [
         "amend", "decide", "ingest", "note", "run_test", "status",
     ]
+
+
+#: Every variable that could name the project to a server, removed so only the client's roots can.
+ROOT_VARS = ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT", "GRAPH_SNAPSHOT_ROOT",
+             "RESEARCH_BOARD_ROOT", "CLAUDE_PROJECT_DIR")
+
+
+@pytest.fixture
+def plugin_dir(tmp_path_factory) -> Path:
+    """Where Antigravity starts a plugin's server: the plugin's own folder, far from the project."""
+    return tmp_path_factory.mktemp("plugins") / "tdlp"
+
+
+def test_the_workspace_the_client_names_is_the_project(repo, plugin_dir, tmp_path_factory):
+    """Antigravity expands no ${...} and starts the server in the plugin's folder, but names the
+    open workspace when asked. The server reads that workspace, and the next one after the client
+    says its roots changed."""
+    plugin_dir.mkdir()
+    other = tmp_path_factory.mktemp("other")
+    from conftest import git
+    git(other, "init", "-q")
+    (other / "seed.txt").write_text("seed", encoding="utf-8")
+    git(other, "add", "-A")
+    git(other, "commit", "-q", "-m", "seed")
+
+    c = Client(plugin_dir, env_extra={"PLUGIN_ROOT": str(plugin_dir)}, roots=[repo.as_uri()], env_drop=ROOT_VARS)
+    try:
+        assert "CMP-grasp" in c.call("status", view="graph")
+        c.roots_changed([other.as_uri()])
+        assert "CMP-grasp" not in c.call("status", view="graph")
+    finally:
+        c.close()
+
+
+def test_a_server_in_its_plugins_folder_with_no_workspace_says_so(plugin_dir):
+    plugin_dir.mkdir()
+    c = Client(plugin_dir, env_extra={"PLUGIN_ROOT": str(plugin_dir)}, env_drop=ROOT_VARS)
+    try:
+        out = c.call("status", view="graph")
+        assert "no project" in out and "BELIEF_PROJECT_ROOT" in out, out
+    finally:
+        c.close()
+
+
+def test_codex_starts_the_server_in_the_project_and_names_nothing_else(repo):
+    """Codex declares no roots and expands nothing; the server's working directory is the project."""
+    c = Client(repo, env_extra={"TDLP_ISOLATED": "1"}, env_drop=ROOT_VARS)
+    try:
+        assert "CMP-grasp" in c.call("status", view="graph")
+    finally:
+        c.close()

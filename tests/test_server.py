@@ -232,6 +232,19 @@ class TestRunner:
         assert env["PATH"].split(os.pathsep) == ["/usr/bin"]
         assert "VIRTUAL_ENV" not in env
 
+    @pytest.mark.parametrize("mark", ["PLUGIN_ROOT", "TDLP_ISOLATED"])
+    def test_any_client_that_starts_it_from_uvx_says_so(self, repo, tmp_path_factory, monkeypatch, mark):
+        """Antigravity names a plugin's install in PLUGIN_ROOT; the configs this repository gives
+        Codex and Antigravity set TDLP_ISOLATED. Either drops the harness's python as Claude Code's
+        CLAUDE_PLUGIN_ROOT does."""
+        from component_belief.runner import project_environment
+
+        tool, own = self._tool_env(tmp_path_factory, monkeypatch)
+        env = project_environment(repo, {"PATH": os.pathsep.join([str(own), "/usr/bin"]),
+                                         "VIRTUAL_ENV": str(tool), mark: "1"})
+        assert env["PATH"].split(os.pathsep) == ["/usr/bin"]
+        assert "VIRTUAL_ENV" not in env
+
     def test_outside_a_plugin_the_servers_environment_is_left_alone(self, repo, tmp_path_factory, monkeypatch):
         from component_belief.runner import project_environment
 

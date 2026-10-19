@@ -18,12 +18,12 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-from mcp.server.fastmcp import Context as ToolContext, FastMCP
+from mcp.server.fastmcp import Context as ToolContext
 
 from .decide import ADOPT, ROLLBACK, active_policy, evaluate_policy
 from .declarations import GOALS_FILE
 from .goals import ratification_gap, view_goals
-from .project import project_root as resolve_root
+from .project import ProjectServer, project_root as resolve_root
 from .render import basis_line, bullet, envelope
 from .runner import _git_revision, _sha256, run_test as execute_test
 from .store import VALIDITY, Store
@@ -56,7 +56,7 @@ obtain through run_test or ingest; "insufficient" is an answer, report it as
 one; escalate to the human for decide(), never approve on their behalf.
 """
 
-mcp = FastMCP("component-belief", instructions=INSTRUCTIONS)
+mcp = ProjectServer("component-belief", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:

@@ -242,8 +242,9 @@ components:
   - id: CMP-goals
     purpose: Keep goals.yaml -- the goals, the interfaces between them and how each is measured -- the human's
     testable_capability: >-
-      Refuses an agent-trailered commit that changes goals.yaml or a file its tests name, and
-      passes the human's; records any agent commit to the goal set since the human's last; and
+      Refuses an agent's commit -- trailered by Claude Code or Codex, or made by an Antigravity
+      agent's command -- that changes goals.yaml or a file its tests name, and passes the human's;
+      writes the Antigravity trailer on that agent's other commits; records any agent commit to the goal set since the human's last; and
       withdraws the goals policy's standing approval while one exists
     failure_modes:
       - {id: FM-goal-set-leak, observable: "an agent commit changing a goal's test file is let through the guard",
@@ -252,6 +253,8 @@ components:
          observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_dropping_a_test_from_goals_yaml_does_not_free_its_file"}
       - {id: FM-stale-ratification, observable: "an adoption under the goals policy records without an approver after the agent changed the goal set",
          observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestRatification::test_an_agent_change_to_the_goal_set_withdraws_that"}
+      - {id: FM-other-agent-leak, observable: "a Codex commit, or one made by an Antigravity agent's command, changes the goal set through the guard",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_a_commit_from_an_antigravity_agents_command_is_refused"}
       - {id: FM-human-blocked, observable: "a commit the human types is refused",
          observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_the_same_commit_by_the_human_passes"}
     remediation: goals.goal_set, check_commit, goal_history and ratification_gap
@@ -260,12 +263,15 @@ components:
       - src/component_belief/goals.py
 
   - id: CMP-plugin
-    purpose: Ship the five servers, the three workflow skills, the verifier and the research scout as one Claude Code plugin any project can enable, at a pinned version
+    purpose: Ship the five servers, the three workflow skills, the verifier and the research scout as one Claude Code plugin any project can enable, at a pinned version, and the same servers, verifier and scout to Codex and Antigravity as their own MCP configs and agent files
     testable_capability: >-
-      Every server installs from the release tag of the plugin's own version and reads the
-      project Claude Code reports; the verifier holds only consistency-belief tools its server
-      registers; the research scout holds no tool that opens a file or runs a command and none
-      of the director's; every server resolves the same project root
+      Every server installs from the release tag of the plugin's own version, from each client's
+      config alike, and reads the project the client reports -- the one Claude Code names, the
+      directory Codex starts it in, the workspace Antigravity names over MCP roots -- and refuses
+      the plugin's own folder as a project; the verifier holds only consistency-belief tools its
+      server registers; the research scout holds no tool that opens a file or runs a command and
+      none of the director's; on Codex and Antigravity each is the Claude Code prompt and holds
+      no file or command tool; every server resolves the same project root
     failure_modes:
       - {id: FM-wrong-root, observable: "a server enabled in one project reads another project's ledger, or an empty one",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_every_server_resolves_the_same_project"}
@@ -275,10 +281,16 @@ components:
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_the_verifier_holds_only_tools_its_server_registers"}
       - {id: FM-scout-reads-code, observable: "the research scout holds a tool that opens a source file or runs a command, or one of the director's",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestManifest::test_the_scout_holds_no_code_tool_and_no_director_tool"}
-    remediation: component_belief.project.project_root; plugin/.mcp.json; plugin/agents/consistency-verifier.md
+      - {id: FM-plugin-folder-read, observable: "a server started in its plugin's folder, with no project named, reads that folder as the project",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestProjectRoot::test_the_plugins_own_folder_is_no_project"}
+      - {id: FM-client-drift, observable: "a Codex or Antigravity config or agent file differs from the plugin's servers or prompts",
+         observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestOtherClients::test_the_client_agents_are_written_from_the_claude_code_ones"}
+    remediation: component_belief.project.project_root and ProjectServer; plugin/.mcp.json; plugin/agents/; clients/ (python tools/client_agents.py)
     goal: GOL-any-project
     code:
       - plugin/
+      - clients/
+      - tools/client_agents.py
       - .claude-plugin/marketplace.json
       - src/component_belief/project.py
 

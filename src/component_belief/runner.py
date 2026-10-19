@@ -22,6 +22,9 @@ from .staleness import Snapshot, write_stamp
 from .store import Store, utc_now
 
 RESULT_FILENAME = "result.json"
+#: Any one of these in the server's environment says it runs from the harness's own isolated
+#: environment, whose interpreter is not the project's (see project_environment).
+ISOLATED_MARKS = ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "TDLP_ISOLATED")
 
 
 def _git_revision(root: Path) -> str:
@@ -84,19 +87,21 @@ def _same_dir(entry: str, directory: Path) -> bool:
 def project_environment(root: Path, env: dict[str, str]) -> dict[str, str]:
     """The environment a declared test runs in: the project's, not the harness's.
 
-    Installed as a plugin, the server runs from an isolated tool environment (`uvx`) whose
-    interpreter leads PATH, so `python` on a run line would be the harness's own -- no pytest and
-    none of the project's packages -- and every gate would fail for a reason that is not the
-    project's. Claude Code names a plugin server's install in CLAUDE_PLUGIN_ROOT; then, and only
-    then, the harness's interpreter directory is dropped from the test's PATH. Outside a plugin
-    the server runs from whatever environment its user chose, and that is left alone. Either way
-    a project `.venv`, if there is one, leads PATH, and the rest is as the client inherited it.
+    Installed as a plugin, or configured by hand to start with `uvx`, the server runs from an
+    isolated tool environment whose interpreter leads PATH, so `python` on a run line would be the
+    harness's own -- no pytest and none of the project's packages -- and every gate would fail for
+    a reason that is not the project's. The launch says so: Claude Code names a plugin server's
+    install in CLAUDE_PLUGIN_ROOT, an Agent Plugins client (Antigravity, Codex) in PLUGIN_ROOT, and
+    the configs this repository gives Codex and Antigravity set TDLP_ISOLATED; then, and only
+    then, the harness's interpreter directory is dropped from the test's PATH. Otherwise the
+    server runs from whatever environment its user chose, and that is left alone. Either way a
+    project `.venv`, if there is one, leads PATH, and the rest is as the client inherited it.
     """
     env = dict(env)
     path_key = next((k for k in env if k.upper() == "PATH"), "PATH")
     entries = [e for e in env.get(path_key, "").split(os.pathsep) if e]
     own = Path(sys.executable).parent
-    if env.get("CLAUDE_PLUGIN_ROOT") and not _inside(own, root):
+    if any(env.get(var) for var in ISOLATED_MARKS) and not _inside(own, root):
         entries = [e for e in entries if not _same_dir(e, own)]
         if env.get("VIRTUAL_ENV") and _same_dir(env["VIRTUAL_ENV"], own.parent):
             del env["VIRTUAL_ENV"]

@@ -11,11 +11,15 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import sys
 import tomllib
 from pathlib import Path
 
+import pytest
+import yaml
+
 from component_belief.goals import RELEASES
-from component_belief.project import project_root
+from component_belief.project import NoProject, project_root, set_client_roots
 
 REPO = Path(__file__).resolve().parents[1]
 PLUGIN = REPO / "plugin"
@@ -49,6 +53,41 @@ class TestProjectRoot:
         monkeypatch.setenv("BELIEF_PROJECT_ROOT", "${CLAUDE_PROJECT_DIR}")
         monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
         monkeypatch.chdir(tmp_path)
+        assert project_root("BELIEF_PROJECT_ROOT") == tmp_path.resolve()
+
+    def test_the_workspace_the_client_names_is_next(self, tmp_path, monkeypatch):
+        """Antigravity expands no variable and starts a plugin's server in the plugin's own folder,
+        but answers roots/list with the open workspace."""
+        monkeypatch.delenv("BELIEF_PROJECT_ROOT", raising=False)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(tmp_path)
+        workspace = tmp_path / "my project"
+        workspace.mkdir()
+        set_client_roots(["https://example.com/not-a-directory", workspace.as_uri()])
+        assert project_root("BELIEF_PROJECT_ROOT") == workspace.resolve()
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        assert project_root("BELIEF_PROJECT_ROOT") == tmp_path.resolve(), "a named directory comes first"
+
+    def test_where_the_client_starts_the_server_is_last(self, tmp_path, monkeypatch):
+        """Codex expands nothing and names no roots, but starts the server where it was started."""
+        monkeypatch.delenv("BELIEF_PROJECT_ROOT", raising=False)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        monkeypatch.chdir(tmp_path)
+        assert project_root("BELIEF_PROJECT_ROOT") == tmp_path.resolve()
+
+    @pytest.mark.parametrize("var", ["CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT"])
+    def test_the_plugins_own_folder_is_no_project(self, tmp_path, monkeypatch, var):
+        """Started in its install with nothing naming the project, a server says so; read as a
+        project, the plugin's folder would report an empty ledger as though nothing was measured."""
+        monkeypatch.delenv("BELIEF_PROJECT_ROOT", raising=False)
+        monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+        plugin = tmp_path / "plugins" / "tdlp"
+        plugin.mkdir(parents=True)
+        monkeypatch.setenv(var, str(plugin))
+        monkeypatch.chdir(plugin)
+        with pytest.raises(NoProject, match="BELIEF_PROJECT_ROOT"):
+            project_root("BELIEF_PROJECT_ROOT")
+        set_client_roots([tmp_path.as_uri()])
         assert project_root("BELIEF_PROJECT_ROOT") == tmp_path.resolve()
 
     def test_every_server_resolves_the_same_project(self, tmp_path, monkeypatch):
@@ -143,6 +182,71 @@ class TestManifest:
         for name in skills:
             front = (PLUGIN / "skills" / name / "SKILL.md").read_text(encoding="utf-8").split("---")[1]
             assert f"name: {name}" in front
+
+
+CLIENTS = REPO / "clients"
+CODEX = tomllib.loads((CLIENTS / "codex" / "config.toml").read_text(encoding="utf-8"))["mcp_servers"]
+ANTIGRAVITY = _json(CLIENTS / "antigravity" / "mcp_config.json")["mcpServers"]
+
+
+class TestOtherClients:
+    """Codex and Antigravity load the same servers from their own MCP configs, and the verifier and
+    the scout from their own agent files. The configs are copied into a user's setup by hand, so a
+    drift from the plugin's would fail in someone else's repository, quietly."""
+
+    @pytest.mark.parametrize("client", ["codex", "antigravity"])
+    def test_each_client_starts_the_plugins_servers_from_this_versions_tag(self, client):
+        servers = {"codex": CODEX, "antigravity": ANTIGRAVITY}[client]
+        assert set(servers) == set(SERVERS)
+        for name, server in servers.items():
+            assert server["command"] == SERVERS[name]["command"] == "uvx"
+            assert server["args"] == SERVERS[name]["args"], (client, name)
+
+    @pytest.mark.parametrize("client", ["codex", "antigravity"])
+    def test_each_client_names_no_project_and_marks_the_tool_environment(self, client):
+        """Neither client expands a variable, so a root variable could only name one fixed
+        directory; the project comes from where Codex starts the server, or from the workspace
+        Antigravity names. TDLP_ISOLATED tells the runner the server's python is not the project's."""
+        servers = {"codex": CODEX, "antigravity": ANTIGRAVITY}[client]
+        for name, server in servers.items():
+            env = server["env"]
+            assert not set(env) & set(ROOT_VARS), (client, name)
+            assert env["TDLP_ISOLATED"] == "1" and env["UV_LINK_MODE"] == "copy", (client, name)
+            plugin_env = {k: v for k, v in SERVERS[name]["env"].items() if k not in ROOT_VARS}
+            assert {k: v for k, v in env.items() if k != "TDLP_ISOLATED"} == plugin_env, (client, name)
+
+    def test_codex_waits_for_the_first_build(self):
+        """Codex gives a server 10 s to start by default; the first start at a release takes longer."""
+        for name, server in CODEX.items():
+            assert server["startup_timeout_sec"] >= 120, name
+
+    def test_the_client_agents_are_written_from_the_claude_code_ones(self):
+        sys.path.insert(0, str(REPO / "tools"))
+        try:
+            import client_agents
+        finally:
+            sys.path.pop(0)
+        files = client_agents.rendered()
+        assert {p.relative_to(CLIENTS).as_posix() for p in files} == {
+            f"{c}/agents/{n}.{ext}" for c, ext in (("codex", "toml"), ("antigravity", "md"))
+            for n in ("consistency-verifier", "research-scout")}
+        for path, text in files.items():
+            assert path.read_text(encoding="utf-8") == text, f"{path} -- run: python tools/client_agents.py"
+            body = (PLUGIN / "agents" / f"{path.stem}.md").read_text(encoding="utf-8").split("---\n", 2)[2]
+            assert body.lstrip("\n") in text, f"{path} is not the Claude Code prompt"
+
+    def test_on_antigravity_neither_agent_holds_a_file_tool(self):
+        for name, allowed in (("consistency-verifier", set()), ("research-scout", {"search_web", "read_url_content"})):
+            front = yaml.safe_load((CLIENTS / "antigravity" / "agents" / f"{name}.md")
+                                   .read_text(encoding="utf-8").split("---\n")[1])
+            assert front["name"] == name and set(front["tools"]) == allowed
+            assert front["inheritMcp"] is True, "the session's servers, not a second process on the ledger"
+
+    def test_on_codex_neither_agent_holds_the_shell(self):
+        for name in ("consistency-verifier", "research-scout"):
+            agent = tomllib.loads((CLIENTS / "codex" / "agents" / f"{name}.toml").read_text(encoding="utf-8"))
+            assert agent["name"] == name and agent["developer_instructions"].strip()
+            assert agent["features"]["shell_tool"] is False and agent["features"]["unified_exec"] is False
 
 
 def test_this_project_gives_the_servers_time_to_build_after_an_update():

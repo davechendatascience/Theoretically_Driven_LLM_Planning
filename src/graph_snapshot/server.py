@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from component_belief.project import project_root as resolve_root
-from mcp.server.fastmcp import FastMCP
+from component_belief.project import ProjectServer, project_root as resolve_root
 
 from . import take_snapshot
 
@@ -28,7 +27,7 @@ Open the page in a browser. To share it, publish that file as an Artifact only w
 asks -- it carries their design.
 """
 
-mcp = FastMCP("graph-snapshot", instructions=INSTRUCTIONS)
+mcp = ProjectServer("graph-snapshot", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:

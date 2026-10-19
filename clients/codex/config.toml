@@ -1,0 +1,40 @@
+# The five TDLP servers for Codex. Copy these tables into ~/.codex/config.toml (every project)
+# or into a trusted project's .codex/config.toml. Codex starts each server in the directory you
+# start Codex in, and that is the project the servers read.
+#
+# startup_timeout_sec: the first start at a new release clones, builds and installs (a minute or
+# two); later starts come from uv's cache. tool_timeout_sec: run_test runs your declared tests
+# and waits for them. TDLP_ISOLATED: the servers run from uvx's environment, not your project's,
+# so a test they run gets your project's python, not theirs.
+
+[mcp_servers.component-belief]
+command = "uvx"
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0", "component-belief-mcp"]
+env = { BELIEF_ACTOR = "agent", UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
+startup_timeout_sec = 300
+tool_timeout_sec = 3600
+
+[mcp_servers.consistency-belief]
+command = "uvx"
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0", "consistency-belief-mcp"]
+env = { CONSISTENCY_ACTOR = "agent", UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
+startup_timeout_sec = 300
+tool_timeout_sec = 3600
+
+[mcp_servers.stamp-monitor]
+command = "uvx"
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0", "stamp-monitor-mcp"]
+env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
+startup_timeout_sec = 300
+
+[mcp_servers.graph-snapshot]
+command = "uvx"
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0", "graph-snapshot-mcp"]
+env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
+startup_timeout_sec = 300
+
+[mcp_servers.research-board]
+command = "uvx"
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.11.0", "research-board-mcp"]
+env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
+startup_timeout_sec = 300

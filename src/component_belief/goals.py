@@ -9,26 +9,34 @@ What holds that line is aimed at drift -- an agent that, stuck, relaxes a measur
 reports progress -- not at an agent working around you on purpose, which only credentials it does
 not hold can stop:
 
-  - the guard: a git commit-msg hook that refuses a commit carrying the agent's trailer
-    (Co-Authored-By: Claude) when it changes the goal set, goals.yaml and every file its tests
-    name. You commit goal changes yourself; the agent drafts them and leaves a note on the goal.
+  - the guard: a git commit-msg hook that refuses the agent's commit when it changes the goal
+    set, goals.yaml and every file its tests name. A commit is the agent's when it carries the
+    trailer the agent's client writes: Co-Authored-By: Claude from Claude Code, Co-authored-by:
+    Codex from Codex. Antigravity writes none, but every command its agent runs carries
+    ANTIGRAVITY_AGENT=1; the guard refuses such a commit to the goal set and writes
+    Co-Authored-By: Antigravity on any other. You commit goal changes yourself; the agent drafts
+    them and leaves a note on the goal.
   - the record: every agent commit to the goal set since your last one, shown in the goals view
     and by stamp-monitor's workflow. Your next commit to the goal set takes them in.
   - the decision rule: an adoption under a policy in goals.yaml needs no approver, because you
     approved its criteria by committing them -- unless the agent has changed the goal set since.
 
-The trailer is a convention the agent keeps, not a credential; a commit you type yourself carries
-none, so it passes.
+The trailer and the variable are conventions the agent's client keeps, not credentials; a commit you
+type in your own terminal carries neither, so it passes. The record reads trailers only, since a
+past commit says nothing of the environment it was made in -- which is why the guard writes
+Antigravity's.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import shlex
 import stat
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +51,15 @@ from .staleness import named_paths
 
 #: Where released versions of this harness install from; a release is tagged tdlp--v<version>.
 RELEASES = "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning"
-AGENT_MARK = re.compile(r"(?im)^co-authored-by:\s*claude\b")
+#: The trailer each agent's client writes on the commits it makes: Claude Code's, then Codex's.
+#: The trailer each agent's client writes on the commits it makes -- Claude Code's, Codex's -- and
+#: the one the guard writes for Antigravity, which writes none.
+AGENT_MARK = re.compile(r"(?im)^co-authored-by:\s*(claude|codex|antigravity)\b")
+#: Set in the environment of every command an agent runs, by a client that writes no trailer:
+#: Antigravity's. The commit-msg hook inherits it from the `git commit` the agent ran.
+AGENT_ENV = {"ANTIGRAVITY_AGENT": "1"}
+#: What the guard writes on a commit made inside an agent's command, so the record can read it.
+GUARD_TRAILER = "Co-Authored-By: Antigravity"
 GUARD_MARK = "# tdlp goal guard"
 #: The release a hook `tdlp-guard install` wrote runs, read back from the hook itself.
 _PINNED = re.compile(r"@tdlp--v([0-9][\w.+-]*)")
@@ -65,6 +81,12 @@ def _split0(text: str | None) -> list[str]:
 
 def is_agent_commit(message: str) -> bool:
     return bool(AGENT_MARK.search(message or ""))
+
+
+def in_agent_command(env: Mapping[str, str] | None = None) -> bool:
+    """Whether this process runs inside a command an agent ran, by its client's mark."""
+    env = os.environ if env is None else env
+    return any(env.get(name) == value for name, value in AGENT_ENV.items())
 
 
 # ---------- the goal set ----------
@@ -151,13 +173,15 @@ def _staged(root: Path) -> list[str]:
     return _split0(_git(root, "diff", "--cached", "--name-only", "--no-renames", "-z", base))
 
 
-def check_commit(root: Path, message: str) -> list[str]:
+def check_commit(root: Path, message: str, env: Mapping[str, str] | None = None) -> list[str]:
     """The goal-set paths this commit would change if the agent is making it; [] lets it through.
 
-    Read from the index being committed (git points GIT_INDEX_FILE at it for `commit -a`), and
-    against goals.yaml both as staged and at HEAD, so removing a test from goals.yaml does not
-    free the file it named in the same commit."""
-    if not is_agent_commit(message):
+    The agent is making it when its message carries an agent's trailer or when it runs inside a
+    command an agent ran (`env`, the hook's environment by default). Read from the index being
+    committed (git points GIT_INDEX_FILE at it for `commit -a`), and against goals.yaml both as
+    staged and at HEAD, so removing a test from goals.yaml does not free the file it named in
+    the same commit."""
+    if not (is_agent_commit(message) or in_agent_command(env)):
         return []
     protected = goal_set(root, _git(root, "show", f":{GOALS_FILE}"), _git(root, "show", f"HEAD:{GOALS_FILE}"))
     return sorted(set(_staged(root)) & protected)
@@ -232,12 +256,14 @@ def install(root: Path, command: str | None = None, force: bool = False) -> Path
 
 def _refusal(paths: list[str]) -> str:
     return (
-        "tdlp guard: refused. This commit carries the agent's trailer (Co-Authored-By: Claude) and "
-        f"changes your goal set: {', '.join(paths)}.\n"
+        "tdlp guard: refused. This commit is the agent's -- it carries an agent's trailer "
+        "(Co-Authored-By: Claude or Codex) or was made from an Antigravity agent's command "
+        f"(ANTIGRAVITY_AGENT=1) -- and changes your goal set: {', '.join(paths)}.\n"
         "Goals, their measures and the tests those run are committed by the human.\n"
         "  agent: unstage them (git restore --staged <paths>), commit the rest, and leave the proposal\n"
         "         as note(subject=\"GOL-...\", text=...) on the goal it concerns.\n"
-        "  human: commit these paths yourself; a commit you type carries no trailer.")
+        "  human: commit these paths yourself, from your own terminal; a commit you type there\n"
+        "         carries no trailer and no agent's environment.")
 
 
 def guard_main(argv: list[str] | None = None) -> int:
@@ -260,6 +286,8 @@ def guard_main(argv: list[str] | None = None) -> int:
         if paths:
             print(_refusal(paths), file=sys.stderr)
             return 1
+        if in_agent_command() and not is_agent_commit(message):
+            _git(root, "interpret-trailers", "--in-place", "--trailer", GUARD_TRAILER, args.message_file)
         return 0
     try:
         hook = install(root, args.command, args.force)

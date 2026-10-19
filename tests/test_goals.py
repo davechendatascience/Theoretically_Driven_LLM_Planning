@@ -1,9 +1,11 @@
 """The goal set is the human's: the guard refuses the agent's commits to it, the history records
 any that got through, and an adoption rests on the human's commit only while there are none.
 
-The trailer (Co-Authored-By: Claude) is the agent's mark on a commit. It is a convention the agent
-keeps, not a credential, so what is asserted here is protection against drift -- an agent that
-relaxes a measure while sincerely reporting progress -- and that a commit the human types passes.
+The agent's mark on a commit is the trailer its client writes (Co-Authored-By: Claude from Claude
+Code, Co-authored-by: Codex from Codex), or, from Antigravity, which writes none, ANTIGRAVITY_AGENT=1
+in the environment of the command that commits. Each is a convention the client keeps, not a
+credential, so what is asserted here is protection against drift -- an agent that relaxes a measure
+while sincerely reporting progress -- and that a commit the human types passes.
 """
 
 from __future__ import annotations
@@ -38,6 +40,21 @@ class TestCheck:
         (goals_repo / "eval" / "pick.py").write_text("# stricter\n", encoding="utf-8")
         git(goals_repo, "add", "-A")
         assert check_commit(goals_repo, "tighten the pick check") == []
+
+    def test_a_codex_commit_to_the_goal_set_is_refused(self, goals_repo):
+        (goals_repo / "eval" / "pick.py").write_text("# always pass\n", encoding="utf-8")
+        git(goals_repo, "add", "-A")
+        message = "loosen the pick check\n\nCo-authored-by: Codex <noreply@openai.com>"
+        assert check_commit(goals_repo, message) == ["eval/pick.py"]
+
+    def test_a_commit_from_an_antigravity_agents_command_is_refused(self, goals_repo):
+        """Antigravity writes no trailer; the command its agent runs carries ANTIGRAVITY_AGENT=1,
+        and git hands the hook that environment."""
+        (goals_repo / "eval" / "pick.py").write_text("# always pass\n", encoding="utf-8")
+        git(goals_repo, "add", "-A")
+        assert check_commit(goals_repo, "loosen the pick check", {"ANTIGRAVITY_AGENT": "1"}) == ["eval/pick.py"]
+        assert check_commit(goals_repo, "loosen the pick check", {"ANTIGRAVITY_AGENT": "0"}) == []
+        assert check_commit(goals_repo, "loosen the pick check", {}) == []
 
     def test_an_agent_commit_below_the_goals_passes(self, goals_repo):
         (goals_repo / "grasp.py").write_text("# v2\n", encoding="utf-8")
@@ -82,6 +99,27 @@ class TestHook:
 
         mine = git(guarded, "commit", "-am", "I loosened it myself")
         assert mine.returncode == 0, mine.stderr
+
+    def test_a_real_commit_from_an_antigravity_agents_command_is_refused(self, guarded, monkeypatch):
+        (guarded / "eval" / "pick.py").write_text("# always pass\n", encoding="utf-8")
+        monkeypatch.setenv("ANTIGRAVITY_AGENT", "1")
+        refused = git(guarded, "commit", "-am", "loosen the pick check")
+        assert refused.returncode != 0 and "Antigravity" in refused.stderr and "eval/pick.py" in refused.stderr
+        monkeypatch.delenv("ANTIGRAVITY_AGENT")
+        assert git(guarded, "commit", "-am", "I loosened it myself").returncode == 0
+
+    def test_an_antigravity_agents_other_commits_carry_the_mark_the_record_reads(self, guarded, monkeypatch):
+        """Antigravity writes no trailer, and a past commit keeps no environment: the guard writes
+        the trailer, so a later read of the history knows the commit was the agent's."""
+        (guarded / "grasp.py").write_text("# v2\n", encoding="utf-8")
+        monkeypatch.setenv("ANTIGRAVITY_AGENT", "1")
+        assert git(guarded, "commit", "-qam", "retune the grasp").returncode == 0
+        message = git(guarded, "log", "-1", "--format=%B").stdout
+        assert message.startswith("retune the grasp") and "Co-Authored-By: Antigravity" in message
+        monkeypatch.delenv("ANTIGRAVITY_AGENT")
+        (guarded / "grasp.py").write_text("# v3\n", encoding="utf-8")
+        assert git(guarded, "commit", "-qam", "mine").returncode == 0
+        assert "Antigravity" not in git(guarded, "log", "-1", "--format=%B").stdout
 
     def test_it_is_reported_as_installed(self, guarded):
         assert guard_installed(guarded)
@@ -128,6 +166,18 @@ class TestHistory:
         git(goals_repo, "commit", "-q", "-am", "reviewed the pick change")
         changes, yours = goal_history(goals_repo)
         assert changes == [] and yours["subject"] == "reviewed the pick change"
+
+    def test_a_codex_commit_that_got_through_is_recorded(self, goals_repo):
+        (goals_repo / "eval" / "pick.py").write_text("# always pass\n", encoding="utf-8")
+        git(goals_repo, "commit", "-q", "--no-verify", "-am",
+            "loosen the pick check\n\nCo-authored-by: Codex <noreply@openai.com>")
+        assert [c["files"] for c in goal_history(goals_repo)[0]] == [["eval/pick.py"]]
+
+    def test_the_record_does_not_read_todays_environment_into_past_commits(self, goals_repo, monkeypatch):
+        """Your own commits stay yours when the record is read from inside an agent's command."""
+        monkeypatch.setenv("ANTIGRAVITY_AGENT", "1")
+        changes, yours = goal_history(goals_repo)
+        assert changes == [] and yours["subject"] == "my goals"
 
     def test_agent_commits_below_the_goals_are_not_in_it(self, goals_repo):
         commit_as_agent(goals_repo, "grasp.py", "# v2\n")

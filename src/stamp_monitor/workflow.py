@@ -33,7 +33,7 @@ ADVERSE = {"evidence": {"fail"}, "design": {"falsified", "gap"}}
 #: Below this many reclassifications a one-sided pattern is reported, not flagged.
 ASYMMETRY_MIN = 3
 #: Actor names that are the agent, not a human able to approve.
-AGENT_ACTORS = {"agent", "claude", "assistant", "llm", ""}
+AGENT_ACTORS = {"agent", "claude", "codex", "antigravity", "gemini", "assistant", "llm", ""}
 
 
 def _read(path: Path) -> list[dict[str, Any]]:

@@ -10,8 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from component_belief.project import project_root as resolve_root
-from mcp.server.fastmcp import FastMCP
+from component_belief.project import ProjectServer, project_root as resolve_root
 
 from . import board as B
 from . import play, reading
@@ -42,7 +41,7 @@ The loop: board() -> scouts (add_trail) -> approve -> spend -> run_test -> board
 Commit .research/ with your work; research.yaml is yours to change, and the board names the commit.
 """
 
-mcp = FastMCP("research-board", instructions=INSTRUCTIONS)
+mcp = ProjectServer("research-board", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:

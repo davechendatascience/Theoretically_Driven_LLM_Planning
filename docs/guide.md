@@ -862,6 +862,7 @@ src/
     links.py                         tagged code regions against their claims
     server.py / cli.py               MCP server; the same reports from a shell
 tools/pytest_trials.py               pytest → trials adapter
+tools/client_agents.py               writes clients/*/agents/ from plugin/agents/ (--check: are they current)
 tests/                               the suites belief.yaml declares as tests
 .claude-plugin/marketplace.json      this repository as the `davechendatascience-marketplace`, listing `tdlp`
 plugin/                              the `tdlp` Claude Code plugin
@@ -873,10 +874,16 @@ plugin/                              the `tdlp` Claude Code plugin
   skills/consistency-belief/SKILL.md the deductive loop, six rules, when to delegate, reviewing what a branch cites, linking code
   skills/adopt-goals/SKILL.md        setting up goals.yaml in a project that already uses TDLP
   skills/research/SKILL.md           the research loop: scouts, approve, spend, reflect
+clients/                             the same servers, verifier and scout for other agents
+  codex/config.toml                  the five servers as Codex [mcp_servers] tables
+  codex/agents/*.toml                verifier and scout as Codex agents, shell and command tools off
+  antigravity/mcp_config.json        the five servers for Antigravity
+  antigravity/agents/*.md            verifier and scout as Antigravity agents, no file or command tool
 ```
 
 A release: bump `version` in `pyproject.toml`, `__version__` in `src/component_belief/__init__.py`, `plugin/.claude-plugin/plugin.json`, the marketplace
-entry and the tag in `plugin/.mcp.json` together (`TST-plugin` fails if any disagree), commit, then
+entry and the tag in `plugin/.mcp.json`, `clients/codex/config.toml` and `clients/antigravity/mcp_config.json`
+together (`TST-plugin` fails if any disagree), commit, then
 `claude plugin tag plugin --push`.
 
 ### Tests

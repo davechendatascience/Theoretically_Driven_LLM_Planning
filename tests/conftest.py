@@ -145,11 +145,18 @@ def git(root: Path, *args: str) -> subprocess.CompletedProcess:
 
 @pytest.fixture(autouse=True)
 def _not_inside_a_plugin(monkeypatch):
-    """A suite launched through the tdlp plugin inherits CLAUDE_PLUGIN_ROOT, which tells the runner
+    """A suite launched through the tdlp plugin, or by a server configured for Codex or
+    Antigravity, inherits CLAUDE_PLUGIN_ROOT, PLUGIN_ROOT or TDLP_ISOLATED, which tells the runner
     to drop the server's own interpreter from a test's PATH. A test that runs a declared command
-    would then find whatever other `python` the machine has, or none. Each test builds the
-    environment it means to test; tests of the plugin case set the variable themselves."""
-    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    would then find whatever other `python` the machine has, or none. One run from an Antigravity
+    agent's command inherits ANTIGRAVITY_AGENT, which makes every commit the agent's. And a server
+    keeps the workspace its client named. Each test builds the environment it means to test; tests
+    of those cases set the variables themselves."""
+    from component_belief import project
+
+    for var in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "TDLP_ISOLATED", "ANTIGRAVITY_AGENT"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setattr(project, "_client_roots", [])
 
 
 @pytest.fixture

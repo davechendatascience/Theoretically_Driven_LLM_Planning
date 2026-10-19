@@ -4,6 +4,34 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## Unreleased · Codex and Antigravity
+
+- **The servers run on Codex and Antigravity.** `clients/codex/config.toml` and
+  `clients/antigravity/mcp_config.json` start the same five servers from the same release tag as
+  the plugin. The README says how to install them.
+- **The verifier and the research scout come along.** `clients/*/agents/` holds both, written
+  from `plugin/agents/` by `tools/client_agents.py`: the same prompt, behind a preamble naming the
+  tools the original holds. On Antigravity neither holds a file or command tool, which was checked
+  against a live subagent. On Codex the shell and command tools are off. Both share the session's
+  MCP servers, so on those two clients the prompt alone keeps the verifier to its three tools.
+- **A server finds the project however its client launches it.** Antigravity expands no
+  `${...}` and starts a plugin's server in the plugin's own folder, so the servers now ask a
+  client that supports MCP roots which workspace it has open, and ask again when it says that
+  changed. A server started in its plugin's folder with no project named now refuses with an
+  error, where before it read that folder as an empty project. Codex starts servers in the
+  directory it was started in, which is still the fallback.
+- **The runner drops the harness's python on any client.** A declared test ran with uvx's
+  interpreter first on `PATH` unless Claude Code had set `CLAUDE_PLUGIN_ROOT`. `PLUGIN_ROOT`
+  (Antigravity) and `TDLP_ISOLATED`, which the new configs set, now count too.
+- **The goal guard knows Codex's and Antigravity's commits.** It refuses a goal-set commit
+  carrying `Co-authored-by: Codex`, and one made by an Antigravity agent's command
+  (`ANTIGRAVITY_AGENT=1`, since Antigravity writes no trailer). On that agent's other commits it
+  writes `Co-Authored-By: Antigravity`, so the record of agent commits can read them.
+- **The theory.** DEF-agent-commit restates which commits are an agent's. That sets aside
+  BRN-goal-guard's trials until it is verified again.
+- **Goals (draft for the human).** `GOL-cross-coding-agents`, measured by
+  `acceptance/test_cross_coding_agents.py`.
+
 ## 0.11.0 — 2026-10-17 · idle hours on the research board
 
 - **research-board: idle hours cost the direction waiting on a result.** From a spend on a

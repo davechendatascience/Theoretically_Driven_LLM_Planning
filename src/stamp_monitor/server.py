@@ -12,8 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from component_belief.project import project_root as resolve_root
-from mcp.server.fastmcp import FastMCP
+from component_belief.project import ProjectServer, project_root as resolve_root
 
 from . import render_findings
 from .audit import audit as run_audit
@@ -39,7 +38,7 @@ workflow before asking for a decision. A [block] finding is for the human, not f
 by amending evidence.
 """
 
-mcp = FastMCP("stamp-monitor", instructions=INSTRUCTIONS)
+mcp = ProjectServer("stamp-monitor", instructions=INSTRUCTIONS)
 
 
 def project_root() -> Path:
