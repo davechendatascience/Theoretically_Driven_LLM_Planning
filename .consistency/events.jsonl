@@ -600,3 +600,7 @@
 {"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0431"}, "session": "", "timestamp": "2026-10-17T13:09:13+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0432"}, "session": "", "timestamp": "2026-10-17T13:09:13+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"subject": "BRN-research-results-follow-their-spend"}, "session": "", "timestamp": "2026-10-17T13:09:22+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "counterexample", "target_id": "BRN-goal-guard", "trial_id": "TRL-0433"}, "session": "", "timestamp": "2026-10-19T02:06:15+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-goal-guard", "trial_id": "TRL-0434"}, "session": "", "timestamp": "2026-10-19T02:06:15+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-goal-guard", "trial_id": "TRL-0435"}, "session": "", "timestamp": "2026-10-19T02:06:15+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"subject": "BRN-goal-guard"}, "session": "", "timestamp": "2026-10-19T02:06:19+00:00", "tool": "note"}
