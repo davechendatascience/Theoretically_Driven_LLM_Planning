@@ -1,0 +1,220 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_servers_own_variable_wins"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_project_claude_code_reports_is_next"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_an_unexpanded_placeholder_names_no_directory"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_workspace_the_client_names_is_next"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_where_the_client_starts_the_server_is_last"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_plugins_own_folder_is_no_project[CLAUDE_PLUGIN_ROOT]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_the_plugins_own_folder_is_no_project[PLUGIN_ROOT]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestProjectRoot::test_every_server_resolves_the_same_project"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_one_version_everywhere"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_installs_from_this_versions_tag"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_reads_the_project_claude_code_reports"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_server_installs_by_copying"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_the_verifier_holds_only_tools_its_server_registers"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_the_scout_holds_no_code_tool_and_no_director_tool"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestManifest::test_every_skill_is_where_the_plugin_loads_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_each_client_starts_the_plugins_servers_from_this_versions_tag[codex]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_each_client_starts_the_plugins_servers_from_this_versions_tag[antigravity]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_each_client_names_no_project_and_marks_the_tool_environment[codex]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_each_client_names_no_project_and_marks_the_tool_environment[antigravity]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_codex_waits_for_the_first_build"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_the_client_agents_are_written_from_the_claude_code_ones"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_on_antigravity_neither_agent_holds_a_file_tool"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin.TestOtherClients::test_on_codex_neither_agent_holds_the_shell"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_plugin::test_this_project_gives_the_servers_time_to_build_after_an_update"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

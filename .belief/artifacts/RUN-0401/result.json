@@ -1,0 +1,31 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestModelToDiagnosis::test_every_slice_carries_its_conditions"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestModelToDiagnosis::test_an_insufficient_slice_is_no_verdict_downstream"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestModelToDiagnosis::test_a_stale_slice_is_no_verdict_and_names_its_change"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
