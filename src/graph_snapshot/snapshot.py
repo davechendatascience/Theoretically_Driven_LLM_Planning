@@ -125,7 +125,7 @@ def take(root: Path) -> dict[str, Any]:
     for cid, comp in components.components.items():
         coverage = ("governed" if declared(cid) else "undeclared design") if comp.implemented else (
             "planned" if governs.get(cid) else "declared only")
-        add(cid, "component", text=comp.purpose, capability=comp.testable_capability, goal=comp.goal,
+        add(cid, "component", text=comp.purpose, capability=comp.testable_capability, goal=comp.goals,
             code=list(comp.code), coverage=coverage, inputs=list(comp.inputs), outputs=list(comp.outputs),
             measured_by=[k.id for k in components.contracts_for_subject(cid)])
     for iid, iface in components.interfaces.items():

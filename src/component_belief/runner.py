@@ -159,8 +159,11 @@ def run_test(
     conditions: dict[str, Any] | None = None,
     repro: dict[str, Any] | None = None,
     actor: str = "agent",
+    reserved: tuple[str, Path] | None = None,
 ) -> dict[str, Any]:
-    run_id, artifact_dir = store.reserve_run_id()
+    """Run one declared test and record its trials. `reserved` is a run id and artifact directory
+    already taken for it -- a background run's, reserved when it was started (jobs.start)."""
+    run_id, artifact_dir = reserved or store.reserve_run_id()
     out_path = artifact_dir / RESULT_FILENAME
 
     env = project_environment(root, dict(os.environ))

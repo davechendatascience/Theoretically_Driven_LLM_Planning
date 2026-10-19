@@ -49,7 +49,9 @@ Declarations (components, interfaces, contracts, tests, priors, policies) live
 in a checked-in belief.yaml and load from git HEAD, not the working tree —
 editing that file changes nothing until a human commits it.
 
-The loop: status(view="diagnose") -> run_test(...) -> status(view="belief").
+The loop: status(view="diagnose") -> run_test(...) -> status(view="belief"). A run longer than
+the client waits on a call goes in the background: run_test(..., wait=False), then
+status(view="runs").
 
 Four rules: diagnose before optimising; never report a result you did not
 obtain through run_test or ingest; "insufficient" is an answer, report it as
@@ -91,12 +93,17 @@ def status(
       trace     - expand a `set=` citation handle into its exact evidence records
       goals     - the human's goals.yaml: each goal and interface met or not, the agent's proposals
                   on them, and any agent commit to the goal set since the human's last
+      runs      - the tests started in the background (run_test(..., wait=False)): running,
+                  recorded, or lost when their process ended without recording
 
     subject: a component or contract id to narrow to (or a RUN- id for diagnose).
     set:     the citation handle from a `basis:` line, for view="trace".
     budget:  cost ceiling for view="plan".
     """
     root = project_root()
+    if view == "runs":
+        from .jobs import view_runs
+        return view_runs(root)
     ctx = Context.build(root)
     if view not in VIEWS:
         return f"unknown view {view!r}; expected one of {', '.join(VIEWS)}"
@@ -125,6 +132,7 @@ def run_test(
     test_id: str,
     conditions: dict[str, Any] | None = None,
     repro: dict[str, Any] | None = None,
+    wait: bool = True,
 ) -> str:
     """Run a declared test and record its trials as measured evidence.
 
@@ -147,6 +155,13 @@ def run_test(
         return f"unknown test {test_id!r}. Declared tests: {known}"
     if not test.run:
         return f"{test_id} has no run command"
+    if not wait:
+        from .jobs import start
+        run_id, pid = start(root, test.id, test.ref, conditions, repro, _actor())
+        return (f"{run_id} {test.ref} started in the background (pid {pid}); it runs to its timeout "
+                f"({test.timeout_s} s) and records its trials when it ends, as a waited run would, and "
+                "they count from then -- for a spend too. status(view=\"runs\") shows it until then; "
+                "keep researching meanwhile.")
 
     result = execute_test(root, ctx.store, ctx.decl, test, conditions, repro, actor=_actor())
 
@@ -204,6 +219,7 @@ async def run_test_tool(
     test_id: str,
     conditions: dict[str, Any] | None = None,
     repro: dict[str, Any] | None = None,
+    wait: bool = True,
     ctx: ToolContext | None = None,
 ) -> str:
     """Run a declared test and record its trials as measured evidence.
@@ -219,7 +235,12 @@ async def run_test_tool(
 
     conditions: captured metadata for bucketing, e.g. {"lighting": "low"}.
     repro:      reproducibility fields, e.g. {"model_revision": "v3", "seed": 7}.
+    wait:       False starts the test in a process of its own and answers at once, with its RUN- id:
+                for a run longer than the client waits on a call (a training run, an hour's eval).
+                It records its trials when it ends; status(view="runs") shows it until then.
     """
+    if not wait:
+        return run_test(test_id, conditions, repro, wait=False)
     return await _with_heartbeat(ctx, test_id, lambda: _in_slot(lambda: run_test(test_id, conditions, repro)))
 
 

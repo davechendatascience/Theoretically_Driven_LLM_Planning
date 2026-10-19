@@ -17,7 +17,7 @@ from component_belief.store import Store
 from conftest import git
 from research_board import board as B
 from research_board import play, reading
-from research_board.page import render_board, render_brief
+from research_board.page import BRIEF_CHARS, PAGE_CHARS, render_board, render_brief, render_item, render_section
 
 RULES = "focus: GOL-grasp\ncosts: {research: 0, implement: 1, test: 1, training_run: 3}\nearn: {trail: 1}\nscouts: 2\n"
 QUOTE = "Sampling approach directions from the object's principal axes raised reachable grasps."
@@ -187,7 +187,8 @@ def test_a_rejected_trail_loses_its_points(research):
     assert "no longer count" in reply
     b = B.build(research)
     assert b.balance(b.directions["DIR-axes"]) == 0
-    assert "rejected by the director: \"a survey, not a result\"" in render_brief(b, b.directions["DIR-axes"])
+    assert f"{trail} · Paper A · 0" in render_brief(b, b.directions["DIR-axes"])
+    assert "rejected by the director: \"a survey, not a result\"" in render_section(b, b.directions["DIR-axes"], "trails")
 
 
 # ---------- the director's moves ----------
@@ -242,10 +243,9 @@ def test_an_idle_hour_costs_the_direction_waiting_on_a_result(research, clock):
     assert "record each trail as you have it" in render_brief(b, b.directions[did])
 
     play.feedback(research, did, "is the pick eval seeded?", kind="question", by="scout-1")
-    question = B.read_ledger(research)[-1]["id"]
     clock.advance(minutes=30)
     assert idle(research, did) == (90, 1, False)          # a scout's question kept research running
-    play.feedback(research, did, "three seeds", kind="answer", reply_to=question)   # the director's: not research
+    play.feedback(research, did, "still reading", by="scout-1")    # a note: it does not stop the clock
     clock.advance(minutes=30)
     assert idle(research, did) == (120, 2, True)
     with pytest.raises(play.Refused, match="idle hours took 2"):
@@ -343,7 +343,7 @@ def test_feedback_reaches_the_next_scout(research):
                  "DIR-bigger-net (halted)", "the gain was data, not size", "CMP-grasp: Choose a grasp pose"):
         assert said in brief, said
 
-    with pytest.raises(play.Refused, match="no direction, trail or spend"):
+    with pytest.raises(play.Refused, match="no goal, direction, trail or spend"):
         play.feedback(research, "RUN-0001", "a note on a run")
     with pytest.raises(play.Refused, match="names the question"):
         play.feedback(research, "DIR-axes", "an answer to nothing", kind="answer")
@@ -391,8 +391,162 @@ def test_a_declaration_naming_research_files_stops_recording(research, claim):
 
 # ---------- the tools ----------
 
-def test_the_server_registers_two_reads_and_six_moves():
+def test_the_server_registers_two_reads_and_eight_moves():
     from research_board import server
 
     names = {t.name for t in asyncio.run(server.mcp.list_tools())}
-    assert names == {"board", "ledger", "open_direction", "add_trail", "feedback", "approve", "spend", "reflect"}
+    assert names == {"board", "ledger", "open_direction", "add_trail", "feedback", "approve", "spend", "reflect",
+                     "evidence", "digest"}
+
+
+# ---------- what counts as research for the idle clock ----------
+
+def test_research_is_what_moves_the_question_not_a_note():
+    research = [{"kind": "direction"}, {"kind": "trail", "points": 1}, {"kind": "evidence", "points": 0},
+                {"kind": "feedback", "type": "question", "by": "scout-1"},
+                {"kind": "feedback", "type": "answer", "by": "director"}]
+    not_research = [{"kind": "trail", "points": 0}, {"kind": "feedback", "type": "note", "by": "scout-1"},
+                    {"kind": "feedback", "type": "question", "by": "director"}, {"kind": "digest"},
+                    {"kind": "feedback", "type": "approved", "by": "director"}, {"kind": "spend"}]
+    assert all(B.is_research(r) for r in research)
+    assert not any(B.is_research(r) for r in not_research)
+
+
+# ---------- a brief a scout can read ----------
+
+LONG = "A long passage the scout read, quoted in full, as the rules ask. " * 30
+
+
+def test_a_long_brief_has_a_head_that_fits_and_every_record_in_its_sections(research):
+    """Briefs of 50-120 KB were saved to a file the scout cannot open; it read the first 2 KB and
+    missed the answers it needed. The head fits, and every record is one page or one id away."""
+    did = funded(research, trails=0)
+    for i in range(120):
+        play.add_trail(research, did, f"Paper {i}", "tweak " + LONG, "CMP-grasp", LONG, by="scout-1")
+    for i in range(60):
+        play.feedback(research, did, f"note {i} " + LONG, by="scout-2")
+    b = B.build(research)
+    d = b.directions[did]
+    head = render_brief(b, d)
+    assert len(head) <= BRIEF_CHARS
+    assert "section=\"trails\"" in head and "section=\"feedback\"" in head
+
+    for section, ids in (("trails", [tr["id"] for tr in d.trails]), ("feedback", [f["id"] for f in d.feedback])):
+        first = render_section(b, d, section)
+        total = int(first.split(" of ", 1)[1].split(",", 1)[0])
+        assert total > 1
+        pages = [render_section(b, d, section, n) for n in range(1, total + 1)]
+        assert all(len(page) <= PAGE_CHARS + 400 for page in pages)
+        assert all(any(i in page for page in pages) for i in ids), section
+    one = d.trails[57]["id"]
+    assert LONG.strip() in render_item(b, one)
+
+
+def test_the_humans_rules_lead_every_brief_on_the_goal(research):
+    text = (research / "goals.yaml").read_text(encoding="utf-8").replace(
+        "    measure: CTR-pick-success\n",
+        "    measure: CTR-pick-success\n    constraints:\n      - actions are executed exactly, with no noise\n"
+        "      - on-policy states only from non-test starts\n", 1)
+    (research / "goals.yaml").write_text(text, encoding="utf-8")
+    git(research, "commit", "-qam", "my standing rules")
+    did = funded(research)
+    head = render_brief(B.build(research), direction(research, did))
+    assert "propose nothing that breaks one" in head
+    assert "- actions are executed exactly, with no noise" in head and "- on-policy states only from non-test starts" in head
+
+
+def test_a_digest_leads_the_brief_and_the_latest_stands(research):
+    did = funded(research)
+    play.digest(research, did, "t1 reaches 402/480 on its own starts; the gap is grasp closure.")
+    play.digest(research, did, "t1 reaches 402/480; closure, not detection, is the gap (EVD-0001).")
+    head = render_brief(B.build(research), direction(research, did))
+    assert "closure, not detection, is the gap" in head and "the gap is grasp closure" not in head
+    assert head.index("Facts so far") < head.index("idea:")
+    with pytest.raises(play.Refused, match="at most"):
+        play.digest(research, did, "x" * (play.DIGEST_CHARS + 1))
+
+
+def test_a_note_on_the_goal_reaches_every_brief_on_it(research):
+    did = funded(research)
+    reply = play.feedback(research, "GOL-grasp", "t1's own-start success is 402/480; any direction starts there",
+                          by="director")
+    assert "every brief on it carries" in reply
+    b = B.build(research)
+    assert "402/480" in render_brief(b, b.directions[did]) and "On GOL-grasp itself" in render_board(b)
+    play.feedback(research, "GOL-grasp", "does the 352k budget count states from t1's rollouts?",
+                  kind="question", by="scout-1")
+    assert [q["about"] for q in B.build(research).open_questions()] == ["GOL-grasp"]
+
+
+# ---------- measured findings ----------
+
+def test_a_measured_finding_is_kept_as_it_was_and_served_to_scouts(research, clock):
+    did = funded(research)
+    (research / "failure_map.csv").write_text("start,closed_on_air\n1,yes\n2,no\n", encoding="utf-8")
+    reply = play.evidence(research, did, "failure_map.csv", "1,997 closes on air; most at starts 1-40")
+    eid = B.read_ledger(research)[-1]["id"]
+    assert eid.startswith("EVD-") and "0 points" in reply           # earns nothing by default
+    (research / "failure_map.csv").write_text("rewritten later\n", encoding="utf-8")
+    served = reading.serve_evidence(research, eid)
+    assert "start,closed_on_air" in served and "rewritten later" not in served
+    assert "1,997 closes on air" in render_brief(B.build(research), direction(research, did))
+    assert B.is_research(B.read_ledger(research)[-1])
+
+    copy = research / B.read_ledger(research)[-1]["copy"]
+    copy.write_text("tampered\n", encoding="utf-8")
+    assert "no longer matches the digest" in reading.serve_evidence(research, eid)
+
+
+def test_a_finding_is_never_code(research):
+    did = funded(research)
+    (research / "probe.py").write_text("print(1)\n", encoding="utf-8")
+    with pytest.raises(play.Refused, match="not a data file"):
+        play.evidence(research, did, "probe.py", "a probe")
+    (research / "grasp.json").write_text("{}", encoding="utf-8")
+    text = (research / "belief.yaml").read_text(encoding="utf-8").replace("code: [grasp.py]", "code: [grasp.py, grasp.json]")
+    (research / "belief.yaml").write_text(text, encoding="utf-8")
+    git(research, "commit", "-qam", "the grasp claims its config")
+    with pytest.raises(play.Refused, match="claimed by CMP-grasp"):
+        play.evidence(research, did, "grasp.json", "the config")
+    with pytest.raises(play.Refused, match="outside the project"):
+        play.evidence(research, did, "../elsewhere.txt", "x")
+
+
+# ---------- a spend on a test ----------
+
+def test_a_spend_on_a_test_counts_that_tests_runs_only(research):
+    """Three arms of one evaluation, three tests on one contract, three spends: each reads its own."""
+    text = (research / "goals.yaml").read_text(encoding="utf-8")
+    text = text.replace("evaluable_by: [TST-pick]", "evaluable_by: [TST-pick, TST-pick-noise]")
+    text = text.replace("tests:\n", "tests:\n  - id: TST-pick-noise\n    layer: e2e\n    targets: [GOL-grasp]\n"
+                                    "    run: python eval/pick.py $OUT noise\n    metrics: [passed]\n", 1)
+    (research / "goals.yaml").write_text(text, encoding="utf-8")
+    git(research, "commit", "-qam", "a second arm")
+    did = funded(research, trails=2)
+    play.spend(research, did, "test", "TST-pick")
+    plain = last_spend(research)
+    play.spend(research, did, "test", "TST-pick-noise")
+    noise = last_spend(research)
+    next_second()
+    run_id = measure(research, "TST-pick-noise")
+    assert result_of(research, noise).runs["CTR-pick-success"] == [run_id]
+    assert result_of(research, plain).counted["CTR-pick-success"] == 0
+
+
+# ---------- the ledger itself ----------
+
+def test_a_ledger_git_ignores_is_named(research):
+    funded(research)
+    assert not B.build(research).ledger_ignored
+    (research / ".gitignore").write_text("*.jsonl\n", encoding="utf-8")
+    b = B.build(research)
+    assert "IGNORED .research/ledger.jsonl" in b.ledger_ignored and "!.research/ledger.jsonl" in b.ledger_ignored
+    assert "! IGNORED" in render_board(b)
+
+
+def test_a_run_can_be_read_metrics_only(research):
+    run_id = measure(research)
+    full = reading.serve_run(research, run_id)
+    lean = reading.serve_run(research, run_id, fields={"metrics"})
+    assert "conditions" in full and "conditions" not in lean and "metrics" in lean
+    assert "---" in full and "---" not in lean

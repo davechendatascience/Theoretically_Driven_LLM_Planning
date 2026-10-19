@@ -294,6 +294,70 @@ class TestContentStamps:
         sl = self.slice_now(run_repo)
         assert sl.state != STATE_STALE and sl.n_stale == 0
 
+    @pytest.fixture
+    def scoped(self, run_repo: Path) -> Path:
+        """The component claims grasp.py and grasp/*.py; the test declares it rests on grasp/ik.py.
+        Its check still opens grasp.py, which the scope leaves out."""
+        (run_repo / "grasp").mkdir()
+        for name in ("ik.py", "tools.py"):
+            (run_repo / "grasp" / name).write_text(f"# {name}\n", encoding="utf-8")
+        text = (run_repo / "belief.yaml").read_text(encoding="utf-8")
+        (run_repo / "belief.yaml").write_text(
+            text.replace('run: "python check.py $OUT"', 'run: "python check.py $OUT"\n    scope: [grasp/ik.py]'),
+            encoding="utf-8")
+        git(run_repo, "add", "-A")
+        git(run_repo, "commit", "-q", "-m", "the test declares its scope")
+        assert load(run_repo).tests["TST-grasp-ik"].scope == ["grasp/ik.py"]
+        self.run(run_repo)
+        return run_repo
+
+    def _edit(self, repo: Path, path: str) -> None:
+        (repo / path).write_text("# edited\n", encoding="utf-8")
+        git(repo, "commit", "-qam", f"edit {path}")
+
+    def test_a_scope_spares_its_run_an_edit_it_never_read(self, scoped):
+        """A lint fix elsewhere in a component's claim no longer stales a nine-hour run."""
+        self._edit(scoped, "grasp/tools.py")
+        sl = self.slice_now(scoped)
+        assert sl.state != STATE_STALE and sl.n_stale == 0
+
+    def test_inside_its_scope_an_edit_stales_it(self, scoped):
+        self._edit(scoped, "grasp/ik.py")
+        sl = self.slice_now(scoped)
+        assert sl.state == STATE_STALE and "grasp/ik.py" in sl.stale_reasons[0]
+
+    def test_a_claimed_file_the_run_opened_stays_watched_whatever_the_scope_says(self, scoped):
+        self._edit(scoped, "grasp.py")
+        sl = self.slice_now(scoped)
+        assert sl.state == STATE_STALE and "grasp.py" in sl.stale_reasons[0]
+
+    def test_without_a_scope_every_claimed_file_is_watched(self, run_repo):
+        (run_repo / "grasp").mkdir()
+        (run_repo / "grasp" / "tools.py").write_text("# tools\n", encoding="utf-8")
+        git(run_repo, "add", "-A")
+        git(run_repo, "commit", "-q", "-m", "a module the component claims")
+        self.run(run_repo)
+        self._edit(run_repo, "grasp/tools.py")
+        assert self.slice_now(run_repo).state == STATE_STALE
+
+    def test_changing_a_scope_is_a_new_version_of_the_test(self, scoped):
+        """Narrowing a scope after the run could clear its evidence of an edit it read: the scope is
+        part of the test, so the old evidence reads stale until the test runs under the new one."""
+        before = load(scoped).tests["TST-grasp-ik"].version
+        text = (scoped / "belief.yaml").read_text(encoding="utf-8").replace("scope: [grasp/ik.py]", "scope: [grasp/x.py]")
+        (scoped / "belief.yaml").write_text(text, encoding="utf-8")
+        git(scoped, "commit", "-qam", "narrow the scope")
+        decl = load(scoped)
+        assert decl.tests["TST-grasp-ik"].version != before
+        assert "measured by TST-grasp-ik@" in self.slice_now(scoped).stale_reasons[0]
+
+    def test_a_scope_outside_every_claim_is_reported(self, run_repo):
+        text = (run_repo / "belief.yaml").read_text(encoding="utf-8").replace(
+            'run: "python check.py $OUT"', 'run: "python check.py $OUT"\n    scope: [vision/seg.py]')
+        (run_repo / "belief.yaml").write_text(text, encoding="utf-8")
+        git(run_repo, "commit", "-qam", "a scope nothing claims")
+        assert any(i.code == "SCOPE_UNCLAIMED" and i.subject == "TST-grasp-ik" for i in load(run_repo).issues)
+
     def test_an_edited_stamp_is_not_trusted(self, run_repo):
         from component_belief.store import Store
 
@@ -518,7 +582,7 @@ class TestJudgedOncePerRun:
         calls = []
         real = CodeStaleness._stale_reason
         monkeypatch.setattr(CodeStaleness, "_stale_reason",
-                            lambda self, paths, t: calls.append(t["id"]) or real(self, paths, t))
+                            lambda self, paths, t, scope=None: calls.append(t["id"]) or real(self, paths, t, scope))
         slices = compute_slices(load(code_repo), trials, staleness=staleness)
         assert len(calls) == 1, "twelve trials of one run, judged once"
         assert slices[0].state == STATE_STALE and slices[0].n_stale == 12

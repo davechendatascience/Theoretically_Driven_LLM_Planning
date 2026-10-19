@@ -53,7 +53,14 @@ class Component:
     failure_modes: list[dict[str, Any]] = field(default_factory=list)
     remediation: str = ""
     code: list[str] = field(default_factory=list)
-    goal: str = ""                  # the GOL- this component serves, if goals.yaml declares one
+    goal: str | list[str] = ""      # the GOL- this component serves, or a list of them
+
+    @property
+    def goals(self) -> list[str]:
+        """Every goal this component serves. A subgoal shares its parent's components, so one
+        component can serve several, and a change to it reaches the evidence of each."""
+        raw = self.goal if isinstance(self.goal, list) else [self.goal]
+        return [str(g) for g in raw if g]
 
     @property
     def implemented(self) -> bool:
@@ -80,10 +87,13 @@ class Interface:
 
 @dataclass
 class Goal:
-    """An outcome the human wants, and the contract that says when it is met."""
+    """An outcome the human wants, the contract that says when it is met, and the standing rules
+    any way of reaching it must keep -- "actions are executed exactly, with no noise" -- which every
+    research brief on the goal carries, so a scout does not propose what the human ruled out."""
     id: str
     outcome: str = ""
     measure: str = ""
+    constraints: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -152,6 +162,10 @@ class Test:
     cost: float = 1.0
     timeout_s: int = 900
     same_as: list[str] = field(default_factory=list)  # earlier versions mapped to this one (3.5)
+    #: The part of its components' claimed code this test's evidence rests on, when it is less than
+    #: all of it: an edit to a claimed file outside the scope, which the run never opened, does not
+    #: stale it. Declared, so it is reviewed; the files a run opened stay watched whatever it says.
+    scope: list[str] = field(default_factory=list)
 
     def measures_as(self, ref: str) -> bool:
         """Whether a trial recorded under `ref` is evidence from this test as it stands: this
@@ -164,7 +178,10 @@ class Test:
     def version(self) -> str:
         """Derived from the command and metric spec (3.5), so editing a test
         mints a new version without anyone remembering to bump it."""
-        return content_hash({"run": self.run, "metrics": sorted(self.metrics)}, 8)
+        spec: dict[str, Any] = {"run": self.run, "metrics": sorted(self.metrics)}
+        if self.scope:         # what the evidence watches is part of the procedure: narrowing it is a new version
+            spec["scope"] = sorted(self.scope)
+        return content_hash(spec, 8)
 
     @property
     def ref(self) -> str:
@@ -266,7 +283,7 @@ class Declarations:
         if iface is not None:
             return [c for c in (iface.producer, iface.consumer) if c in self.components]
         if subject_id in self.goals:
-            return sorted(cid for cid, comp in self.components.items() if comp.goal == subject_id)
+            return sorted(cid for cid, comp in self.components.items() if subject_id in comp.goals)
         between = self.goal_interfaces.get(subject_id)
         if between is not None:
             return sorted(set(self.components_of_subject(between.from_goal))
@@ -276,6 +293,11 @@ class Declarations:
     def code_paths_for_subject(self, subject_id: str) -> list[str]:
         """The code a contract's evidence measured: the claims of every component it rests on."""
         return [p for cid in self.components_of_subject(subject_id) for p in self.components[cid].code]
+
+    def scope_for(self, trial: dict[str, Any]) -> list[str] | None:
+        """The scope the trial's test declares, or None when it watches all its components claim."""
+        test = self.tests.get(str(trial.get("test_id") or ""))
+        return list(test.scope) if test is not None and test.scope else None
 
     def goal_policy_gap(self, policy_id: str) -> str | None:
         """Why a decision under this policy is not covered by the human's commit of goals.yaml,
@@ -432,6 +454,8 @@ def _merge_goals(decl: Declarations, text: str) -> None:
         decl.issues.append(Issue("MALFORMED", GOALS_FILE, "top level must be a mapping"))
         return
     for goal in _entries(data, "goals", Goal, decl.issues, where=GOALS_FILE):
+        raw = goal.constraints if isinstance(goal.constraints, list) else [goal.constraints]
+        goal.constraints = [" ".join(str(c).split()) for c in raw if str(c or "").strip()]
         decl.goals[goal.id] = goal
     for raw in data.get("interfaces") or []:
         if not isinstance(raw, dict) or not raw.get("id"):
@@ -495,6 +519,15 @@ def _entries(data: dict[str, Any], section: str, cls: type, issues: list[Issue],
 def validate(decl: Declarations) -> list[Issue]:
     issues: list[Issue] = []
 
+    from .staleness import matches
+
+    claimed = [entry for comp in decl.components.values() for entry in comp.code]
+    for tid, test in decl.tests.items():
+        for entry in test.scope:
+            if not any(matches(entry, c) or matches(c, entry) for c in claimed):
+                issues.append(Issue("SCOPE_UNCLAIMED", tid, f"scope {entry!r} is inside no component's claimed "
+                                    "code; a scope only narrows what the components claim"))
+
     for cid, comp in decl.components.items():
         missing = [
             name for name, value in (
@@ -539,8 +572,9 @@ def validate(decl: Declarations) -> list[Issue]:
                                         f"observed_by {ref}, which is not a declared contract"))
 
     for cid, comp in decl.components.items():
-        if comp.goal and comp.goal not in decl.goals:
-            issues.append(Issue("UNKNOWN_GOAL", cid, f"serves {comp.goal}, which {GOALS_FILE} does not declare"))
+        for goal in comp.goals:
+            if goal not in decl.goals:
+                issues.append(Issue("UNKNOWN_GOAL", cid, f"serves {goal}, which {GOALS_FILE} does not declare"))
 
     issues.extend(_validate_goals(decl))
 

@@ -30,6 +30,19 @@ def test_the_goal_set_is_goals_yaml_and_every_file_its_tests_name(goals_repo):
     assert goal_set(goals_repo) == {"goals.yaml"}, "goals.yaml itself, even before it exists"
 
 
+def test_a_component_can_serve_several_goals(goals_repo):
+    """A subgoal shares its parent's components: one component names both, each goal reads it as
+    serving it, and a goal it names that goals.yaml does not declare is reported."""
+    text = (goals_repo / "belief.yaml").read_text(encoding="utf-8")
+    (goals_repo / "belief.yaml").write_text(
+        text.replace("    goal: GOL-grasp\n", "    goal: [GOL-grasp, GOL-see, GOL-fly]\n"), encoding="utf-8")
+    git(goals_repo, "commit", "-qam", "the grasp serves seeing too")
+    decl = load(goals_repo)
+    assert "CMP-grasp" in decl.components_of_subject("GOL-see")
+    assert "CMP-grasp" in decl.components_of_subject("GOL-grasp")
+    assert [i.subject for i in decl.issues if i.code == "UNKNOWN_GOAL"] == ["CMP-grasp"]
+
+
 class TestCheck:
     def test_an_agent_commit_to_the_goal_set_is_refused(self, goals_repo):
         (goals_repo / "eval" / "pick.py").write_text("# always pass\n", encoding="utf-8")

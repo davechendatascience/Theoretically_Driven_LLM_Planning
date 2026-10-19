@@ -701,7 +701,7 @@ button { font: inherit; color: inherit; }
       if (n.coverage) parts.push(el("p", { class: "why", text: COVER_WORDS[n.coverage] || "" }));
       if (n.kind === "interface") parts.push(section("Between", refs([n.producer, n.consumer].filter(Boolean))));
       if (n.capability) parts.push(section("Testable capability", prose(n.capability, true)));
-      if (n.goal) parts.push(section("Serves", refs([n.goal])));
+      if (n.goal && n.goal.length) parts.push(section("Serves", refs([].concat(n.goal))));
       const branches = out[n.id].filter((b) => N[b].kind === "branch");
       if (branches.length) parts.push(section(`Governed by · ${branches.length}`, el("div", { class: "reach" }, branches.sort().map((b) =>
         el("div", {}, el("span", { class: "item refs" }, mark(N[b]), refBtn(b)), el("div", { class: "why", text: headline(N[b].text, 160) }))))));
@@ -726,7 +726,7 @@ button { font: inherit; color: inherit; }
       if (n.measure) parts.push(section("Measured by", plainIds([n.measure])));
       parts.push(section("Requirements stated as axioms", inc[n.id].length ? refs(inc[n.id].sort())
         : el("div", { class: "empty", text: "No axiom names this goal, so no theory traces to it." })));
-      const served = Object.values(N).filter((c) => c.kind === "component" && c.goal === n.id).map((c) => c.id);
+      const served = Object.values(N).filter((c) => c.kind === "component" && [].concat(c.goal || []).includes(n.id)).map((c) => c.id);
       parts.push(section("Components that name it", served.length ? refs(served) : el("div", { class: "empty", text: "No component names this goal." })));
     }
     box.replaceChildren(el("div", { class: "insp" }, kids, parts));

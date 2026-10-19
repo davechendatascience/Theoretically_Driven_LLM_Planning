@@ -4,6 +4,52 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## Unreleased · research-board feedback
+
+From two days of use on a robot-learning goal: 18 directions, 276 trails, 16 spends.
+
+- **Briefs a scout can read.** Briefs of 50-120 KB were saved to a file the scout cannot open, and
+  scouts worked from the first 2 KB. `board(direction)` now returns a head that always fits (under
+  16,000 characters): the goal and the human's standing rules for it, the director's digest, open
+  questions, the latest feedback, the papers already cited, and an index. `section=` pages the rest
+  (trails, spends, feedback, evidence, goal, directions, components) and `item=` serves one record
+  with its replies. `ledger(run=..., fields="metrics")` reads a run whose records are too long, and
+  `limit` now applies to a run's records.
+- **Your standing rules reach every scout.** A goal in `goals.yaml` may carry `constraints:`, one
+  rule a line. Every brief on the goal leads with them, and the goals view lists them. They sit
+  in your file, so the guard keeps them yours.
+- **`run_test(..., wait=False)`.** A run of hours starts in a process of its own and the call answers
+  at once with its RUN id. The run records its trials when it ends, exactly as a waited one, so it
+  survives a client's call timeout or a server restart. `status(view="runs")` shows each one
+  running, recorded or lost. The evidence ledger now takes a cross-process lock as well as its
+  thread lock, so a background run and the server, or two sessions on one project, never hand out
+  one id twice.
+- **A test may declare its `scope:`.** A test whose component claims far more than it exercises
+  names the part its evidence rests on. An edit outside the scope no longer stales the run, unless
+  the run opened the file: what a run opened stays watched. A scope is part of the test's version,
+  so narrowing one after a run leaves that run's evidence stale.
+- **Measured findings: `evidence(direction, artifact, summary)`.** The director attaches a data
+  file or report produced outside a declared test. The board keeps a copy and its digest, and
+  scouts read it with `ledger(evidence=...)`. A source file, or a file a component claims or a test
+  runs, is refused. It earns `earn.evidence`, 0 by default, counts as research, and is never a
+  result.
+- **`digest(direction, text)`.** The director's facts-so-far, which every brief on the direction
+  leads with. Scouts propose edits in feedback.
+- **Feedback on a goal.** `feedback("GOL-...", ...)` reaches every brief on that goal, and a question
+  there waits on the director like any other.
+- **The idle clock reads research, not notes.** Research is now an earning trail, a new direction,
+  a measured finding, a scout's question or an answer. A note, or a trail that earned nothing, no
+  longer stops the clock.
+- **A spend on a test counts that test's runs only**, so arms sharing a contract keep their results
+  apart.
+- **A component may serve several goals:** `goal: [GOL-a, GOL-b]`. A subgoal shares its parent's
+  components and stops reading "served by no component".
+- **Smaller.** The board names a ledger git would ignore, with the exception to add. propose_branch
+  warns only when the claim names code, not when the rationale does.
+- **The theory.** DEF-research-ledger restates what research is, what a spend on a test counts, the
+  two new records and the balance. That sets aside BRN-research-results-follow-their-spend's trials
+  until it is verified again.
+
 ## 0.12.0 — 2026-10-19 · Codex and Antigravity
 
 - **The servers run on Codex and Antigravity.** `clients/codex/config.toml` and

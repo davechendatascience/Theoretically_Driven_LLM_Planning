@@ -15,15 +15,20 @@ and what came of it, and the literature. Whether a tweak fits the code is the di
 
 ## Protocol
 
-1. **Read your brief.** For a direction, `board(direction="DIR-...")`. It holds the goal and how it
-   is measured, every trail and spend so far with its result, the feedback thread, the closed
-   directions not to walk again, and the components a tweak can name. For a goal with no
-   direction yet, `board()` shows what exists.
+1. **Read your brief.** For a direction, `board(direction="DIR-...")`. Its head always fits: the
+   goal, how it is measured and the human's standing rules for it -- propose nothing that breaks
+   one -- the director's digest of the facts so far, open questions, the latest feedback, the
+   papers already cited, and an index. Then read what you need by section, a page at a time
+   (`board(direction=..., section="trails"|"feedback"|"spends"|"evidence"|"goal"|"directions"|
+   "components", part=...)`), or one record whole (`board(item="FBK-...")`). Read the feedback
+   section before adding to a direction. For a goal with no direction yet, `board()` shows what
+   exists, and the notes on the goal itself.
 2. **Read the ledgers when a number matters.** `ledger(run="RUN-...")` serves a run's records and
-   its captured output. That is often more than the contract kept, so look there before asking.
-   `ledger(contract=...)` serves a measure's rule and history; `ledger(node=...)` serves a design
-   claim and what its verifiers tried. component-belief's and consistency-belief's `status` give
-   the wider picture.
+   its captured output. That is often more than the contract kept, so look there before asking;
+   add `fields="metrics"` when a run is too long to read whole. `ledger(contract=...)` serves a
+   measure's rule and history; `ledger(node=...)` serves a design claim and what its verifiers
+   tried; `ledger(evidence="EVD-...")` serves a finding the director measured. component-belief's
+   and consistency-belief's `status` give the wider picture.
 3. **Search, then read the primary source.** Use WebSearch to find work, and WebFetch to read it.
    A survey, an index or a blog is a lead: follow it to the paper. Do not fetch this project's own
    repository.
@@ -40,7 +45,8 @@ and what came of it, and the literature. Whether a tweak fits the code is the di
    what that test costs under the rules.
 6. **Talk through feedback.** A note for the next scout: `feedback(about, text, by=...)`. A question
    for the director, when the ledgers cannot answer it: `feedback(about, text, kind="question",
-   by=...)`. Address it to the direction, trail or spend it concerns.
+   by=...)`. Address it to the goal, direction, trail or spend it concerns. To change the
+   digest at the head of a brief, say what in a note: the digest is the director's.
 
 ## Rules
 
@@ -51,9 +57,9 @@ and what came of it, and the literature. Whether a tweak fits the code is the di
 - Points come from new papers, quoted, on declared components. Ten thin trails help nobody, and the
   director rejects them.
 - Record each trail when you have read its paper, not all at the end. While a test waits on its
-  result, every hour with no research recorded costs the waiting direction a point, and each trail,
-  new direction or question keeps research running for a while (the brief says how long). A note
-  left only to stop that clock is not research: say something the next scout can use, or nothing.
+  result, every hour with no research recorded costs the waiting direction a point, and each
+  earning trail, new direction or question keeps research running for a while (the brief says how
+  long). A note does not: say in one something the next scout can use, or nothing.
 - You cannot approve, spend or reflect: those are the director's moves.
 
 ## Report

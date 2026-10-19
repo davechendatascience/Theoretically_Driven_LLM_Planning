@@ -128,6 +128,16 @@ Eight facts decide whether a declaration measures what you meant.
      trials record as `error`. Declare a longer one for a long measure.
      `run_test` reports progress every minute, so the client does not abort
      it as idle.
+   - A run of hours -- longer than your client waits on one call -- goes in
+     the background: `run_test(test_id, wait=False)` answers at once with its
+     RUN id, and the run records its trials when it ends, exactly as a waited
+     one would. `status(view="runs")` shows it running, recorded, or lost.
+   - A test whose component claims far more code than the test exercises can
+     declare `scope: [paths]`: the part of the claim its evidence rests on.
+     An edit to a claimed file outside the scope then leaves its evidence
+     current, unless the run opened that file -- what a run opened stays
+     watched. The scope is part of the test: changing it makes the earlier
+     evidence stale, as editing the run line does.
 
 ## Citations
 

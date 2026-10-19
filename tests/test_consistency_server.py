@@ -519,6 +519,15 @@ def test_propose_branch_warns_when_a_claim_names_a_class_or_a_call(committed_rep
     assert "warning:" not in clean
 
 
+def test_a_rationale_that_names_code_is_context_not_a_claim(committed_repo: Path):
+    """Measured motivation in the rationale ("Scheduler.enqueue in scheduler.py dropped 3% at 64")
+    names code the claim does not: the verifier judges the claim, so nothing is warned."""
+    out = propose_branch(id="BRN-queue-3", subject="CMP-scheduler", premises=["AXM-energy-budget"],
+                         claim="No more than 64 items are ever queued, whatever the load.",
+                         rationale="Scheduler.enqueue in scheduler.py dropped 3% of items past 64.")
+    assert "warning:" not in out
+
+
 # ---------- the joint gate: a design proven over a refuted measurement is proven of nothing ----------
 
 JOINT_BELIEF = """

@@ -28,6 +28,7 @@ BOARD_FILE = "BOARD.md"
 
 DEFAULT_COSTS = {"research": 0, "implement": 1, "test": 1, "dataset_eval": 1, "training_run": 3}
 DEFAULT_EARN = 1
+DEFAULT_EARN_EVIDENCE = 0       # a measured finding is a stronger reason to test, and the director's own
 DEFAULT_SCOUTS = 3
 DEFAULT_IDLE_PER_HOUR = 1       # points an idle hour costs a direction waiting on a result
 DEFAULT_RUNNING_MINUTES = 30    # how long research counts as running after a research record
@@ -97,6 +98,7 @@ class Rules:
     focus: str = ""
     costs: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_COSTS))
     earn: int = DEFAULT_EARN
+    earn_evidence: int = DEFAULT_EARN_EVIDENCE
     scouts: int = DEFAULT_SCOUTS
     idle_per_hour: int = DEFAULT_IDLE_PER_HOUR
     running_minutes: int = DEFAULT_RUNNING_MINUTES
@@ -158,12 +160,23 @@ def load_rules(root: Path) -> Rules:
                                 "the default costs are in effect")
     if "earn" in data:
         raw = data["earn"]
-        earn = _count(raw.get("trail") if isinstance(raw, dict) else raw)
-        if earn is None:
-            rules.issues.append(f"MALFORMED {RULES_FILE}: earn.trail must be a whole number of points, "
-                                f"0 or more; {DEFAULT_EARN} is in effect")
-        else:
-            rules.earn = earn
+        given = raw if isinstance(raw, dict) else {"trail": raw}
+        if "trail" in given:
+            earn = _count(given["trail"])
+            if earn is None:
+                rules.issues.append(f"MALFORMED {RULES_FILE}: earn.trail must be a whole number of points, "
+                                    f"0 or more; {DEFAULT_EARN} is in effect")
+            else:
+                rules.earn = earn
+        if "evidence" in given:
+            earn = _count(given["evidence"])
+            if earn is None:
+                rules.issues.append(f"MALFORMED {RULES_FILE}: earn.evidence must be a whole number of "
+                                    f"points, 0 or more; {DEFAULT_EARN_EVIDENCE} is in effect")
+            else:
+                rules.earn_evidence = earn
+        for key in sorted(set(given) - {"trail", "evidence"}):
+            rules.issues.append(f"UNREAD {RULES_FILE}: `earn.{key}` is not a rule this version reads")
     if "scouts" in data:
         scouts = _count(data["scouts"])
         if not scouts:
@@ -196,6 +209,11 @@ def research_dir(root: Path) -> Path:
     return root / RESEARCH_DIR
 
 
+def evidence_dir(root: Path, evidence_id: str) -> Path:
+    """Where the board keeps its own copy of a finding's artifact: the bytes it hashed."""
+    return research_dir(root) / "evidence" / evidence_id
+
+
 def ledger_path(root: Path) -> Path:
     return research_dir(root) / LEDGER_FILE
 
@@ -226,12 +244,18 @@ def direction_id(name: str) -> str:
 
 
 def is_research(record: dict[str, Any]) -> bool:
-    """What shows research running: a direction opened, a trail, or feedback a scout left. The
-    director's verdicts, reflections, answers and notes are not research."""
+    """What shows research running: a direction opened, a trail that earned when it was recorded,
+    a measured finding attached, a question a scout asked, or an answer to a question. A note, a
+    trail that earned nothing, a digest and the director's verdicts and reflections are not: a note
+    left only to stop the clock would otherwise stop it."""
     kind = record.get("kind")
-    if kind in ("direction", "trail"):
+    if kind in ("direction", "evidence"):
         return True
-    return kind == "feedback" and record.get("type") in FEEDBACK_KINDS and record.get("by") != "director"
+    if kind == "trail":
+        return int(record.get("points") or 0) > 0
+    if kind != "feedback":
+        return False
+    return (record.get("type") == QUESTION and record.get("by") != "director") or record.get("type") == ANSWER
 
 
 # ---------- results ----------
@@ -287,7 +311,9 @@ def _states(decl: Any, records: list[dict[str, Any]], contracts: list[str], stal
 
 def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend: dict[str, Any]) -> Result:
     """The evidence a spend may claim is the measured evidence recorded after it, against the
-    contracts it named when it was recorded (DEF-research-ledger).
+    contracts it named when it was recorded -- by the test it named, when it named one -- so three
+    arms on one contract, each its own test and its own spend, keep their results apart
+    (DEF-research-ledger).
 
     Measured only: the server recorded it from a run it captured itself, so it is the first record
     of its measurement. An imported record can carry a measurement made long before the spend, and
@@ -307,8 +333,10 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     since = when(spend.get("timestamp"))
     if not contracts or since is None:
         return result
+    test = spend.get("test") or ""            # a spend that named a test counts that test's runs only
     after = [t for t in trials
              if t.get("contract_id") in contracts and t.get("provenance") == "measured"
+             and (not test or t.get("test_id") == test)
              and (when(t.get("timestamp")) or since) > since]
     result.states = _states(decl, after, contracts, staleness)
     for cid in contracts:
@@ -421,6 +449,8 @@ class Direction:
     trails: list[dict[str, Any]] = field(default_factory=list)
     spends: list[dict[str, Any]] = field(default_factory=list)
     feedback: list[dict[str, Any]] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)    # measured findings attached to it
+    digest: dict[str, Any] | None = None        # the director's latest "facts so far"
     verdict: dict[str, Any] | None = None       # the latest approval or rejection
     decision: dict[str, Any] | None = None      # the latest continue, halt or pivot
     state: str = PROPOSED
@@ -456,10 +486,13 @@ class Board:
     trails: dict[str, dict[str, Any]] = field(default_factory=dict)
     spends: dict[str, dict[str, Any]] = field(default_factory=dict)
     feedback: dict[str, dict[str, Any]] = field(default_factory=dict)
+    evidence: dict[str, dict[str, Any]] = field(default_factory=dict)
     results: dict[str, Result] = field(default_factory=dict)
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
+    goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
     evidence_error: str = ""
+    ledger_ignored: str = ""       # why git would leave the ledger out of a commit, if it would
     now: datetime = field(default_factory=clock)
     research_until: datetime | None = None    # research counts as running until then, by the rules now
 
@@ -473,7 +506,7 @@ class Board:
         return 0 if self.rejected(trail["id"]) else int(trail.get("points") or 0)
 
     def earned(self, d: Direction) -> int:
-        return sum(self.points(t) for t in d.trails)
+        return sum(self.points(t) for t in d.trails) + sum(int(e.get("points") or 0) for e in d.evidence)
 
     def spent(self, d: Direction) -> int:
         return sum(int(s.get("cost") or 0) for s in d.spends)
@@ -482,16 +515,20 @@ class Board:
         return d.idle.points if d.idle else 0
 
     def balance(self, d: Direction) -> int:
-        """DEF-research-ledger: the points its trails earned, less those of rejected trails, less
-        the costs of its spends, less what its idle hours have cost by now -- computed from the
-        research ledger and the evidence ledger, never written to either."""
+        """DEF-research-ledger: the points its trails and its measured findings earned, less those
+        of rejected trails, less the costs of its spends, less what its idle hours have cost by now
+        -- computed from the research ledger and the evidence ledger, never written to either."""
         return self.earned(d) - self.spent(d) - self.idle_points(d)
+
+    def issues(self) -> list[str]:
+        """What the director should know before trusting what the board shows or commits."""
+        return self.rules.issues + [i for i in (self.evidence_error, self.ledger_ignored) if i]
 
     def direction_of(self, research_id: str) -> str:
         """The direction a research id belongs to, or "" when it names none."""
         if research_id in self.directions:
             return research_id
-        for table in (self.trails, self.spends, self.feedback):
+        for table in (self.trails, self.spends, self.feedback, self.evidence):
             if research_id in table:
                 return str(table[research_id].get("direction", ""))
         return ""
@@ -559,6 +596,10 @@ def build(root: Path, *, with_results: bool = True) -> Board:
             board.spends[rid] = record
         elif kind == "feedback":
             board.feedback[rid] = record
+        elif kind == "evidence":
+            board.evidence[rid] = record
+        elif kind == "digest" and (d := board.directions.get(str(record.get("direction")))) is not None:
+            d.digest = record                      # the ledger's order: the latest stands
 
     for trail in board.trails.values():
         if (d := board.directions.get(str(trail.get("direction")))) is not None:
@@ -566,11 +607,16 @@ def build(root: Path, *, with_results: bool = True) -> Board:
     for spend in board.spends.values():
         if (d := board.directions.get(str(spend.get("direction")))) is not None:
             d.spends.append(spend)
+    for item in board.evidence.values():
+        if (d := board.directions.get(str(item.get("direction")))) is not None:
+            d.evidence.append(item)
     for item in board.feedback.values():          # the ledger's order is the order recorded
         about = str(item.get("about", ""))
         kind = item.get("type")
         if kind in VERDICTS and about in board.trails:
             board.trail_verdicts[about] = item
+        if item.get("goal") and not item.get("direction"):
+            board.goal_feedback.setdefault(str(item["goal"]), []).append(item)
         if (d := board.directions.get(str(item.get("direction")))) is not None:
             d.feedback.append(item)
             if kind in VERDICTS and about == d.id:
@@ -578,6 +624,7 @@ def build(root: Path, *, with_results: bool = True) -> Board:
             elif kind in DECISIONS and about == d.id:
                 d.decision = item
 
+    board.ledger_ignored = ignored_ledger(root)
     if with_results:
         try:
             from component_belief.model import compute_slices
@@ -630,6 +677,18 @@ def build(root: Path, *, with_results: bool = True) -> Board:
         else:
             d.state = EARNING
     return board
+
+
+def ignored_ledger(root: Path) -> str:
+    """Why `git add .research/` would leave the ledger out, or "" when it would not. A repository
+    that ignores *.jsonl ignores it in silence, and the page beside it is committed alone."""
+    path = f"{RESEARCH_DIR}/{LEDGER_FILE}"
+    rule = git(root, "check-ignore", "-v", path)
+    if not rule:
+        return ""
+    source = rule.split("\t", 1)[0].strip()
+    return (f"IGNORED {path}: git ignores it ({source}), so committing {RESEARCH_DIR}/ leaves the "
+            f"ledger out and keeps only the page; add `!{path}` to .gitignore")
 
 
 def research_files(root: Path) -> set[str]:

@@ -30,16 +30,42 @@ board() → scouts (background) → approve → spend → build, run_test → bo
 4. **Spend before you work for a direction:** `spend(direction, action, target, expect)`. Then
    build, and run the target's tests with `run_test`. Only results recorded after the spend count
    for the direction. Work without spending is always allowed, but its results belong to no
-   direction.
+   direction. Spend on a **test** (`TST-...`) rather than its contract when several arms share a
+   contract: a spend on a test counts that test's runs only.
+   **Spend right before you launch, and launch long runs in the background:**
+   `run_test(test_id, wait=False)` answers at once with the RUN id and records the trials when the
+   run ends; `status(view="runs")` shows it until then. Give a run of hours its `timeout_s`.
    **Keep scouts out while a test you paid for waits on its result.** Every hour with no research
-   recorded on the board (a trail, a new direction, a scout's feedback) costs the waiting direction
-   a point. Each record keeps research running for `running_minutes`. Send scouts when you spend,
-   and send the next one when one returns. The board's `next:` line says when the clock is running
-   and when the next point goes. The clock stops when the result is in, or when you halt the
-   direction.
+   recorded on the board costs the waiting direction a point. Research is an earning trail, a new
+   direction, a measured finding, a scout's question or an answer -- not a note. Each keeps research
+   running for `running_minutes`. Send scouts when you spend, and send the next one when one
+   returns. The board's `next:` line says when the clock is running and when the next point goes.
+   The clock stops when the result is in, or when you halt the direction.
 5. **Reflect when a result settles:** `reflect(direction, continue|halt|pivot, why)`. Nothing more
    is spent on that direction until you do. A pivot halts it; open the next one with
    `open_direction(..., pivot_from=...)`.
+
+## Keeping briefs readable
+
+A scout reads `board(direction=...)`: a head that always fits -- the human's standing rules for the
+goal, your digest, open questions, the latest feedback, the papers already cited and an index --
+and then pages through `section=` or fetches one record with `item=`. Two moves keep the head
+useful as a direction grows:
+
+- **`digest(direction, text)`** -- the facts so far, in at most 4000 characters, which every brief
+  on the direction leads with. Rewrite it after each result and each scout round that changed the
+  picture. Scouts propose edits in feedback; the digest is yours.
+- **`evidence(direction, artifact, summary)`** -- attach a measured finding you made outside a
+  declared test (a failure map, the table of a free check): a `.json`, `.csv`, `.md`, `.txt` or
+  `.log` file no component claims and no test runs. The board keeps a copy and its digest, scouts
+  read it with `ledger(evidence=...)`, and it counts as research. It earns `earn.evidence` (0 by
+  default) and is never a spend's result.
+- **Notes on a goal** -- `feedback("GOL-...", text)` reaches every brief on that goal: what has been
+  measured before any direction holds it.
+
+The human's standing rules ("actions are executed exactly, with no noise") belong in `goals.yaml`
+under the goal as `constraints:`, which every brief carries. They are the human's: draft them and
+leave them for the human to commit, as you would a goal.
 
 ## Answering scouts
 
@@ -53,7 +79,7 @@ board() → scouts (background) → approve → spend → build, run_test → bo
 ## The rules are yours to tune
 
 `research.yaml` holds `focus` (the goal being pursued), `costs` (points per action), `earn` (what a
-trail earns), `idle` (`per_hour`: points an idle hour costs, 0 for none; `running_minutes`: how long
+trail earns, `trail`, and a measured finding, `evidence`), `idle` (`per_hour`: points an idle hour costs, 0 for none; `running_minutes`: how long
 a research record keeps research running) and `scouts`. It takes effect when committed, and the
 board names the commit that last changed it, so a cost lowered to get a spend through is visible to
 the human. A spend keeps the idle terms in effect when it was made, so changing them later reprices
@@ -66,6 +92,8 @@ commit.
    measures, and designs are proven by their verifiers, as before.
 2. **Scouts read no code.** Do not paste code into feedback or a brief. If a tweak cannot be judged
    without the code, that judgement is yours, made when you approve and build.
-3. **Commit `.research/`** with your work, as you commit `.belief/` and `.consistency/`.
+3. **Commit `.research/`** with your work, as you commit `.belief/` and `.consistency/`. If the
+   board says `IGNORED .research/ledger.jsonl`, the repository's `.gitignore` drops the ledger:
+   add the exception it names.
 4. **The goals stay the human's.** A direction serves a goal in `goals.yaml`. If research shows a
    goal is wrong or out of reach, say so with component-belief's `note(subject="GOL-...")`.

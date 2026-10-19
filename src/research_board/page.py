@@ -2,9 +2,14 @@
 
 The board answers "what is being tried, and what next?" in the order a director acts on it. A brief
 is everything a scout working one direction may need, and it is all a scout gets of the project's
-design: the goal, the research so far, what was spent and what came of it, the feedback, and the
-components a tweak can name. The page is the board with every open direction's brief, rewritten
-after every move so it can be read in an editor or on GitHub without a server.
+design: the goal and the human's standing rules for it, the director's digest, the research so far,
+what was spent and what came of it, the feedback, and the components a tweak can name.
+
+A scout holds no tool that opens a file, so a reply too long for its client to show in full is a
+reply it cannot read: the client saves it to a file and shows the first lines. So a brief is a head
+that always fits -- the rules, the digest, what is open, the papers already cited, and an index --
+and the rest by section, a page at a time, or one record by its id. The page in .research/ is the
+board with every open direction in full, rewritten after every move for a person in an editor.
 """
 
 from __future__ import annotations
@@ -13,6 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from . import board as B
+
+#: The most a brief's head, or one page of a section, holds: under what a client shows in full.
+BRIEF_CHARS = 16000
+PAGE_CHARS = 12000
+SECTIONS = ("trails", "spends", "feedback", "evidence", "goal", "directions", "components")
 
 _HEADINGS = {
     B.NEEDS_REFLECTION: "Needs reflection (a result settled)",
@@ -73,6 +83,9 @@ def _goal_lines(board: B.Board, goal_id: str) -> list[str]:
     lines = [f"{goal_id}: {_short(goal.outcome, 240)}"]
     if goal.measure:
         lines.append(f"  measured by {goal.measure}: {board.measures.get(goal.measure, B.NO_EVIDENCE)}")
+    if goal.constraints:
+        lines.append("  the human's standing rules for it (goals.yaml) -- propose nothing that breaks one:")
+        lines += [f"  - {rule}" for rule in goal.constraints]
     return lines
 
 
@@ -137,8 +150,8 @@ def _next(board: B.Board) -> list[str]:
         soonest = min(d.idle.next_point_in or 3600 for d in idling)
         out.append(f"research is idle while {', '.join(d.id for d in idling)} wait"
                    f"{'s' if len(idling) == 1 else ''} on a result: send a scout now -- the next idle point "
-                   f"is taken in {_duration(soonest)}, and any trail, new direction or scout's feedback "
-                   f"stops the clock for {board.rules.running_minutes}m")
+                   f"is taken in {_duration(soonest)}, and an earning trail, a new direction, a finding, "
+                   f"a scout's question or an answer stops the clock for {board.rules.running_minutes}m")
     if pending:
         out.append(f"results pending on {', '.join(d.id for d in pending)}: run them (run_test), and meanwhile "
                    f"send up to {board.rules.scouts} scouts, in the background -- one per direction "
@@ -159,7 +172,7 @@ def render_board(board: B.Board) -> str:
     if focus:
         lines += ["focus: " + "\n".join(_goal_lines(board, focus)), ""]
     lines.append(_rules_line(board.rules))
-    for issue in board.rules.issues + ([board.evidence_error] if board.evidence_error else []):
+    for issue in board.issues():
         lines.append(f"! {issue}")
     if not board.directions:
         lines += ["", "No directions yet."]
@@ -169,6 +182,9 @@ def render_board(board: B.Board) -> str:
             lines += ["", f"## {_HEADINGS[state]}"]
             for d in group:
                 lines += _summary(board, d, focus)
+    for goal_id, items in sorted(board.goal_feedback.items()):
+        lines += ["", f"## On {goal_id} itself ({_plural(len(items), 'note')}, the latest last)"]
+        lines += [_feedback_line(f, 240) for f in items[-3:]]
     questions = board.open_questions()
     if questions:
         lines += ["", "## Open questions for the director"]
@@ -202,7 +218,7 @@ def _trail_lines(board: B.Board, trail: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _feedback_line(item: dict[str, Any]) -> str:
+def _feedback_line(item: dict[str, Any], limit: int | None = None) -> str:
     kind = item.get("type")
     about = item.get("about")
     if kind == B.ANSWER:
@@ -213,13 +229,29 @@ def _feedback_line(item: dict[str, Any]) -> str:
         what = f"reflection: {kind}"
     else:
         what = f"{kind} on {about}" + (f", replying to {item['reply_to']}" if item.get("reply_to") else "")
-    return f"- {item['id']} · {item.get('by')} · {what}: \"{item.get('text')}\""
+    text = item.get("text") if limit is None else _short(item.get("text"), limit)
+    return f"- {item['id']} · {item.get('by')} · {what}: \"{text}\""
+
+
+def _evidence_line(item: dict[str, Any], limit: int | None = 240) -> str:
+    worth = f"+{item['points']}" if item.get("points") else "0 points"
+    summary = item.get("summary") if limit is None else _short(item.get("summary"), limit)
+    return (f"- {item['id']} · by {item.get('by')} · {worth} · {item.get('artifact')} "
+            f"(sha256 {item.get('sha256')}): \"{summary}\" -- ledger(evidence=\"{item['id']}\")")
+
+
+def _digest_lines(d: B.Direction) -> list[str]:
+    if not d.digest:
+        return []
+    when = str(d.digest.get("timestamp", ""))[:16].replace("T", " ")
+    return [f"## Facts so far -- the director's digest ({d.digest['id']}, {when})", d.digest.get("text", ""), ""]
 
 
 def _direction_detail(board: B.Board, d: B.Direction) -> list[str]:
     lines = [f"state: {d.state} · {_balance(board, d)}" + (f" · rank {d.rank}" if d.rank else "")]
     if idle := _idle_line(d):
         lines.append(idle)
+    lines += [""] + _digest_lines(d)
     lines.append(f"idea: {d.record.get('idea')}")
     if d.record.get("assessment"):
         lines.append(f"assessment: {d.record['assessment']}")
@@ -229,40 +261,192 @@ def _direction_detail(board: B.Board, d: B.Direction) -> list[str]:
     lines += [line for trail in d.trails for line in _trail_lines(board, trail) + [""]] or ["(none yet)", ""]
     lines.append("## Spends")
     lines += [f"- {_spend_line(board, s)}" for s in d.spends] or ["(none yet)"]
+    if d.evidence:
+        lines += ["", "## Measured findings"] + [_evidence_line(e, None) for e in d.evidence]
     lines += ["", "## Feedback, oldest first"]
     lines += [_feedback_line(f) for f in d.feedback] or ["(none yet)"]
     return lines
 
 
+# ---------- a brief a scout can read: a head that fits, the rest by section ----------
+
+def _blocks(board: B.Board, d: B.Direction, section: str) -> list[tuple[str, str]]:
+    """One section of a direction, as (id, text) blocks in the order recorded."""
+    if section == "trails":
+        return [(tr["id"], "\n".join(_trail_lines(board, tr))) for tr in d.trails]
+    if section == "spends":
+        return [(s["id"], f"- {_spend_line(board, s)}") for s in d.spends]
+    if section == "feedback":
+        return [(f["id"], _feedback_line(f)) for f in d.feedback]
+    if section == "evidence":
+        return [(e["id"], _evidence_line(e, None)) for e in d.evidence]
+    if section == "goal":
+        return [(f["id"], _feedback_line(f)) for f in board.goal_feedback.get(d.goal, [])]
+    if section == "directions":
+        out = []
+        for o in board.ordered():
+            if o.goal != d.goal or o.id == d.id:
+                continue
+            if o.state in (B.HALTED, B.REJECTED):
+                why = (o.decision if o.state == B.HALTED else o.verdict) or {}
+                out.append((o.id, (f"- {o.id} ({o.state} -- do not walk it again): {o.record.get('idea')} "
+                                   f"-- \"{why.get('text')}\"")))
+            else:
+                out.append((o.id, f"- {o.id} ({o.state}): {o.record.get('idea')}"))
+        return out
+    if section == "components":
+        return [(cid, f"- {cid}: {c.purpose}") for cid, c in sorted(board.decl.components.items())]
+    return []
+
+
+def _pages(blocks: list[tuple[str, str]], limit: int = PAGE_CHARS) -> list[list[str]]:
+    """Blocks packed into pages of at most `limit` characters; a block longer than a page is cut,
+    and says how to read it whole."""
+    pages: list[list[str]] = [[]]
+    used = 0
+    for rid, text in blocks:
+        if len(text) > limit:
+            text = text[: limit - 200] + f"\n… cut at {limit} characters; in full: board(item=\"{rid}\")"
+        if pages[-1] and used + len(text) + 1 > limit:
+            pages.append([])
+            used = 0
+        pages[-1].append(text)
+        used += len(text) + 1
+    return pages
+
+
+def render_section(board: B.Board, d: B.Direction, section: str, part: int = 1) -> str:
+    if section not in SECTIONS:
+        return f"no section {section!r}; sections: {', '.join(SECTIONS)}"
+    pages = _pages(_blocks(board, d, section))
+    total = len(pages) if pages[0] else 0
+    if not total:
+        return f"# {d.id} · {section}: none yet"
+    part = min(max(1, part), total)
+    lines = [f"# {d.id} · {section} · part {part} of {total}, oldest first", ""] + pages[part - 1]
+    if part < total:
+        lines += ["", f"next: board(direction=\"{d.id}\", section=\"{section}\", part={part + 1})"]
+    return "\n".join(lines)
+
+
+def _index_line(board: B.Board, d: B.Direction, section: str, what: str) -> str:
+    parts = len(_pages(_blocks(board, d, section)))
+    return f"- {what} -- board(direction=\"{d.id}\", section=\"{section}\"){f', {parts} parts' if parts > 1 else ''}"
+
+
 def render_brief(board: B.Board, d: B.Direction) -> str:
-    """Everything a scout on one direction reads: it holds no tool that opens a file, so what the
-    project's design says about this goal reaches it from here and the ledgers."""
+    """The head of a direction's brief: what a scout reads first, always short enough to read whole.
+    It holds no tool that opens a file, so what the project's design says about this goal reaches it
+    from here and the ledgers."""
     lines = [f"# {d.id}", "", "for " + "\n".join(_goal_lines(board, d.goal))]
-    lines += _direction_detail(board, d)
+    lines.append(f"state: {d.state} · {_balance(board, d)}" + (f" · rank {d.rank}" if d.rank else ""))
+    if idle := _idle_line(d):
+        lines.append(idle)
+    lines += [""] + _digest_lines(d)
+    lines.append(f"idea: {_short(d.record.get('idea'), 1500)}")
+    if d.record.get("assessment"):
+        text = d.record["assessment"]
+        lines.append(f"assessment: {_short(text, 1500)}" + (f" (in full: board(item=\"{d.id}\"))" if len(text) > 1500 else ""))
     if d.record.get("pivot_from") in board.directions:
         old = board.directions[d.record["pivot_from"]]
         if old.decision:
-            lines += ["", f"{old.id} was left with: \"{old.decision.get('text')}\""]
+            lines.append(f"pivot from {old.id}, which was left with: \"{_short(old.decision.get('text'), 600)}\"")
+
+    earning = sum(1 for tr in d.trails if board.points(tr))
+    questions = [q for q in board.open_questions() if q.get("direction") == d.id]
+    goal_items = board.goal_feedback.get(d.goal, [])
+    lines += ["", "## Read the rest by section, a page at a time; one record by its id: board(item=...)"]
+    lines.append(_index_line(board, d, "trails", f"{_plural(len(d.trails), 'trail')} ({earning} earning)"))
+    lines.append(_index_line(board, d, "spends", _plural(len(d.spends), "spend")))
+    lines.append(_index_line(board, d, "feedback", f"{len(d.feedback)} feedback ({len(questions)} open question(s))"))
+    if d.evidence:
+        lines.append(_index_line(board, d, "evidence", _plural(len(d.evidence), "measured finding")))
+    if goal_items:
+        lines.append(_index_line(board, d, "goal", f"{_plural(len(goal_items), 'note')} on {d.goal} itself"))
+    lines.append(_index_line(board, d, "directions", f"the other directions on {d.goal}"))
+    lines.append(_index_line(board, d, "components", "the components a tweak can name"))
+
+    def fits(block: list[str]) -> bool:
+        return len("\n".join(lines + block)) <= BRIEF_CHARS - 1200      # room for the rules at the end
+
+    optional: list[tuple[list[str], str]] = []
+    if questions:
+        optional.append((["", "## Open questions on it, waiting on the director"]
+                         + [_feedback_line(q, 1200) for q in questions], "feedback"))
+    open_ids = {q["id"] for q in questions}
+    latest = [f for f in d.feedback if f["id"] not in open_ids][-5:]      # the open ones are above, whole
+    if latest:
+        optional.append((["", "## The latest feedback, newest last"]
+                         + [_feedback_line(f, 400) for f in latest], "feedback"))
+    if d.trails:
+        optional.append((["", "## Papers already cited here -- a trail on one of these earns nothing"]
+                         + [f"- {tr['id']} · {_short(tr.get('paper'), 110)} · "
+                            f"{'+' + str(board.points(tr)) if board.points(tr) else '0'}" for tr in d.trails], "trails"))
+    if d.evidence:
+        optional.append((["", "## Measured findings"] + [_evidence_line(e, 200) for e in d.evidence], "evidence"))
+    if goal_items:
+        optional.append((["", f"## On {d.goal} itself, the latest last"]
+                         + [_feedback_line(f, 400) for f in goal_items[-5:]], "goal"))
     closed = [o for o in board.ordered() if o.goal == d.goal and o.id != d.id and o.state in (B.HALTED, B.REJECTED)]
     if closed:
-        lines += ["", f"## Closed directions on {d.goal} -- do not walk them again"]
-        for o in closed:
-            why = (o.decision if o.state == B.HALTED else o.verdict) or {}
-            lines.append(f"- {o.id} ({o.state}): {_short(o.record.get('idea'))} -- \"{_short(why.get('text'))}\"")
+        optional.append((["", f"## Closed directions on {d.goal} -- do not walk them again"]
+                         + [f"- {o.id} ({o.state}): {_short(o.record.get('idea'))} -- "
+                            f"\"{_short(((o.decision if o.state == B.HALTED else o.verdict) or {}).get('text'))}\""
+                            for o in closed], "directions"))
     others = [o for o in board.ordered() if o.goal == d.goal and o.id != d.id and o.state not in (B.HALTED, B.REJECTED)]
     if others:
-        lines += ["", f"## Other open directions on {d.goal}"]
-        lines += [f"- {o.id} ({o.state}): {_short(o.record.get('idea'))}" for o in others]
-    lines += ["", "## Components a tweak can name (belief.yaml at HEAD)"]
-    comps = board.decl.components
-    lines += [f"- {cid}: {_short(c.purpose, 200)}" for cid, c in sorted(comps.items())] or ["(none declared)"]
+        optional.append((["", f"## Other open directions on {d.goal}"]
+                         + [f"- {o.id} ({o.state}): {_short(o.record.get('idea'))}" for o in others], "directions"))
+    optional.append((["", "## Components a tweak can name (belief.yaml at HEAD)"]
+                     + ([f"- {cid}: {_short(c.purpose, 140)}" for cid, c in sorted(board.decl.components.items())]
+                        or ["(none declared)"]), "components"))
+    for block, section in optional:
+        if fits(block):
+            lines += block
+        else:
+            lines += ["", (f"{block[1].removeprefix('## ')}: too long for the head -- "
+                           f"board(direction=\"{d.id}\", section=\"{section}\")")]
+
     lines += ["", _rules_line(board.rules),
-              f"A trail earns {board.rules.earn} for a paper new to this direction, quoted, whose tweak "
-              "names a component above."]
+              (f"A trail earns {board.rules.earn} for a paper new to this direction, quoted, whose tweak "
+               "names a component above.")]
     if board.rules.idle_per_hour:
-        lines.append(f"While a test waits on its result, an hour with no trail, new direction or scout's "
-                     f"feedback recorded costs the waiting direction {board.rules.idle_per_hour}: record "
-                     "each trail as you have it, not all at the end.")
+        lines.append(f"While a test waits on its result, an hour with no earning trail, new direction, finding, "
+                     f"scout's question or answer recorded costs the waiting direction {board.rules.idle_per_hour}: "
+                     "record each trail as you have it, not all at the end. A note does not stop the clock.")
+    lines.append("To change the digest above, say what in feedback(..., kind=\"note\"); the director keeps it.")
+    return "\n".join(lines)
+
+
+def render_item(board: B.Board, rid: str) -> str:
+    """One record in full, with the feedback on it and the replies to it."""
+    about = [f for f in board.feedback.values() if f.get("about") == rid and f.get("id") != rid]
+    replies = [f for f in board.feedback.values() if f.get("reply_to") == rid]
+    if rid in board.directions:
+        d = board.directions[rid]
+        lines = [f"# {rid} · for {d.goal} · {d.state}", f"idea: {d.record.get('idea')}",
+                 f"assessment: {d.record.get('assessment') or '(none)'}", ""] + _digest_lines(d)
+        for record in (d.verdict, d.decision):
+            if record:
+                lines.append(_feedback_line(record))
+        return "\n".join(lines)
+    if rid in board.trails:
+        lines = _trail_lines(board, board.trails[rid])
+    elif rid in board.spends:
+        lines = [f"- {_spend_line(board, board.spends[rid])}"]
+    elif rid in board.evidence:
+        lines = [_evidence_line(board.evidence[rid], None)]
+    elif rid in board.feedback:
+        item = board.feedback[rid]
+        lines = [_feedback_line(item)]
+        if item.get("reply_to") in board.feedback:
+            lines.insert(0, "in reply to " + _feedback_line(board.feedback[item["reply_to"]], 600))
+    else:
+        return f"no record {rid!r} on the board"
+    if about or replies:
+        lines += ["", "feedback on it and replies, oldest first:"]
+        lines += [_feedback_line(f) for f in sorted({f["id"]: f for f in about + replies}.values(),
+                                                    key=lambda f: str(f.get("timestamp", "")))]
     return "\n".join(lines)
 
 

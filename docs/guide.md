@@ -302,6 +302,9 @@ A result stops counting the moment the thing it measured changes — and not bef
   never read it.
 * A **test run** writes a content stamp: the git blob id of every file its evidence rests on, as the
   working tree actually stood. Once one of those files differs at HEAD, its trials are `stale`.
+  Those files are the test's own and everything its components claim -- or, for a test that
+  declares `scope:`, the part of the claim it names plus every claimed file the run actually
+  opened. A scope is part of the test: changing it is a new version, so earlier evidence goes stale.
 
 * A **review** is bound to what was reviewed. `review()` records, in the ledger, that someone
   read a code region against the claim it realizes, or a branch's cited contract against the
@@ -471,8 +474,8 @@ status(view="diagnose")  →  run_test(...)  →  status(view="belief")
 
 | Tool | Does |
 |---|---|
-| `status` | 9 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace`, `goals` |
-| `run_test` | runs a declared test, captures its artifact and stamp, records its trials; calls made together run at once |
+| `status` | 10 views: `graph`, `coverage`, `belief`, `diagnose`, `plan`, `artifacts`, `cycle`, `trace`, `goals`, `runs` |
+| `run_test` | runs a declared test, captures its artifact and stamp, records its trials; calls made together run at once; `wait=False` runs it in a process of its own, answers with the RUN id at once and records when the run ends (`status(view="runs")`) |
 | `ingest` | imports external evidence: each record names a test its contract lists, and the server copies and hashes the results file itself |
 | `amend` | reclassifies or supersedes trials by appending; nothing is edited |
 | `note` | qualitative annotation; zero weight |
@@ -645,14 +648,16 @@ free; its results belong to no direction.
 
 | Tool | Who | Does |
 |---|---|---|
-| `board(direction)` | all | every direction in the order to act on it; with a `DIR-` id, that direction's brief: the goal, every trail, spend, result and feedback, the closed directions, and the components a tweak can name |
-| `ledger(run, contract, node)` | all | records from all three ledgers, and what a run captured (stdout, stderr, `result.json`, the command); never a source file |
+| `board(direction, section, part, item)` | all | every direction in the order to act on it; with a `DIR-` id, that direction's brief, whose head always fits: the goal and the human's standing rules for it, the director's digest, open questions, the latest feedback, the papers already cited and an index; `section=` pages the rest (trails, spends, feedback, evidence, goal, directions, components); `item=` serves one record whole |
+| `ledger(run, contract, node, evidence, limit, fields)` | all | records from all three ledgers, what a run captured (stdout, stderr, `result.json`, the command) and a finding the director attached; `fields="metrics"` for a run too long to read whole; never a source file |
 | `open_direction(name, goal, idea, assessment)` | all | a new direction for a goal, at 0 points |
 | `add_trail(direction, paper, tweak, component, quote, at, expect)` | all | earns the rules' points for a paper new to the direction, quoted, on a declared component; otherwise kept, earning nothing, with the reason |
-| `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, or an answer, addressed to a direction, trail or spend |
+| `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, or an answer, addressed to a goal, direction, trail or spend; a note on a goal reaches every brief on it |
 | `approve(target, approved, why, rank)` | director | a direction must be approved before anything is spent on it; `rank` orders them; a rejected trail's points stop counting |
 | `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names and the idle terms; runs measured on them afterwards are the direction's result |
 | `reflect(direction, decision, why)` | director | continue, halt or pivot; required after a result settles, before the next spend |
+| `evidence(direction, artifact, summary)` | director | attaches a measured finding -- a data file or report no component claims and no test runs; the board keeps a copy and its digest; earns `earn.evidence` (0 by default); never a result |
+| `digest(direction, text)` | director | the facts so far, at most 4000 characters, that every brief on the direction leads with |
 
 * **Rules in `research.yaml`, read from HEAD.** `focus` (the goal pursued now), `costs` per
   action, what a trail `earn`s, what an `idle` hour costs, and how many `scouts` run at once. An
@@ -661,12 +666,21 @@ free; its results belong to no direction.
 * **An idle hour costs the direction waiting on a result.** From a spend on a contract until its
   result says something (anything but insufficient or no evidence), or the direction is halted,
   every hour in which nobody records research costs that direction `idle.per_hour` points (default
-  1). Research means a trail, a new direction or a scout's feedback; each keeps research running
-  for `idle.running_minutes` (default 30). The director's own moves do not count. Idle time is
+  1). Research means an earning trail, a new direction, a measured finding, a scout's question or
+  an answer; each keeps research running for `idle.running_minutes` (default 30). A note, a trail
+  that earned nothing and the director's verdicts do not count. Idle time is
   totalled, so a point goes at the first idle hour, a second at the second, and so on. A spend keeps
   the idle terms in effect when it was made, so a later edit of the rules reprices nothing already
   waited. A spend that changes code and names no contract waits on nothing.
-* **Play in `.research/ledger.jsonl`, append-only.** Directions, trails, spends and feedback. A
+* **A spend on a test counts that test's runs.** Three arms of one evaluation, each its own test on
+  one contract and each with its own spend, keep their results apart.
+* **Briefs a scout can read.** A scout opens no file, so a reply too long for its client to show
+  whole is a reply it cannot read. A brief's head stays under 16,000 characters and leads with the
+  human's `constraints:` for the goal (declared in `goals.yaml`, so they are the human's) and the
+  director's digest; everything else is a section away, a page at a time, or one `item=` away.
+* **Play in `.research/ledger.jsonl`, append-only.** Directions, trails, spends, feedback, measured
+  findings (with the board's copy in `.research/evidence/`) and digests. The board says so if git
+  ignores the ledger, as a `*.jsonl` rule would. A
   balance and a result are never written: both are computed from the ledgers each time they are
   read. `.research/BOARD.md` is the board with every open direction's detail, rewritten after each
   move, for reading in an editor or on GitHub.

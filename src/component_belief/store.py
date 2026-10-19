@@ -14,6 +14,7 @@ import json
 import threading
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,10 +22,61 @@ from typing import Any, Iterator
 
 from .ids import sequential_id
 
-#: One writer at a time within a server process. Ids are taken from the ledger as it stands, so a
-#: run that appends while another counts would hand out the same EV- id twice. Runs execute in
-#: parallel; only taking an id and appending hold this.
+#: One writer at a time. Ids are taken from the ledger as it stands, so a run that appends while
+#: another counts would hand out the same EV- id twice. Runs execute in parallel; only taking an id
+#: and appending hold this. Within a process the lock is this RLock; across processes -- a test run
+#: in the background, recording when it ends while the server records another, or two sessions on
+#: one project -- it is also a lock on a file in the ledger's cache, taken by the outermost holder.
 _LEDGER = threading.RLock()
+_HELD = threading.local()
+
+
+def _lock(fh: Any) -> None:
+    if os.name == "nt":
+        import msvcrt
+        import time
+        while True:
+            try:
+                msvcrt.locking(fh.fileno(), msvcrt.LK_LOCK, 1)
+                return
+            except OSError:            # LK_LOCK gives up after ten tries; keep waiting
+                time.sleep(0.05)
+    import fcntl
+    fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+
+
+def _unlock(fh: Any) -> None:
+    if os.name == "nt":
+        import msvcrt
+        fh.seek(0)
+        msvcrt.locking(fh.fileno(), msvcrt.LK_UNLCK, 1)
+        return
+    import fcntl
+    fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def ledger_lock(directory: Path) -> Iterator[None]:
+    """Hold the ledger in `directory` against every other writer, in this process or another."""
+    with _LEDGER:
+        depth = getattr(_HELD, "depth", 0)
+        if depth:
+            _HELD.depth = depth + 1
+            try:
+                yield
+            finally:
+                _HELD.depth = depth
+            return
+        path = directory / "cache" / "ledger.lock"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a+b") as fh:
+            _lock(fh)
+            _HELD.depth = 1
+            try:
+                yield
+            finally:
+                _HELD.depth = 0
+                _unlock(fh)
 
 STORE_DIR = ".belief"
 VALIDITY = ("valid", "invalid", "quarantined", "superseded")
@@ -79,7 +131,7 @@ class Store:
 
     def _append(self, path: Path, record: dict[str, Any]) -> None:
         line = json.dumps(record, sort_keys=True, default=str) + "\n"
-        with _LEDGER:
+        with ledger_lock(self.dir):
             self.ensure()
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(line)
@@ -94,7 +146,7 @@ class Store:
         return sequential_id("EV", n + 1)
 
     def append_trial(self, record: dict[str, Any]) -> str:
-        with _LEDGER:
+        with ledger_lock(self.dir):
             return self._append_trial(record)
 
     def _append_trial(self, record: dict[str, Any]) -> str:
@@ -109,7 +161,7 @@ class Store:
     def append_trials(self, records: list[dict[str, Any]]) -> list[str]:
         """Allocate ids in one pass — one re-scan of the ledger, not N — and append them before
         anyone else counts."""
-        with _LEDGER:
+        with ledger_lock(self.dir):
             return self._append_trials(records)
 
     def _append_trials(self, records: list[dict[str, Any]]) -> list[str]:
@@ -209,7 +261,7 @@ class Store:
     def append_decision(self, record: dict[str, Any]) -> dict[str, Any]:
         record = dict(record)
         record.setdefault("timestamp", utc_now())
-        with _LEDGER:
+        with ledger_lock(self.dir):
             record.setdefault("id", sequential_id("DEC", len(self.decisions()) + 1))
             self._append(self.decisions_path, record)
         return record
@@ -240,7 +292,7 @@ class Store:
         reservation: it is created with exist_ok=False, so two runs at once -- in this server or
         in another process on the same project -- never share an id, and an id whose directory
         exists from a run that recorded nothing is skipped rather than written into."""
-        with _LEDGER:
+        with ledger_lock(self.dir):
             n = int(self.next_run_id().split("-", 1)[1])
             while True:
                 run_id = sequential_id("RUN", n)

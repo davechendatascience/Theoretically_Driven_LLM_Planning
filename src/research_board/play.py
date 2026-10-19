@@ -9,7 +9,9 @@ tool list leaves them out.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
 import threading
 from pathlib import Path
 from typing import Any
@@ -21,7 +23,13 @@ from .page import write_page
 #: two moves counting at once would hand out the same id.
 _LOCK = threading.RLock()
 
-_PREFIX = {"trail": "TRAIL", "spend": "SPD", "feedback": "FBK"}
+_PREFIX = {"trail": "TRAIL", "spend": "SPD", "feedback": "FBK", "evidence": "EVD", "digest": "DGT"}
+
+#: What a measured finding may be: data and reports, which a scout may read, never source code.
+EVIDENCE_SUFFIXES = (".json", ".jsonl", ".csv", ".tsv", ".txt", ".md", ".log")
+EVIDENCE_BYTES = 2_000_000
+#: A digest leads every brief on its direction, so it stays short enough to always be read.
+DIGEST_CHARS = 4000
 
 
 class Refused(Exception):
@@ -38,14 +46,18 @@ def _record(root: Path, board: B.Board, kind: str, fields: dict[str, Any]) -> tu
             f"evidence rests on what is there and recording would move it. Drop {B.RESEARCH_DIR}/ "
             "from those declarations to keep research here.")
     record = {"kind": kind, **fields, "timestamp": B.utc_now()}
-    if kind in _PREFIX:
-        n = sum(1 for r in B.read_ledger(root) if r.get("kind") == kind)
-        record = {"id": f"{_PREFIX[kind]}-{n + 1:04d}", **record}
+    if kind in _PREFIX and not fields.get("id"):
+        record = {"id": _next_id(root, kind), **record}
     path = B.ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(json.dumps(record, sort_keys=True) + "\n")
     return record, write_page(root)
+
+
+def _next_id(root: Path, kind: str) -> str:
+    n = sum(1 for r in B.read_ledger(root) if r.get("kind") == kind)
+    return f"{_PREFIX[kind]}-{n + 1:04d}"
 
 
 def _direction(board: B.Board, direction: str) -> B.Direction:
@@ -127,9 +139,10 @@ def feedback(root: Path, about: str, text: str, kind: str = B.NOTE, reply_to: st
     with _LOCK:
         board = B.build(root, with_results=False)
         direction = board.direction_of(about)
-        if not direction:
-            raise Refused(f"{about!r} is no direction, trail or spend on the board; feedback is addressed "
-                          "to what it is about, so the next scout on that direction reads it")
+        goal = about if not direction and about in board.decl.goals else ""
+        if not direction and not goal:
+            raise Refused(f"{about!r} is no goal, direction, trail or spend on the board; feedback is "
+                          "addressed to what it is about, so the next scout on it reads it")
         if reply_to:
             parent = board.feedback.get(reply_to)
             if parent is None:
@@ -138,13 +151,16 @@ def feedback(root: Path, about: str, text: str, kind: str = B.NOTE, reply_to: st
                 raise Refused(f"{reply_to} is a {parent.get('type')}, not a question")
         elif kind == B.ANSWER:
             raise Refused("an answer names the question it answers: reply_to=<FBK- id>")
-        record, _ = _record(root, board, "feedback", {
-            "about": about, "direction": direction, "type": kind, "text": text.strip(),
-            "reply_to": reply_to or "", "by": by})
+        fields = {"about": about, "direction": direction, "type": kind, "text": text.strip(),
+                  "reply_to": reply_to or "", "by": by}
+        if goal:
+            fields["goal"] = goal
+        record, _ = _record(root, board, "feedback", fields)
     if kind == B.QUESTION:
         return (f"{record['id']}: question on {about} recorded; it stays open on the board until the "
                 f"director answers it with feedback(..., kind=\"answer\", reply_to=\"{record['id']}\").")
-    return f"{record['id']}: {kind} on {about} recorded, in {direction}'s feedback."
+    where = f"{direction}'s feedback" if direction else f"the notes on {goal}, which every brief on it carries"
+    return f"{record['id']}: {kind} on {about} recorded, in {where}."
 
 
 def approve(root: Path, target: str, approved: bool, why: str, rank: int | None = None) -> str:
@@ -211,9 +227,11 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
         rules = board.rules                                   # so are the idle terms: a later rule reprices none
         record, _ = _record(root, board, "spend", {
             "direction": d.id, "action": action, "target": target, "contracts": contracts,
+            "test": target if target in decl.tests else "",
             "expect": expect.strip(), "cost": cost, "commit": commit, "by": "director",
             "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes}})
-    counts = (f"Runs measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
+    by_test = f"{target}'s runs " if target in decl.tests else "Runs "
+    counts = (f"{by_test}measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
               if contracts else f"{target} names no contract, so this spend has no result of its own.")
     if contracts and rules.idle_per_hour:
         counts += (f" Until the result is in, every hour with no research recorded costs {d.id} "
@@ -239,3 +257,65 @@ def reflect(root: Path, direction: str, decision: str, why: str) -> str:
     if decision == B.HALT:
         return f"{record['id']}: {d.id} halted; it stays on the board with this reason."
     return f"{record['id']}: {d.id} continues."
+
+
+def evidence(root: Path, direction: str, artifact: str, summary: str, by: str = "director") -> str:
+    """Attach a measured finding to a direction: a data file or report the director produced
+    outside a declared test. The board keeps its own copy of the bytes and their digest, so what a
+    scout reads later is what was attached, and serves it through ledger(evidence=...). It is
+    never a result: a spend's result comes from measured runs only (DEF-research-ledger)."""
+    _required(direction=direction, artifact=artifact, summary=summary)
+    from component_belief.staleness import matches, named_paths
+
+    with _LOCK:
+        board = B.build(root, with_results=False)
+        d = _direction(board, direction)
+        path = (root / artifact).resolve()
+        try:
+            rel = path.relative_to(root.resolve()).as_posix()
+        except ValueError:
+            raise Refused(f"{artifact!r} is outside the project") from None
+        if not path.is_file():
+            raise Refused(f"no file {rel!r}")
+        if rel.split("/", 1)[0] in (".git", ".belief", ".consistency", B.RESEARCH_DIR):
+            raise Refused(f"{rel} is in a ledger; ledger(run=...) and ledger(node=...) already serve those")
+        if path.suffix.lower() not in EVIDENCE_SUFFIXES:
+            raise Refused(f"{rel} is not a data file or report ({', '.join(EVIDENCE_SUFFIXES)}); a finding "
+                          "is what was measured, never the code that measured it")
+        claimed = sorted(cid for cid, comp in board.decl.components.items() if any(matches(rel, e) for e in comp.code))
+        named = sorted(tid for tid, test in board.decl.tests.items()
+                       if named_paths(test.run, list(test.reads), {rel}))
+        if claimed or named:
+            raise Refused(f"{rel} is {'claimed by ' + ', '.join(claimed) if claimed else 'named by ' + ', '.join(named)}"
+                          "; a scout reads no file a component claims or a test runs")
+        size = path.stat().st_size
+        if size > EVIDENCE_BYTES:
+            raise Refused(f"{rel} is {size} bytes; attach a summary table under {EVIDENCE_BYTES} bytes instead")
+        eid = _next_id(root, "evidence")
+        copy = B.evidence_dir(root, eid) / path.name
+        copy.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, copy)
+        digest = hashlib.sha256(copy.read_bytes()).hexdigest()[:16]
+        points = 0 if d.state in (B.REJECTED, B.HALTED) else board.rules.earn_evidence
+        record, after = _record(root, board, "evidence", {
+            "id": eid, "direction": d.id, "artifact": rel, "copy": copy.relative_to(root).as_posix(),
+            "sha256": digest, "bytes": size, "summary": summary.strip(), "by": by, "points": points,
+            "commit": (B.git(root, "rev-parse", "--short", "HEAD") or "").strip()})
+    worth = f"+{points}" if points else "0 points"
+    return (f"{eid} on {d.id}: {rel} ({size} bytes, sha256 {digest}) kept as {record['copy']}, {worth}; "
+            f"scouts read it with ledger(evidence=\"{eid}\"). {d.id} balance {_balance(after, d.id)}.")
+
+
+def digest(root: Path, direction: str, text: str) -> str:
+    """The director's "facts so far" for a direction, which leads every brief on it. A new digest
+    replaces the last on the board; the ledger keeps every one. Scouts propose changes through
+    feedback; the director decides what the next scout reads first."""
+    _required(direction=direction, text=text)
+    if len(text.strip()) > DIGEST_CHARS:
+        raise Refused(f"a digest leads every brief, so it is at most {DIGEST_CHARS} characters "
+                      f"({len(text.strip())} given); leave the rest in feedback, where a scout can page it")
+    with _LOCK:
+        board = B.build(root, with_results=False)
+        d = _direction(board, direction)
+        record, _ = _record(root, board, "digest", {"direction": d.id, "text": text.strip(), "by": "director"})
+    return f"{record['id']}: {d.id}'s digest is now what every brief on it leads with."

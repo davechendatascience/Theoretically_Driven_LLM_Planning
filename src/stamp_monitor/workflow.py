@@ -140,7 +140,7 @@ def _decisions_on_evidence(root: Path, findings: list[Finding]) -> None:
         stale = []
         for t in cited:
             contract = decl.contracts.get(t.get("contract_id", ""))
-            if contract and staleness.stale_reason(decl.code_paths_for_subject(contract.subject), t):
+            if contract and staleness.stale_reason(decl.code_paths_for_subject(contract.subject), t, decl.scope_for(t)):
                 stale.append(t)
         if stale:
             which = sorted({t.get("contract_id") for t in stale})

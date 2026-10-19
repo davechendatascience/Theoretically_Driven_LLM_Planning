@@ -404,6 +404,7 @@ def view_goals(ctx: Any) -> str:
         own = by_contract.get(goal.measure, [])
         lines += ["", f"{gid}  {_headline(own)} -- {goal.outcome}"]
         lines += _measure_lines(decl, goal.measure, own)
+        lines += [f"  rule: {rule}" for rule in goal.constraints]
         served = decl.components_of_subject(gid)
         lines.append(f"  served by: {', '.join(served) if served else 'no component names this goal'}")
     if decl.goal_interfaces:

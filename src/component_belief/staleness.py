@@ -308,8 +308,13 @@ class CodeStaleness:
                     f"{run_id}/{STAMP_FILE} no longer matches the digest its trials recorded")
         return self._stamps[key]
 
-    def stale_reason(self, code_paths: list[str], trial: dict[str, Any]) -> str | None:
+    def stale_reason(self, code_paths: list[str], trial: dict[str, Any],
+                     scope: list[str] | None = None) -> str | None:
         """Why this trial no longer speaks for HEAD, or None if it still does.
+
+        `scope`, when the trial's test declares one, narrows the claimed files watched to those it
+        names, and every claimed file the run opened stays watched as well: a declared scope can
+        leave out what the run never read, and nothing it did.
 
         Everything the answer depends on is the run's stamp, its run id, the revision it names and
         the code paths asked about -- every trial of one run shares them -- so a run is judged once
@@ -317,12 +322,14 @@ class CodeStaleness:
         against every tracked file again."""
         repro = trial.get("repro") or {}
         key = (str(trial.get("stamp") or ""), str(trial.get("run_id") or ""),
-               str(repro.get("sw_revision") or trial.get("system_version") or ""), tuple(code_paths))
+               str(repro.get("sw_revision") or trial.get("system_version") or ""), tuple(code_paths),
+               tuple(scope or ()))
         if key not in self._reasons:
-            self._reasons[key] = self._stale_reason(code_paths, trial)
+            self._reasons[key] = self._stale_reason(code_paths, trial, scope)
         return self._reasons[key]
 
-    def _stale_reason(self, code_paths: list[str], trial: dict[str, Any]) -> str | None:
+    def _stale_reason(self, code_paths: list[str], trial: dict[str, Any],
+                      scope: list[str] | None = None) -> str | None:
         stamp = self.stamp_for(trial)
         if stamp is None:
             return self._revision_reason(code_paths, trial)
@@ -334,9 +341,11 @@ class CodeStaleness:
 
         files: dict[str, str | None] = stamp.get("files") or {}
         covered = [e for e in code_paths if e in (stamp.get("claimed") or [])]
-        watch = set(stamp.get("named") or [])
-        watch |= self._claimed_at_head(tuple(covered))
-        watch |= {p for p in files if any(matches(p, e) for e in covered)}
+        claimed = self._claimed_at_head(tuple(covered)) | {p for p in files if any(matches(p, e) for e in covered)}
+        if scope:
+            opened = {p for p in stamp.get("opened") or [] if any(matches(p, e) for e in covered)}
+            claimed = {p for p in claimed if any(matches(p, s) for s in scope)} | opened
+        watch = set(stamp.get("named") or []) | claimed
         # a path absent from the stamp did not exist when the run looked
         changed = sorted(p for p in watch if files.get(p) != head.get(p))
         if changed:
@@ -357,7 +366,7 @@ class CodeStaleness:
 
         # A path claimed after the run was stamped has no recorded content: judge it by revision.
         uncovered = [e for e in code_paths if e not in covered]
-        return self._revision_reason(uncovered, trial) if uncovered else None
+        return self._revision_reason(uncovered, trial, scope) if uncovered else None
 
     def _claimed_at_head(self, entries: tuple[str, ...]) -> set[str]:
         """The files at HEAD the entries claim: the same tree for every run, so matched once."""
@@ -397,7 +406,8 @@ class CodeStaleness:
                 line.strip() for line in out.splitlines() if line.strip()}
         return self._changed[revision]
 
-    def _revision_reason(self, code_paths: list[str], trial: dict[str, Any]) -> str | None:
+    def _revision_reason(self, code_paths: list[str], trial: dict[str, Any],
+                         scope: list[str] | None = None) -> str | None:
         repro = trial.get("repro") or {}
         revision = str(repro.get("sw_revision") or trial.get("system_version") or "")
         if not revision or not code_paths:
@@ -405,7 +415,8 @@ class CodeStaleness:
         changed = self.changed_since(revision)
         if changed is None:
             return f"revision {revision} is not in this repository's history"
-        hit = sorted(path for path in changed if any(matches(path, entry) for entry in code_paths))
+        hit = sorted(path for path in changed if any(matches(path, entry) for entry in code_paths)
+                     and (not scope or any(matches(path, s) for s in scope)))
         return f"{_shown(hit)} changed since {revision}" if hit else None
 
 

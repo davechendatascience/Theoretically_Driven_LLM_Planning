@@ -695,26 +695,31 @@ definitions:
     meaning: >-
       The append-only records the research board keeps in .research/, a
       directory that holds no declaration file and no part of the ledger
-      DEF-ledger names: directions, trails, spends and feedback, each stamped
-      with the time it was recorded. None of them is a trial record, and
-      neither is the page the board writes beside them. A direction is a line
+      DEF-ledger names: directions, trails, spends, feedback, measured
+      findings and digests, each stamped with the time it was recorded. None
+      of them is a trial record, and neither is the page the board writes
+      beside them, nor the copy of the file a measured finding attaches, which
+      the board keeps in .research/ beside the record. A direction is a line
       of research. A spend is recorded on one direction
       and names, when it is recorded, the contracts it targets: the contract
       it names, or each contract the test it names can measure at the head
-      revision then, or none; that set does not change afterwards. A spend
-      records a commitment to test its direction by every measurement
-      recorded against each contract it targets after the spend was
-      recorded. A measured trial record is recorded when the run that
+      revision then, or none; that set does not change afterwards; and, when
+      it names a test, that test. A spend records a commitment to test its
+      direction by every measurement recorded against each contract it
+      targets after the spend was recorded -- by the test it names, when it
+      names one. A measured trial record is recorded when the run that
       captured its artifact ends, and each run captures an artifact of its
       own, so a measured record is the first record of the measurement it
       carries. The result of a spend on a contract it targets is the state
       DEF-contract-state gives that contract when its slices are computed
       from the measured trial records in the evidence ledger recorded against
-      it after the spend was recorded, and from no other record; a spend that
+      it after the spend was recorded -- by the test the spend names, when it
+      names one -- and from no other record; a spend that
       targets no contract has no result. For each direction the board shows
       the results of the spends recorded on that direction and no other
-      result. A research record is a direction, a trail, or feedback not left
-      by the director. A spend also fixes, when it is recorded, the points an
+      result. A research record is a direction, a trail that earned points
+      when it was recorded, a measured finding, a question not asked by the
+      director, or an answer. A spend also fixes, when it is recorded, the points an
       idle hour costs and how long research counts as running after a
       research record. A spend that targets a contract waits from when it is
       recorded until the first moment at which its result, computed as above
@@ -723,15 +728,17 @@ definitions:
       is idle at a moment when a spend on it waits then and no research
       record was recorded within that spend's running time before it. A
       direction's balance at a moment is the points earned by its trails that
-      were not rejected, less the costs of its spends, less the whole points
+      were not rejected and by its measured findings, less the costs of its
+      spends, less the whole points
       its idle time up to that moment costs, each stretch of it priced at the
       highest rate fixed by a spend waiting through it; it is computed from
       the research ledger and the evidence ledger, and recorded in neither.
       Where a component's code claims a file in .research/,
       or a declared test names one on its run line or among what it reads,
       the board records nothing. Otherwise recording to it appends one record
-      to the research ledger and rewrites one page in .research/, and changes
-      nothing else: it appends no record to the ledger DEF-ledger names, of
+      to the research ledger, rewrites one page in .research/ and, for a
+      measured finding, writes there one copy of the file it attaches, and
+      changes nothing else: it appends no record to the ledger DEF-ledger names, of
       any provenance, changes no declaration, makes no commit and does not
       move the head revision.
 lemmas:
@@ -1493,7 +1500,8 @@ branches:
       counting for a line of research only when no such commitment was
       recorded before it, bars none of them. Beliefs: by DEF-research-ledger,
       recording appends one record to the research ledger, which is no trial
-      record, rewrites one page, which is none either, appends no record to
+      record, rewrites one page and, for a measured finding, writes one copy
+      of the file it attaches, neither of which is one either, appends no record to
       the ledger DEF-ledger names, of any provenance, and changes no
       declaration; and where a component's code claims a file in .research/
       or a declared test names one, it records nothing. Belief-eligible

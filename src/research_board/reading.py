@@ -10,14 +10,19 @@ run id must look like one, and only files inside that run's own artifact directo
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
 from . import board as B
 
 RUN_ID = re.compile(r"^RUN-\d+$")
+EVIDENCE_ID = re.compile(r"^EVD-\d+$")
+FIELDS = ("metrics", "conditions", "output")
+LINE_LIMIT = 2000          # characters served of one record
 NODE_ID = re.compile(r"^(AXM|DEF|LMA|BRN)-[A-Za-z0-9][A-Za-z0-9_-]*$")
 FILE_LIMIT = 6000          # characters served of each captured file
 RECORD_LIMIT = 50
@@ -41,12 +46,18 @@ def _clip(text: str, limit: int = FILE_LIMIT) -> str:
     return text[: limit // 2] + f"\n… [{len(text) - limit} characters cut] …\n" + text[-limit // 2:]
 
 
-def _trial_line(record: dict[str, Any]) -> str:
-    conditions = record.get("conditions", {})
-    raw = conditions.get("raw", conditions) if isinstance(conditions, dict) else conditions
-    return (f"- {record.get('id')} · {record.get('timestamp', '')} · {record.get('contract_id')} · "
-            f"{record.get('run_id', '')} · {record.get('outcome')} · {record.get('validity', 'valid')} · "
-            f"metrics {json.dumps(record.get('metrics', {}), sort_keys=True)} · conditions {json.dumps(raw, sort_keys=True)}")
+def _trial_line(record: dict[str, Any], fields: Collection[str] = FIELDS) -> str:
+    line = (f"- {record.get('id')} · {record.get('timestamp', '')} · {record.get('contract_id')} · "
+            f"{record.get('run_id', '')} · {record.get('outcome')} · {record.get('validity', 'valid')}")
+    if "metrics" in fields:
+        line += f" · metrics {json.dumps(record.get('metrics', {}), sort_keys=True)}"
+    if "conditions" in fields:
+        conditions = record.get("conditions", {})
+        raw = conditions.get("raw", conditions) if isinstance(conditions, dict) else conditions
+        line += f" · conditions {json.dumps(raw, sort_keys=True)}"
+    if len(line) > LINE_LIMIT:
+        line = line[:LINE_LIMIT] + f" … [{len(line) - LINE_LIMIT} characters cut; fields=\"metrics\" reads less]"
+    return line
 
 
 def _trials(root: Path) -> list[dict[str, Any]]:
@@ -55,18 +66,20 @@ def _trials(root: Path) -> list[dict[str, Any]]:
     return Store(root).effective_trials()
 
 
-def serve_run(root: Path, run_id: str) -> str:
+def serve_run(root: Path, run_id: str, limit: int = RECORD_LIMIT, fields: Collection[str] = FIELDS) -> str:
     if not RUN_ID.match(run_id):
         return f"{run_id!r} is not a run id (RUN-<digits>)"
     records = [t for t in _trials(root) if t.get("run_id") == run_id]
     lines = [f"{run_id}: {len(records)} record(s) in the evidence ledger"]
-    lines += [_trial_line(r) for r in records[:RECORD_LIMIT]]
-    if len(records) > RECORD_LIMIT:
-        lines.append(f"… and {len(records) - RECORD_LIMIT} more")
+    lines += [_trial_line(r, fields) for r in records[:limit]]
+    if len(records) > limit:
+        lines.append(f"… and {len(records) - limit} more (limit=)")
     for event in _jsonl(root / ".belief" / "events.jsonl"):
         payload = event.get("payload") or {}
         if event.get("tool") == "run_test" and payload.get("run_id") == run_id:
             lines.append(f"run: {payload.get('test')} · exit {payload.get('exit_code')} · {event.get('timestamp')}")
+    if "output" not in fields:
+        return "\n".join(lines)
     artifacts = (root / ".belief" / "artifacts").resolve()
     directory = (artifacts / run_id).resolve()
     if directory.parent != artifacts or not directory.is_dir():
@@ -79,7 +92,7 @@ def serve_run(root: Path, run_id: str) -> str:
     return "\n".join(lines)
 
 
-def serve_contract(root: Path, contract_id: str, limit: int) -> str:
+def serve_contract(root: Path, contract_id: str, limit: int, fields: Collection[str] = FIELDS) -> str:
     from component_belief.declarations import load
 
     decl = load(root)
@@ -96,7 +109,31 @@ def serve_contract(root: Path, contract_id: str, limit: int) -> str:
             lines.append(f"  {tid}: {test.run}")
     records = [t for t in _trials(root) if t.get("contract_id") == contract_id]
     lines.append(f"{len(records)} record(s); the latest {min(limit, len(records))}, newest last:")
-    lines += [_trial_line(r) for r in records[-limit:]]
+    lines += [_trial_line(r, fields) for r in records[-limit:]]
+    return "\n".join(lines)
+
+
+def serve_evidence(root: Path, evidence_id: str) -> str:
+    """A measured finding as the board kept it: its own copy, checked against the digest it took."""
+    if not EVIDENCE_ID.match(evidence_id):
+        return f"{evidence_id!r} is not an evidence id (EVD-<digits>)"
+    item = next((r for r in B.read_ledger(root) if r.get("kind") == "evidence" and r.get("id") == evidence_id), None)
+    if item is None:
+        return f"no evidence {evidence_id!r} on the board"
+    lines = [(f"{evidence_id} on {item.get('direction')} · by {item.get('by')} · {item.get('artifact')} at "
+              f"{item.get('commit') or '?'} · {item.get('bytes')} bytes · sha256 {item.get('sha256')}"),
+             f"summary: {item.get('summary')}"]
+    kept = B.evidence_dir(root, evidence_id).resolve()
+    path = (root / str(item.get("copy", ""))).resolve()
+    if path.parent != kept or not path.is_file():
+        lines.append("the board's copy is missing; the summary is all that is left")
+        return "\n".join(lines)
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest()[:16] != item.get("sha256"):
+        lines.append("the board's copy no longer matches the digest it took: not served")
+        return "\n".join(lines)
+    text = data.decode("utf-8", errors="replace")
+    lines += ["", f"--- {path.name} ({len(text)} characters) ---", _clip(text, 12000)]
     return "\n".join(lines)
 
 

@@ -632,3 +632,62 @@ class TestGoals:
                                     for light in ("normal", "low") for _ in range(40)])
         out = server.decide("CHG-3", policy_id="POL-release")
         assert "requires a human approver" in out and "Not covered by your goals.yaml" in out
+
+
+# ---------- runs in the background ----------
+
+class TestBackgroundRuns:
+    """A run of hours outlives the tool call: it starts in a process of its own, answers with its
+    id at once, and records its trials when it ends, as a waited run would."""
+
+    @staticmethod
+    def _until(predicate, seconds: float = 60.0):
+        import time
+
+        deadline = time.monotonic() + seconds
+        while time.monotonic() < deadline:
+            value = predicate()
+            if value:
+                return value
+            time.sleep(0.1)
+        raise AssertionError("timed out waiting")
+
+    def test_a_background_run_answers_at_once_and_records_when_it_ends(self, project, repo):
+        emit_yaml(repo, 'python -c "import json,os,time; time.sleep(1); '
+                        "json.dump([{'metrics': {'ik_success': True}}], open(os.environ['OUT'], 'w'))\"")
+        reply = server.run_test("TST-grasp-ik", wait=False)
+        run_id = reply.split()[0]
+        assert run_id.startswith("RUN-") and "started in the background" in reply
+        assert "running" in server.status(view="runs") or "recorded" in server.status(view="runs")
+
+        records = self._until(lambda: [t for t in Store(repo).effective_trials() if t.get("run_id") == run_id])
+        assert {t["provenance"] for t in records} == {"measured"} and records[0]["stamp"]
+        self._until(lambda: "recorded" in server.status(view="runs"))
+        assert f"{run_id} · TST-grasp-ik@" in server.status(view="runs")
+
+    def test_a_run_whose_process_died_unrecorded_reads_as_lost(self, project, repo):
+        from component_belief.jobs import JOB_FILE
+
+        run_id, directory = Store(repo).reserve_run_id()
+        (directory / JOB_FILE).write_text(json.dumps({"run_id": run_id, "test": "TST-grasp-ik@x",
+                                                      "started": "2026-10-19T00:00:00+00:00", "pid": 2 ** 22 + 7}),
+                                          encoding="utf-8")
+        assert f"{run_id} · TST-grasp-ik@x · lost" in server.status(view="runs")
+
+
+def test_two_processes_appending_at_once_never_share_an_id(repo):
+    """The server and a background run record into one ledger; ids are taken under a lock both hold."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = ("import sys; sys.path.insert(0, sys.argv[2]); from pathlib import Path\n"
+              "from component_belief.store import Store\n"
+              "s = Store(Path(sys.argv[1]))\n"
+              "for i in range(40):\n"
+              "    s.append_trials([{'contract_id': 'CTR-x', 'run_id': 'RUN-x', 'metrics': {}}])\n")
+    src = str(Path(__file__).resolve().parents[1] / "src")
+    procs = [subprocess.Popen([sys.executable, "-c", script, str(repo), src]) for _ in range(3)]
+    assert all(p.wait(timeout=120) == 0 for p in procs)
+    ids = [t["id"] for t in Store(repo).raw_records() if t.get("kind") == "trial"]
+    assert len(ids) == 120 and len(set(ids)) == 120

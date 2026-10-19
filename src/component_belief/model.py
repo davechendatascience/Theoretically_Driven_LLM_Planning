@@ -212,7 +212,7 @@ def compute_slices(
             continue
 
         stale = _test_changed(decl, trial) or (
-            staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial)
+            staleness.stale_reason(decl.code_paths_for_subject(contract.subject), trial, decl.scope_for(trial))
             if staleness is not None else None)
         if stale:
             bundle["stale"] += 1

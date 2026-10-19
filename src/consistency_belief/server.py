@@ -272,7 +272,9 @@ def propose_branch(
     once the same id is declared in consistency.yaml at git HEAD. Proposing an id
     that is already staged restates it; trials of the earlier claim stop counting.
     """
-    cited = source_citations(f"{claim} {rationale}") + code_identifiers(f"{claim} {rationale}")
+    # The claim only: a rationale that names what was measured on a technique is context, and the
+    # verifier judges the claim.
+    cited = source_citations(claim) + code_identifiers(claim)
     warning = ""
     if cited:
         warning = (

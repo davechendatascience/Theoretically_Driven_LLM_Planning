@@ -55,6 +55,10 @@ what clears a target, gates, `$OUT`, what evidence is bound to. Two more facts m
     a rate over episodes, write a script that puts the trials in `$OUT` instead.
     Keep it out of `tests/` and away from fixtures you edit: every file a goal's test names or
     `reads:` becomes the human's, and the guard refuses your commits to it.
+- **Standing rules:** what any way of reaching a goal must keep, as the human has said it --
+  "actions are executed exactly, with no noise" -- go under the goal as `constraints:`, one line
+  each. Every research brief on the goal carries them. Draft only rules the human has stated;
+  never one of your own.
 - **Interfaces:** one per hand-over between two goals' systems (`from`, `to`, `hands_over`), each
   measured by a `layer: interface` test.
 - **Policy:** `POL-goals`, naming every measure with `require: supported`.
