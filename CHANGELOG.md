@@ -4,7 +4,7 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
-## Unreleased · research-board feedback
+## 0.13.0 — 2026-10-19 · research-board feedback
 
 From two days of use on a robot-learning goal: 18 directions, 276 trails, 16 spends.
 
