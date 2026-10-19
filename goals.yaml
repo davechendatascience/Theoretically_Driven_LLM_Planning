@@ -34,6 +34,14 @@ goals:
       tests in that project's environment.
     measure: CTR-runs-in-any-project
 
+  - id: GOL-cross-coding-agents
+    outcome: >-
+      Claude Code, Codex and Antigravity can each run the harness on my project: whichever agent I
+      use, the servers read the project it is working in and run its tests in that project's
+      environment, its commits to my goal set are refused, and it can send the verifier and the
+      research scout, neither holding a tool that opens a file or runs a command.
+    measure: CTR-runs-on-any-coding-agent
+
 interfaces:
   - id: IFC-evidence__designs
     from: GOL-honest-evidence
@@ -71,6 +79,13 @@ contracts:
     metrics: [{id: passed, unit: bool}]
     acceptance: {rule: "passed == true"}
     evaluable_by: [TST-acceptance-any-project]
+
+  - id: CTR-runs-on-any-coding-agent
+    subject: GOL-cross-coding-agents
+    kind: gate
+    metrics: [{id: passed, unit: bool}]
+    acceptance: {rule: "passed == true"}
+    evaluable_by: [TST-acceptance-cross-agents]
 
   - id: CTR-design-gate-reads-evidence
     subject: IFC-evidence__designs
@@ -112,6 +127,14 @@ tests:
     capture: [case]
     reads: [acceptance/conftest.py]
 
+  - id: TST-acceptance-cross-agents
+    layer: e2e
+    targets: [GOL-cross-coding-agents]
+    run: python tools/pytest_trials.py $OUT -- acceptance/test_cross_coding_agents.py -q -p no:asyncio
+    metrics: [passed]
+    capture: [case]
+    reads: [acceptance/conftest.py]
+
   - id: TST-acceptance-design-gate
     layer: interface
     targets: [IFC-evidence__designs]
@@ -127,4 +150,5 @@ policies:
       - {slice: CTR-designs-are-sound, require: supported}
       - {slice: CTR-goals-stay-mine, require: supported}
       - {slice: CTR-runs-in-any-project, require: supported}
+      - {slice: CTR-runs-on-any-coding-agent, require: supported}
       - {slice: CTR-design-gate-reads-evidence, require: supported}

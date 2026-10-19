@@ -87,6 +87,9 @@ def project(tmp_path: Path, monkeypatch) -> Path:
     commit(tmp_path, "a planner and its test")
     for var in ("BELIEF_PROJECT_ROOT", "CONSISTENCY_PROJECT_ROOT", "STAMP_MONITOR_ROOT"):
         monkeypatch.setenv(var, str(tmp_path))
-    # measured as a plain process, whatever launched the suite
-    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    # measured as a plain process, whatever launched the suite, with no workspace a client named
+    for var in ("CLAUDE_PLUGIN_ROOT", "PLUGIN_ROOT", "TDLP_ISOLATED", "ANTIGRAVITY_AGENT"):
+        monkeypatch.delenv(var, raising=False)
+    from component_belief import project as roots
+    monkeypatch.setattr(roots, "_client_roots", [])
     return tmp_path
