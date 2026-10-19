@@ -219,7 +219,7 @@ components:
       - {id: FM-cross-process-ids, observable: "two processes recording into one ledger at once hand one evidence id to two records",
          observed_by: CTR-surface-intact, case: "tests.test_server::test_two_processes_appending_at_once_never_share_an_id"}
     remediation: runner.run_test() synthesis branch; jobs.start and jobs.work; store.ledger_lock; the tool list in server.py; the checks in server.ingest()
-    goal: GOL-honest-evidence
+    goal: [GOL-honest-evidence, GOL-cross-coding-agents]
     code:
       - src/component_belief/runner.py
       - src/component_belief/jobs.py
@@ -270,7 +270,7 @@ components:
       - {id: FM-human-blocked, observable: "a commit the human types is refused",
          observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_the_same_commit_by_the_human_passes"}
     remediation: goals.goal_set, check_commit, goal_history and ratification_gap
-    goal: GOL-goals-stay-mine
+    goal: [GOL-goals-stay-mine, GOL-cross-coding-agents]
     code:
       - src/component_belief/goals.py
 
@@ -298,7 +298,7 @@ components:
       - {id: FM-client-drift, observable: "a Codex or Antigravity config or agent file differs from the plugin's servers or prompts",
          observed_by: CTR-plugin-pinned-and-rooted, case: "tests.test_plugin.TestOtherClients::test_the_client_agents_are_written_from_the_claude_code_ones"}
     remediation: component_belief.project.project_root and ProjectServer; plugin/.mcp.json; plugin/agents/; clients/ (python tools/client_agents.py)
-    goal: GOL-any-project
+    goal: [GOL-any-project, GOL-cross-coding-agents]
     code:
       - plugin/
       - clients/
