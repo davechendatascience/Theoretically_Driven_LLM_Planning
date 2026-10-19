@@ -4,7 +4,7 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
-## Unreleased · Codex and Antigravity
+## 0.12.0 — 2026-10-19 · Codex and Antigravity
 
 - **The servers run on Codex and Antigravity.** `clients/codex/config.toml` and
   `clients/antigravity/mcp_config.json` start the same five servers from the same release tag as
