@@ -1,0 +1,22 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestDeclarationsToModel::test_an_unscorable_contract_never_reaches_a_belief"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestDeclarationsToModel::test_a_predicate_outside_the_whitelist_is_reported_and_never_runs"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestProofDagToLedgerViews::test_a_trial_stops_counting_once_its_claim_is_restated"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "tests.test_interfaces.TestProofDagToLedgerViews::test_a_gap_doubts_and_only_a_falsification_refutes"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
