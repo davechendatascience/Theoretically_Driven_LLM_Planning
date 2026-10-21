@@ -1,0 +1,4 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0426/result.json -- tests/test_research_board.py -q -p no:asyncio
+exit=0
+test=TST-research-board@2c0f83e3
+at=2026-10-21T01:45:15+00:00

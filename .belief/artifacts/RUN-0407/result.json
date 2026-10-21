@@ -1,0 +1,103 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_on_codex_every_server_reads_the_project_codex_was_started_in"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_on_antigravity_every_server_reads_the_workspace_antigravity_names"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_on_any_agent_a_project_test_runs_with_the_projects_python[claude-code]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_on_any_agent_a_project_test_runs_with_the_projects_python[antigravity-plugin]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_on_any_agent_a_project_test_runs_with_the_projects_python[uvx]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_whichever_agent_commits_to_my_goal_set_it_is_refused[claude-code-\\n\\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>-env0]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_whichever_agent_commits_to_my_goal_set_it_is_refused[codex-\\n\\nCo-authored-by: Codex <noreply@openai.com>-env1]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_whichever_agent_commits_to_my_goal_set_it_is_refused[antigravity--env2]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_every_agent_can_send_it_and_it_cannot_open_a_file[consistency-verifier]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_every_agent_can_send_it_and_it_cannot_open_a_file[research-scout]"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_cross_coding_agents::test_every_agent_installs_the_release_the_plugin_names"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
