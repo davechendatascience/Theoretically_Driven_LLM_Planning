@@ -6,7 +6,7 @@
     {
       "name": "tdlp",
       "source": "./plugin",
-      "version": "0.13.3",
+      "version": "0.13.4",
       "description": "The five servers, their workflow skills, the file-blind verifier and the research scout, pinned to a release tag."
     }
   ]

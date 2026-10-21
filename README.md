@@ -206,7 +206,7 @@ builds the servers, which takes a minute or two, on either agent.
 name, for example "have consistency-verifier verify the open obligations":
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.3" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.4" tdlp-guard install
 ```
 
 What differs between the three:
