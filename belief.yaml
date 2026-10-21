@@ -275,6 +275,8 @@ components:
       writes the Antigravity trailer on that agent's other commits; records any agent commit to the goal set since the human's last; and
       withdraws the goals policy's standing approval while one exists
     failure_modes:
+      - {id: FM-pause-unshown, observable: "a goal goals.yaml marks paused reads in the goals view like any other",
+         observed_by: CTR-goal-set-stays-human, case: "tests.test_goals::test_a_paused_goal_says_so_in_the_goals_view"}
       - {id: FM-goal-set-leak, observable: "an agent commit changing a goal's test file is let through the guard",
          observed_by: CTR-goal-set-stays-human, case: "tests.test_goals.TestCheck::test_an_agent_commit_to_the_goal_set_is_refused"}
       - {id: FM-freed-by-removal, observable: "removing a test from goals.yaml frees its file in the same commit",
@@ -467,7 +469,8 @@ components:
       hour -- one in which a test it paid for, its first run started, waited on its result and no
       research (an earning trail, a direction, a finding, a scout's question or check, or an
       answer; never a note) was recorded -- at the rate the spend fixed when it was made;
-      keeps a scout's check open until it is answered or measured; counts for a spend that fixed a
+      keeps a scout's check open until it is answered or measured; stops every wait on the directions
+      of a goal goals.yaml marks paused, from the commit that pauses it, and refuses spends on them; counts for a spend that fixed a
       test's arm that arm's runs only, and lists per goal, apart from every result, the runs no spend
       claims; shows the board in plain words, without ids, for the human; takes its rules from research.yaml at HEAD;
       serves a brief whose head always fits, carrying the human's standing rules for the goal, and
@@ -541,6 +544,8 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_the_human_view_says_what_each_spend_is_doing_and_the_best_measured_result"}
       - {id: FM-best-by-luck, observable: "the human view calls a small sample the best result over a larger one whose rate is better supported",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_the_best_result_is_the_one_its_count_can_vouch_for"}
+      - {id: FM-paused-goal-charged, observable: "a spend on a direction whose goal is paused waits or costs idle hours, waits again before the commit that lifts the pause, or is made at all",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_paused_goal_stops_its_directions_clocks_from_the_commit_that_pauses_it"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

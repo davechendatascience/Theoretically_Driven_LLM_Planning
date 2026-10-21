@@ -166,6 +166,16 @@ class Goal:
     outcome: str = ""
     measure: str = ""
     constraints: list[str] = field(default_factory=list)
+    #: active, or paused: the human has set it aside for now. While a goal is paused no research
+    #: spend on its directions waits, so none pays for idle hours (DEF-research-ledger).
+    status: str = "active"
+
+    @property
+    def paused(self) -> bool:
+        return self.status == GOAL_PAUSED
+
+
+GOAL_ACTIVE, GOAL_PAUSED = "active", "paused"
 
 
 @dataclass
@@ -569,6 +579,11 @@ def _merge_goals(decl: Declarations, text: str) -> None:
     for goal in _entries(data, "goals", Goal, decl.issues, where=GOALS_FILE):
         raw = goal.constraints if isinstance(goal.constraints, list) else [goal.constraints]
         goal.constraints = [" ".join(str(c).split()) for c in raw if str(c or "").strip()]
+        goal.status = str(goal.status or GOAL_ACTIVE).strip().lower()
+        if goal.status not in (GOAL_ACTIVE, GOAL_PAUSED):
+            decl.issues.append(Issue("MALFORMED", goal.id, f"status {goal.status!r} is neither {GOAL_ACTIVE} nor "
+                                     f"{GOAL_PAUSED}; it reads as {GOAL_ACTIVE}"))
+            goal.status = GOAL_ACTIVE
         decl.goals[goal.id] = goal
     for raw in data.get("interfaces") or []:
         if not isinstance(raw, dict) or not raw.get("id"):

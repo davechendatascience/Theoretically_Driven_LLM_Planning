@@ -679,7 +679,11 @@ free; its results belong to no direction.
   result says something (anything but insufficient or no evidence), or the direction is halted,
   every hour in which nobody records research costs that direction `idle.per_hour` points (default
   1). Until a run starts the spend is queued and costs nothing, so a test may be funded before the
-  machine frees; a spend made before 0.13.5 waits from when it was recorded, as it did. Research
+  machine frees; a spend made before 0.13.3 waits from when it was recorded, as it did. No spend
+  waits while its direction's goal is set aside with `status: paused` in `goals.yaml` -- from the
+  commit that pauses it until one that sets it active again -- and nothing is spent on such a
+  direction meanwhile, though research on it goes on. A direction's goal is the one it was opened
+  for, or the latest `retarget`'s. Research
   means an earning trail, a new direction, a measured finding, a scout's question or check, or an
   answer; each keeps research running for `idle.running_minutes` (default 30). A note, a trail
   that earned nothing and the director's verdicts do not count. Idle time is

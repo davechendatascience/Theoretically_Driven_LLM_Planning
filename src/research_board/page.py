@@ -76,11 +76,20 @@ def _idle_line(d: B.Direction) -> str:
     return line
 
 
+def _paused_since(board: B.Board, goal_id: str) -> str:
+    stretches = board.paused.get(goal_id) or []
+    since = f" since {stretches[-1][0].strftime('%Y-%m-%d')}" if stretches and stretches[-1][1] is None else ""
+    return (f"paused in goals.yaml{since}: nothing is spent on its directions, and no spend on them "
+            "waits, so none pays for idle hours")
+
+
 def _goal_lines(board: B.Board, goal_id: str) -> list[str]:
     goal = board.decl.goals.get(goal_id)
     if goal is None:
         return [f"{goal_id or '(no goal)'}: not a goal in goals.yaml at HEAD"]
     lines = [f"{goal_id}: {_short(goal.outcome, 240)}"]
+    if goal.paused:
+        lines.append(f"  {_paused_since(board, goal_id)}")
     if goal.measure:
         lines.append(f"  measured by {goal.measure}: {board.measures.get(goal.measure, B.NO_EVIDENCE)}")
     if goal.constraints:
@@ -434,8 +443,10 @@ def render_human(board: B.Board) -> str:
         state = board.measures.get(goal.measure, B.NO_EVIDENCE) if goal and goal.measure else ""
         met = {"supported": "met", "refuted": "not met", "contested": "not settled",
                "stale": "not current: the code moved since it was measured"}.get(state, "not measured yet")
-        lines.append(f"## {_short(goal.outcome, 160) if goal else goal_id}")
+        lines.append(f"## {_short(goal.outcome, 160) if goal else goal_id}" + (" (paused)" if goal and goal.paused else ""))
         lines.append(f"Goal: {met}." if goal else "Goal: no longer in goals.yaml.")
+        if goal and goal.paused:
+            lines.append(f"Paused: {_paused_since(board, goal_id)}.")
 
         lines.append(_best_line(board, mine))
         active = [d for d in mine if d.state == B.ACTIVE]

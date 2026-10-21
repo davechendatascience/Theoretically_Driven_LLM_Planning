@@ -422,6 +422,82 @@ def idle_stretches(start: datetime, end: datetime, research: list[datetime],
     return stretches
 
 
+#: Each goal's paused stretches, by the HEAD they were read at: goals.yaml's history changes only
+#: with a commit, and a build reads it on every move.
+_PAUSES: dict[tuple[str, str], dict[str, list[tuple[datetime, datetime | None]]]] = {}
+
+
+def paused_stretches(root: Path) -> dict[str, list[tuple[datetime, datetime | None]]]:
+    """When each goal was paused (DEF-research-ledger): from a commit at which goals.yaml marks it
+    paused and the one before did not, until the next commit at which it no longer does -- open
+    (None) while none has -- among the commits in HEAD's history that change goals.yaml, by their
+    commit times."""
+    from component_belief.declarations import GOALS_FILE, load_yaml
+
+    head = (git(root, "rev-parse", "HEAD") or "").strip()
+    key = (str(root), head)
+    if key in _PAUSES:
+        return _PAUSES[key]
+    out: dict[str, list[tuple[datetime, datetime | None]]] = {}
+    since: dict[str, datetime] = {}
+    for line in (git(root, "log", "--reverse", "--format=%H %cI", "--", GOALS_FILE) or "").splitlines():
+        sha, _, stamp = line.partition(" ")
+        moment = when(stamp)
+        if moment is None:
+            continue
+        try:
+            data = load_yaml(git(root, "show", f"{sha}:{GOALS_FILE}") or "")[0] or {}
+        except Exception:                          # a revision that does not parse marks nothing paused
+            data = {}
+        goals = data.get("goals") if isinstance(data, dict) else None
+        paused = {str(g["id"]) for g in goals or [] if isinstance(g, dict) and g.get("id")
+                  and str(g.get("status") or "").strip().lower() == "paused"}
+        for gid in paused - set(since):
+            since[gid] = moment
+        for gid in set(since) - paused:
+            out.setdefault(gid, []).append((since.pop(gid), moment))
+    for gid, moment in since.items():
+        out.setdefault(gid, []).append((moment, None))
+    _PAUSES[key] = out
+    return out
+
+
+def paused_windows(d: "Direction", paused: dict[str, list[tuple[datetime, datetime | None]]],
+                   now: datetime) -> list[tuple[datetime, datetime]]:
+    """The stretches in which the goal a direction served then was paused: its goal over time is
+    the one it was opened for, then each retarget's from when it was recorded."""
+    pieces: list[tuple[datetime, str]] = []
+    opened = when(d.record.get("timestamp"))
+    if opened is not None:
+        pieces.append((opened, str(d.record.get("goal", ""))))
+    for item in d.feedback:
+        moment = when(item.get("timestamp"))
+        if item.get("type") == RETARGET and item.get("about") == d.id and moment is not None:
+            pieces.append((moment, str(item.get("goal", ""))))
+    windows = []
+    for i, (start, goal) in enumerate(pieces):
+        end = pieces[i + 1][0] if i + 1 < len(pieces) else now
+        for a, b in paused.get(goal, []):
+            lo, hi = max(a, start), min(b or now, end)
+            if lo < hi:
+                windows.append((lo, hi))
+    return sorted(windows)
+
+
+def _without(start: datetime, end: datetime, holes: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    """[start, end) less the holes, as the stretches left."""
+    left, cursor = [], start
+    for a, b in holes:
+        if b <= cursor or a >= end:
+            continue
+        if a > cursor:
+            left.append((cursor, a))
+        cursor = max(cursor, b)
+    if cursor < end:
+        left.append((cursor, end))
+    return left
+
+
 def _closed_after(d: Direction, since: datetime) -> datetime | None:
     """The first halt, pivot or rejection of a direction recorded after `since`."""
     for item in d.feedback:
@@ -508,7 +584,8 @@ def wait_start(decl: Any, spend: dict[str, Any], result: Result | None, started:
 
 
 def direction_idle(d: Direction, results: dict[str, Result], research: list[datetime], now: datetime,
-                   starts: dict[str, datetime | None] | None = None) -> Idle:
+                   starts: dict[str, datetime | None] | None = None,
+                   paused: list[tuple[datetime, datetime]] | None = None) -> Idle:
     """A spend waits from its start (wait_start) until its result first says something, or its
     direction is halted or rejected; while one waits and no research record falls within its
     running time, the direction is idle. A spend recorded before idle hours were priced fixed no
@@ -531,10 +608,13 @@ def direction_idle(d: Direction, results: dict[str, Result], research: list[date
         closed = _closed_after(d, when(spend.get("timestamp")) or start)
         ends = [now] + [m for m in (result.waited_until, closed) if m is not None]
         end = min(ends)
-        if end == now and start < now:
+        # no spend waits while the goal its direction serves is paused
+        windows = _without(start, end, paused or [])
+        if end == now and windows and windows[-1][1] == now:
             idle.waiting_on.append(spend["id"])
-        for a, b in idle_stretches(start, end, research, timedelta(minutes=running)):
-            segments.append((a, b, rate))
+        for ws, we in windows:
+            for a, b in idle_stretches(ws, we, research, timedelta(minutes=running)):
+                segments.append((a, b, rate))
     bounds = sorted({moment for a, b, _ in segments for moment in (a, b)})
     for lo, hi in zip(bounds, bounds[1:]):
         rate = max((r for a, b, r in segments if a <= lo and hi <= b), default=0)
@@ -598,6 +678,7 @@ class Board:
     starts: dict[str, datetime | None] = field(default_factory=dict)     # when each spend's wait starts
     unclaimed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # per goal: runs no direction claims
     running: list[dict[str, Any]] = field(default_factory=list)   # background runs going now
+    paused: dict[str, list[tuple[datetime, datetime | None]]] = field(default_factory=dict)   # per goal
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
     goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
@@ -740,6 +821,7 @@ def build(root: Path, *, with_results: bool = True) -> Board:
                 d.retarget = item
 
     board.ledger_ignored = ignored_ledger(root)
+    board.paused = paused_stretches(root)
     if with_results:
         try:
             from component_belief.model import compute_slices
@@ -774,7 +856,8 @@ def build(root: Path, *, with_results: bool = True) -> Board:
         if research:
             board.research_until = research[-1] + timedelta(minutes=board.rules.running_minutes)
         for d in board.directions.values():
-            d.idle = direction_idle(d, board.results, research, board.now, board.starts)
+            d.idle = direction_idle(d, board.results, research, board.now, board.starts,
+                                    paused_windows(d, board.paused, board.now))
 
     cheapest = board.rules.cheapest_paid()
     for d in board.directions.values():

@@ -566,6 +566,55 @@ def test_the_best_result_is_the_one_its_count_can_vouch_for():
     assert '"five hundred episodes" measured 440 of 500' in _best_line(board, [lucky, many])
 
 
+def test_a_paused_goal_stops_its_directions_clocks_from_the_commit_that_pauses_it(research, clock, monkeypatch):
+    """A subgoal paused only in a comment kept charging its direction: 45 hours of idle points, a
+    balance of -31. `status: paused` on a goal in goals.yaml -- the human's commit -- stops every
+    wait on its directions from that commit's time until a commit sets it active again, and no spend
+    is made on them meanwhile. A direction retargeted to an active goal waits again."""
+    def commit_goals(status: str, message: str) -> None:
+        text = (research / "goals.yaml").read_text(encoding="utf-8")
+        text = re.sub(r"(  - id: GOL-grasp\n(?:    .*\n)*?)(    status: \w+\n)?(?=  - id:|\n\S|\Z)",
+                      lambda m: m.group(1) + f"    status: {status}\n", text, count=1)
+        (research / "goals.yaml").write_text(text, encoding="utf-8")
+        monkeypatch.setenv("GIT_COMMITTER_DATE", clock.at.isoformat())
+        git(research, "commit", "-qam", message)
+
+    clock.at = clock.at.replace(microsecond=0)                    # git keeps commit times in whole seconds
+    did = funded(research, trails=3)
+    play.spend(research, did, "test", "TST-pick")
+    launched(research, "TST-pick", clock.at)
+    clock.advance(minutes=90)                                     # t0+90: idle since t0+30
+    assert idle(research, did) == (60, 1, True)
+
+    commit_goals("paused", "set the grasp goal aside for now")
+    assert load(research).goals["GOL-grasp"].paused
+    clock.advance(hours=5)
+    assert idle(research, did) == (60, 1, False)                  # no wait while it is paused
+    with pytest.raises(play.Refused, match="GOL-grasp is paused in goals.yaml"):
+        play.spend(research, did, "test", "TST-grasp-ik")
+    assert "+1" in play.add_trail(research, did, "Paper after the pause", "a tweak", "CMP-grasp", QUOTE)  # runs 30m
+    b = B.build(research)
+    human = render_human(b)
+    assert "## The arm picks up the object it is asked for (paused)" in human
+    assert "Paused: paused in goals.yaml since " in human
+    assert "paused in goals.yaml since " in render_brief(b, b.directions[did])
+
+    commit_goals("active", "back to the grasp goal")
+    clock.advance(minutes=60)
+    assert idle(research, did) == (90, 1, True)                   # it waits again from that commit
+
+    commit_goals("paused", "aside again")
+    clock.advance(minutes=30)
+    play.retarget(research, did, "GOL-see", "the gap is segmentation")
+    clock.advance(minutes=60)
+    assert idle(research, did) == (150, 2, True)                  # paused 30m, then its goal is an active one
+
+    commit_goals("sleeping", "a word goals.yaml does not know")
+    assert any(i.code == "MALFORMED" and i.subject == "GOL-grasp" and "sleeping" in i.message
+               for i in load(research).issues)
+    assert not load(research).goals["GOL-grasp"].paused
+
+
 def test_rules_take_effect_from_head(goals_repo, monkeypatch):
     assert B.load_rules(goals_repo).source == "defaults"
     (goals_repo / B.RULES_FILE).write_text("costs: {test: 5}\n", encoding="utf-8")

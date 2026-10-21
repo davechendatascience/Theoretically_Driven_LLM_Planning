@@ -347,3 +347,17 @@ class TestWhatTheGoalsPolicyReads:
         git(goals_repo, "commit", "-q", "--no-verify", "-m", "tidy" + AGENT_TRAILER)
         changes, _ = goal_history(goals_repo)
         assert changes and "eval/goals/test_hard.py" in changes[0]["files"]
+
+
+def test_a_paused_goal_says_so_in_the_goals_view(goals_repo, monkeypatch):
+    """`status: paused` is the human's, in goals.yaml; the goals view says which goals are set aside."""
+    from component_belief import server
+
+    text = (goals_repo / "goals.yaml").read_text(encoding="utf-8").replace(
+        "    measure: CTR-see-e2e\n", "    measure: CTR-see-e2e\n    status: paused\n", 1)
+    (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+    git(goals_repo, "commit", "-qam", "set the seeing goal aside")
+    monkeypatch.setenv("BELIEF_PROJECT_ROOT", str(goals_repo))
+    view = server.status(view="goals")
+    assert "GOL-see  UNMEASURED · PAUSED (goals.yaml): no research spend on it waits --" in view
+    assert "GOL-grasp  UNMEASURED -- " in view

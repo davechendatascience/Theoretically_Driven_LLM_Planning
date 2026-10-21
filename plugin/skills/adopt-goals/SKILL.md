@@ -59,6 +59,9 @@ what clears a target, gates, `$OUT`, what evidence is bound to. Two more facts m
   "actions are executed exactly, with no noise" -- go under the goal as `constraints:`, one line
   each. Every research brief on the goal carries them. Draft only rules the human has stated;
   never one of your own.
+- **Paused goals:** a goal the human has set aside for now carries `status: paused`. While it is,
+  no research spend on its directions waits or pays idle points, and none is made. It is the
+  human's to set and to lift; draft it only when they say so.
 - **Interfaces:** one per hand-over between two goals' systems (`from`, `to`, `hands_over`), each
   measured by a `layer: interface` test.
 - **Policy:** `POL-goals`, naming every measure with `require: supported`.

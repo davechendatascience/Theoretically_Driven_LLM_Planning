@@ -402,7 +402,8 @@ def view_goals(ctx: Any) -> str:
         lines.append(f"  you last committed the goal set in {yours['sha']}: {yours['subject']}")
     for gid, goal in sorted(decl.goals.items()):
         own = by_contract.get(goal.measure, [])
-        lines += ["", f"{gid}  {_headline(own)} -- {goal.outcome}"]
+        paused = " · PAUSED (goals.yaml): no research spend on it waits" if goal.paused else ""
+        lines += ["", f"{gid}  {_headline(own)}{paused} -- {goal.outcome}"]
         lines += _measure_lines(decl, goal.measure, own)
         lines += [f"  rule: {rule}" for rule in goal.constraints]
         served = decl.components_of_subject(gid)

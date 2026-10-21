@@ -78,7 +78,10 @@ useful as a direction grows:
 
 The human's standing rules ("actions are executed exactly, with no noise") belong in `goals.yaml`
 under the goal as `constraints:`, which every brief carries. They are the human's: draft them and
-leave them for the human to commit, as you would a goal.
+leave them for the human to commit, as you would a goal. So is pausing a goal: `status: paused`
+under it, committed by the human, stops every wait on its directions from that commit -- no idle
+points -- and refuses spends on them until it is set active again; research on them goes on. If
+the human sets a goal aside in words, propose the line, don't keep paying the clock.
 
 ## Answering scouts
 

@@ -238,6 +238,10 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
             raise Refused(f"no action {action!r} in the rules; actions: "
                           + ", ".join(f"{a} {c}" for a, c in costs.items()))
         decl = board.decl
+        goal = decl.goals.get(d.goal)
+        if goal is not None and goal.paused:
+            raise Refused(f"{d.goal} is paused in goals.yaml, so nothing is spent on its directions while it is; "
+                          "research on them goes on. It is the human's to set active again.")
         if not any(target in table for table in (decl.components, decl.contracts, decl.tests, decl.goals,
                                                  decl.interfaces, decl.goal_interfaces)):
             raise Refused(f"{target!r} is not declared in belief.yaml or goals.yaml at HEAD")

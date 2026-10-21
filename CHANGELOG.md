@@ -4,6 +4,30 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.6 — 2026-10-21 · a goal can be paused, and the theory catches up with 0.13.x
+
+- **A goal can be paused.** A subgoal set aside only in a `goals.yaml` comment kept charging its
+  direction: 45 idle hours, and a balance of −31. A goal may now carry `status: paused`. It is the
+  human's, like the rest of `goals.yaml`. From the commit that pauses it until a commit that sets
+  it active again, no spend on its directions waits, so none pays for idle hours, and no new spend
+  is made on them; research goes on. The pause is read from `goals.yaml`'s own history, so idle
+  points charged before the pause stay charged. A direction follows its goal across a `retarget`.
+  The goals view, the board, every brief and `board(view="human")` say which goals are paused. A
+  status other than `active` or `paused` is reported and reads as active.
+- **The theory now states what 0.13.1–0.13.4 shipped without declaring.**
+  - AXM-no-silent-failure now also covers a value a declaration file gives a key in a mapping
+    that gives the key again. DEF-declaration-load says how a declaration file is read and where
+    a repeat is reported. A new branch, BRN-repeated-keys-reported, proposed through
+    `propose_branch`, claims it.
+  - DEF-measured-record now says a run of a test with parameters runs its run line with the values
+    it was given, and its records carry them. BRN-runner-captures claims it, since
+    DEF-contract-slice relies on it.
+  - DEF-research-ledger now says which goal a direction serves, the latest `retarget`'s, and that
+    no spend waits while that goal is paused.
+  - `audit_change` was run on each node before it was restated.
+- **A slip fixed in the guide.** Version bumps had turned "a spend made before 0.13.3" into "before
+  0.13.5". Version pins are now bumped by pattern, not by a sweep of every mention.
+
 ## 0.13.5 — 2026-10-21 · the human view says what is happening
 
 From a first use of `board(view="human")` on a real board.
