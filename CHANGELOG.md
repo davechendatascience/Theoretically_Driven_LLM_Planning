@@ -4,6 +4,23 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.5 — 2026-10-21 · the human view says what is happening
+
+From a first use of `board(view="human")` on a real board.
+
+- **"Its test is running" only while it is.** The view called every direction with an unsettled
+  spend "running": three did, while nothing ran. One spend's result had gone stale, one had never
+  run. Each now reads from its spend's own state: "its test is running (started ...)" only while a
+  background run that counts for it is going; "measured 465 of 500, now stale: the code moved
+  since, so it counts again only once re-run"; "waiting for its first run (funded ...)"; or
+  "measured ... so far, too few to say yet".
+- **The best result is shown, with its count and state.** "Best result so far: none yet" hid a run
+  that measured 465 of 500 before going stale. The view now shows the best measured result with
+  how many passed, of how many, and whether it still counts. Passes are counted by the contract's
+  acceptance rule, not the record's outcome field. A result is ranked by the pass rate its count
+  can vouch for, so one lucky trial does not outrank 500 episodes.
+- **Wording.** "then 5 more" for "then 5 mores", and "0 set aside" for "0 sets aside".
+
 ## 0.13.4 — 2026-10-21 · arms of one test, a board in plain words, unclaimed work, recurring gaps
 
 The rest of a project's notes on 0.13.0, in one patch release.

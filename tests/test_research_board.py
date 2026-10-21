@@ -487,20 +487,83 @@ def test_the_human_view_says_where_the_research_stands_in_plain_words(arms, cloc
     play.spend(arms, did, "test", "TST-pick", params={"arm": "noise"})
     human = render_human(B.build(arms))
     assert "## The arm picks up the object it is asked for" in human
-    assert '"Sample grasp approaches from principal axes" -- paid for, waiting for its run to start' in human
-    assert "Best result so far: none yet." in human and "Needs you: nothing." in human
+    assert '"Sample grasp approaches from principal axes" -- waiting for its first run (funded ' in human
+    assert "Best result so far: none yet -- nothing has been measured for it." in human and "Needs you: nothing." in human
 
     clock.at = datetime.now(timezone.utc)
     next_second()
     measure(arms, params={"arm": "plain"})
     measure(arms, params={"arm": "noise"})
     human = render_human(B.build(arms))
-    assert 'Best result so far: "Sample grasp approaches from principal axes" passed its test on' in human
+    assert 'Best result so far: "Sample grasp approaches from principal axes" passed its test, 1 of 1, on' in human
     assert "Waiting on the agent: 1 result to weigh." in human
     assert "Work no idea claims: 1 test run since research began" in human
     assert not re.search(r"\b(DIR|TRAIL|SPD|FBK|EVD|RUN|TST|CTR|CMP)-", human)
     assert server.board(view="human") == human
     assert "no view 'robot'" in server.board(view="robot")
+
+
+def test_the_human_view_says_what_each_spend_is_doing_and_the_best_measured_result(research, clock):
+    """On a real board the view read "its test is running" for three directions while nothing ran:
+    one result had gone stale, one spend had never run. It said "Best result so far: none yet"
+    though a run had measured 465 of 500 before going stale, and "then 5 mores", "0 sets aside"."""
+    def opened(name: str, idea: str) -> str:
+        play.open_direction(research, name, "GOL-grasp", idea)
+        did = B.direction_id(name)
+        for i in range(2):
+            play.add_trail(research, did, f"Paper {name} {i}", "a tweak", "CMP-grasp", QUOTE, by="scout-1")
+        play.approve(research, did, True, "worth a test")
+        return did
+
+    running = opened("seg", "Segment the scene first")
+    play.spend(research, running, "test", "TST-see")
+    launched(research, "TST-see", clock.at)
+    never = opened("hold", "Hold the gripper closed longer")
+    play.spend(research, never, "test", "TST-grasp-ik")          # made before spends waited for a run
+    path = B.ledger_path(research)
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    records[-1]["idle"].pop("from")
+    path.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in records), encoding="utf-8")
+    went_stale = opened("clock", "Close on a clock")
+    play.spend(research, went_stale, "test", "TST-pick")
+    for name in ("one", "two", "three"):
+        opened(name, f"Idea {name}")
+    clock.advance(hours=3)
+
+    clock.at = datetime.now(timezone.utc)
+    next_second()
+    measure(research)                                            # TST-pick: 1 of 1 passes ...
+    pick = research / "eval" / "pick.py"
+    pick.write_text(pick.read_text(encoding="utf-8") + "# edited\n", encoding="utf-8")
+    git(research, "commit", "-qam", "the pick eval moved")      # ... and the code moves under it
+    clock.advance(minutes=5)
+
+    human = render_human(B.build(research))
+    assert '"Segment the scene first" -- its test is running (started ' in human
+    assert '"Hold the gripper closed longer" -- waiting for its first run (funded ' in human
+    assert "and no research has been done for" in human           # that old spend still waits, and idles
+    assert ('"Close on a clock" -- measured 1 of 1, now stale: the code moved since, so it counts again '
+            "only once re-run") in human
+    assert human.count("its test is running") == 1
+    assert ('Best result so far: "Close on a clock" measured 1 of 1 on ') in human and "now stale" in human
+    assert '"Idea one", then 2 more -- approved' in human or '"Idea three", then 2 more -- approved' in human
+    assert "0 set aside;" in human and "mores" not in human and "sets aside" not in human
+
+
+def test_the_best_result_is_the_one_its_count_can_vouch_for():
+    """Ranked by raw pass rate, a one-trial diagnostic (1 of 1) outranked 440 of 500 episodes."""
+    from types import SimpleNamespace
+
+    from research_board.page import _best_line
+
+    def stale(passed: int, judged: int) -> B.Result:
+        return B.Result(states={"CTR-x": "stale"}, counted={"CTR-x": judged}, passed={"CTR-x": passed},
+                        scored={"CTR-x": judged})
+
+    board = SimpleNamespace(results={"S1": stale(1, 1), "S2": stale(440, 500)}, now=datetime.now(timezone.utc))
+    lucky = B.Direction(record={"id": "DIR-a", "idea": "one noise draw"}, spends=[{"id": "S1"}])
+    many = B.Direction(record={"id": "DIR-b", "idea": "five hundred episodes"}, spends=[{"id": "S2"}])
+    assert '"five hundred episodes" measured 440 of 500' in _best_line(board, [lucky, many])
 
 
 def test_rules_take_effect_from_head(goals_repo, monkeypatch):

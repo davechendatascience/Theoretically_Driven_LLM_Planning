@@ -537,6 +537,10 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_on_one_arm_counts_that_arms_runs_and_the_rest_count_for_no_direction"}
       - {id: FM-human-view-narrates, observable: "board(view=\"human\") names a ledger id, or leaves out the goal's state, the best result, what is being tried or what needs the human",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_the_human_view_says_where_the_research_stands_in_plain_words"}
+      - {id: FM-human-view-misreports, observable: "the human view says a test is running while no run of it is going, hides a measured result that went stale, or counts passes other than by the contract's acceptance rule",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_human_view_says_what_each_spend_is_doing_and_the_best_measured_result"}
+      - {id: FM-best-by-luck, observable: "the human view calls a small sample the best result over a larger one whose rate is better supported",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_best_result_is_the_one_its_count_can_vouch_for"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

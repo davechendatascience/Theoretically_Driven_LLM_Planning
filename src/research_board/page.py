@@ -357,6 +357,68 @@ def _name(d: B.Direction) -> str:
     return f"\"{_short(d.record.get('idea'), 120)}\""
 
 
+def _measured(result: B.Result) -> tuple[int, int]:
+    """(passed, judged) on the contract that sets a result's state -- its weakest: the records its
+    acceptance rule passes, of those the rule could judge."""
+    states = result.states or {}
+    cid = min(states, key=lambda c: B._RANK.get(states[c], 3)) if states else ""
+    return result.passed.get(cid, 0), result.scored.get(cid, 0)
+
+
+def _day(moment: Any) -> str:
+    return moment.strftime("%Y-%m-%d") if moment else "?"
+
+
+def _best_line(board: B.Board, mine: list[B.Direction]) -> str:
+    """The best result on a goal, with its count and its state: a supported one, the latest; else
+    the measured one with the highest pass rate. A result that went stale is still the most
+    anyone knows, so it is shown as stale rather than hidden."""
+    measured = [(board.results[s["id"]], d) for d in mine for s in d.spends
+                if board.results.get(s["id"]) and _measured(board.results[s["id"]])[1]]
+    if not measured:
+        return "Best result so far: none yet -- nothing has been measured for it."
+    held = [(r, d) for r, d in measured if r.status == "supported"]
+    if held:
+        result, d = max(held, key=lambda x: x[0].settled_at or board.now)
+        passed, counted = _measured(result)
+        return f"Best result so far: {_name(d)} passed its test, {passed} of {counted}, on {_day(result.settled_at)}."
+    def floor(result: B.Result) -> float:
+        """The pass rate it can vouch for: the lower end of its credible interval, from a flat
+        prior, so one lucky trial does not outrank five hundred measured ones."""
+        from component_belief.stats import credible_interval
+
+        passed, judged = _measured(result)
+        return credible_interval(1 + passed, 1 + judged - passed)[0]
+
+    result, d = max(measured, key=lambda x: (floor(x[0]), x[0].settled_at or board.now))
+    passed, counted = _measured(result)
+    how = {"stale": "now stale: the code moved since, so it counts again only once re-run",
+           "refuted": "short of what its test asks", "contested": "not settled either way yet",
+           "insufficient_evidence": "too few to say yet"}.get(result.status, result.status or "not settled")
+    return f"Best result so far: {_name(d)} measured {passed} of {counted} on {_day(result.settled_at)}, {how}."
+
+
+def _trying_line(board: B.Board, d: B.Direction) -> str:
+    """What a direction with an unsettled spend is doing, said from the spend's own state: running
+    only while a background run that counts for it is going."""
+    pending = [s for s in d.spends if (r := board.results.get(s["id"])) and r.states and not r.settled]
+    spend = pending[-1]
+    result = board.results[spend["id"]]
+    jobs = B.running_for(board.decl, spend, board.running)
+    passed, counted = _measured(result)
+    if jobs:
+        how = f"its test is running (started {_day(B.when(min(j.get('started', '') for j in jobs)))})"
+    elif result.status == "stale":
+        how = f"measured {passed} of {counted}, now stale: the code moved since, so it counts again only once re-run"
+    elif not counted:
+        how = f"waiting for its first run (funded {_day(B.when(spend.get('timestamp')))})"
+    else:
+        how = f"measured {passed} of {counted} so far, too few to say yet"
+    if d.idle and d.idle.idle_now:
+        how += f", and no research has been done for {_duration(d.idle.seconds)} of the wait"
+    return f"Trying now: {_name(d)} -- {how}."
+
+
 def render_human(board: B.Board) -> str:
     """The board for the human, in plain words: for each goal with research on it, whether it is
     met, the best result so far, what is being tried and what comes next, the work no direction
@@ -375,26 +437,12 @@ def render_human(board: B.Board) -> str:
         lines.append(f"## {_short(goal.outcome, 160) if goal else goal_id}")
         lines.append(f"Goal: {met}." if goal else "Goal: no longer in goals.yaml.")
 
-        settled = [(board.results[s["id"]], d, s) for d in mine for s in d.spends
-                   if board.results.get(s["id"]) and board.results[s["id"]].settled]
-        held = [x for x in settled if x[0].status == "supported"]
-        if held:
-            result, d, _spend = max(held, key=lambda x: x[0].settled_at or board.now)
-            on = result.settled_at.strftime("%Y-%m-%d") if result.settled_at else "?"
-            lines.append(f"Best result so far: {_name(d)} passed its test on {on}.")
-        else:
-            lines.append("Best result so far: none yet" + (f" -- {_plural(len(settled), 'test')} came back, none passing."
-                                                           if settled else "."))
+        lines.append(_best_line(board, mine))
         active = [d for d in mine if d.state == B.ACTIVE]
-        for d in active:
-            queued = d.idle and d.idle.queued
-            how = "paid for, waiting for its run to start" if queued else "its test is running"
-            if d.idle and d.idle.idle_now:
-                how += f", and no research has been done for {_duration(d.idle.seconds)} of the wait"
-            lines.append(f"Trying now: {_name(d)} -- {how}.")
+        lines += [_trying_line(board, d) for d in active]
         ready = [d for d in mine if d.state == B.READY]
         if ready:
-            lines.append(f"Next up: {_name(ready[0])}" + (f", then {_plural(len(ready) - 1, 'more')}" if len(ready) > 1 else "")
+            lines.append(f"Next up: {_name(ready[0])}" + (f", then {len(ready) - 1} more" if len(ready) > 1 else "")
                          + " -- approved, with enough research behind it to test.")
         if not active and not ready:
             earning = [d for d in mine if d.state in (B.EARNING, B.PROPOSED)]
@@ -403,7 +451,7 @@ def render_human(board: B.Board) -> str:
         closed = [d for d in mine if d.state in (B.HALTED, B.REJECTED)]
         papers = sum(1 for d in mine for t in d.trails if t.get("type") != B.SET_ASIDE)
         put = sum(1 for d in mine for t in d.trails if t.get("type") == B.SET_ASIDE)
-        lines.append(f"Research: {_plural(len(mine) - len(closed), 'idea')} open, {_plural(len(closed), 'set')} aside; "
+        lines.append(f"Research: {_plural(len(mine) - len(closed), 'idea')} open, {len(closed)} set aside; "
                      f"{_plural(papers, 'paper')} cited" + (f" and {put} read and dropped" if put else "") + ".")
         waiting = [q for q in board.open_questions() if board.direction_of(str(q.get("about"))) in {d.id for d in mine}
                    or q.get("goal") == goal_id]

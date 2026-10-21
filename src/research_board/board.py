@@ -290,6 +290,8 @@ class Result:
 
     states: dict[str, str] = field(default_factory=dict)
     counted: dict[str, int] = field(default_factory=dict)
+    passed: dict[str, int] = field(default_factory=dict)    # records that meet the contract's acceptance rule
+    scored: dict[str, int] = field(default_factory=dict)    # records the rule could judge at all
     runs: dict[str, list[str]] = field(default_factory=dict)
     settled_at: datetime | None = None
     waited_until: datetime | None = None       # the first moment it read other than WAITING; None: still waiting
@@ -341,6 +343,8 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     changed since reads as stale, which is not waiting: a test that came back is not in flight,
     whatever has happened to the code since, so a doubt about when errs toward charging less idle.
     """
+    from component_belief.model import score_trial
+
     result = Result()
     contracts = [c for c in spend.get("contracts", []) if c in decl.contracts]
     since = when(spend.get("timestamp"))
@@ -356,6 +360,9 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     for cid in contracts:
         mine = [t for t in after if t.get("contract_id") == cid]
         result.counted[cid] = len(mine)
+        verdicts = [score_trial(decl.contracts[cid], t)[0] for t in mine]   # the rule decides, not the outcome field
+        result.passed[cid] = sum(1 for v in verdicts if v is True)
+        result.scored[cid] = sum(1 for v in verdicts if v is not None)
         result.runs[cid] = sorted({str(t.get("run_id")) for t in mine if t.get("run_id")})
     moments = [m for m in (when(t.get("timestamp")) for t in after) if m is not None]
     result.settled_at = max(moments) if moments else None
@@ -463,6 +470,16 @@ def _same_arm(ran: dict[str, Any] | None, fixed: dict[str, Any]) -> bool:
     return all(str(ran.get(k)) == str(v) for k, v in fixed.items())
 
 
+def running_for(decl: Any, spend: dict[str, Any], running: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The background runs going now that count for a spend: of the test it names, with the values
+    it fixes, or, naming none, of a test that can measure a contract it targets."""
+    test = spend.get("test") or ""
+    tests = {test} if test else {tid for cid in spend.get("contracts", []) if cid in decl.contracts
+                                 for tid in decl.contracts[cid].evaluable_by}
+    return [j for j in running if str(j.get("test", "")).split("@", 1)[0] in tests
+            and _same_arm(j.get("params"), spend.get("params") or {})]
+
+
 def run_starts(trials: list[dict[str, Any]]) -> dict[str, datetime]:
     """When each recorded run started: the time its records carry, or, for a run recorded before
     runs said, when it was recorded -- which errs toward charging less idle."""
@@ -485,11 +502,7 @@ def wait_start(decl: Any, spend: dict[str, Any], result: Result | None, started:
         return recorded
     runs = {r for ids in (result.runs.values() if result else ()) for r in ids}
     starts: list[datetime | None] = [started[r] for r in runs if r in started]
-    test = spend.get("test") or ""
-    tests = {test} if test else {tid for cid in spend.get("contracts", []) if cid in decl.contracts
-                                 for tid in decl.contracts[cid].evaluable_by}
-    starts += [when(j.get("started")) for j in running if str(j.get("test", "")).split("@", 1)[0] in tests
-               and _same_arm(j.get("params"), spend.get("params") or {})]
+    starts += [when(j.get("started")) for j in running_for(decl, spend, running)]
     first = min((m for m in starts if m is not None), default=None)
     return None if first is None else max(recorded, first)
 
@@ -584,6 +597,7 @@ class Board:
     results: dict[str, Result] = field(default_factory=dict)
     starts: dict[str, datetime | None] = field(default_factory=dict)     # when each spend's wait starts
     unclaimed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # per goal: runs no direction claims
+    running: list[dict[str, Any]] = field(default_factory=list)   # background runs going now
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
     goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
@@ -736,7 +750,7 @@ def build(root: Path, *, with_results: bool = True) -> Board:
 
             trials = Store(root).effective_trials()
             staleness = CodeStaleness(root)
-            running = [j for j in background_runs(root) if j.get("state") == "running"]
+            running = board.running = [j for j in background_runs(root) if j.get("state") == "running"]
             started = run_starts(trials)
             for sid, spend in board.spends.items():
                 board.results[sid] = spend_result(board.decl, trials, staleness, spend)
