@@ -126,7 +126,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.5" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
