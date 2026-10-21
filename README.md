@@ -9,14 +9,14 @@ result exists only once a tool has measured it, and a design holds only once it 
 attempts to refute it.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-v0.11.0-dark.png">
-  <img alt="Goal snapshot of this repository at 10ad8f9: 19 of 19 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-v0.11.0-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-v0.13.4-dark.png">
+  <img alt="Goal snapshot of this repository at 3f67792: 19 of 19 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-v0.13.4-light.png">
 </picture>
 
 <sub>**This repository, drawn by its own plugin.** An AI agent built TDLP under TDLP, so the repo is
 its own demo. The picture is a goal snapshot, `snapshot(focus="GOL-sound-designs")`, taken at
-`10ad8f9` (v0.11.0, 2026-10-17): every design claim proven, every component covered by a design,
-and on the left the ten requirements one of its four goals rests on. A snapshot names its commit
+`3f67792` (v0.13.4, 2026-10-21): every design claim proven, every component covered by a design,
+and on the left the ten requirements one of its five goals rests on. A snapshot names its commit
 and does not update; take one yourself in the [tour](#try-it-in-five-minutes).</sub>
 
 ---
@@ -40,13 +40,13 @@ What that looks like, from this repo's own tools:
 ```text
 status(view="goals")
 GOL-sound-designs  MET -- A design claim counts as proven only after falsification probes judged from ...
-  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0337 (+65 stale)
+  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0476 (+105 stale)
 
 status(view="tree")
-basis: verification_trials×72 set=f85e8c · proven=23 obligations=0 refuted=0
+basis: verification_trials×69 set=affd52 · proven=23 obligations=0 refuted=0
 ```
 
-`RUN-0337` is the run the verdict rests on. `+65 stale` counts older results kept on record that no
+`RUN-0476` is the run the verdict rests on. `+105 stale` counts older results kept on record that no
 longer count, because what they measured has changed since.
 
 ### 2. Systems-engineered: a V-model, with you at the top
@@ -54,13 +54,13 @@ longer count, because what they measured has changed since.
 Every stage of the classic V has a home, and each is checked by something other than the agent's
 word. Your part is the top row. The agent owns the rest.
 
-| Stage | Declared | Checked by | This repo at `10ad8f9` |
+| Stage | Declared | Checked by | This repo at `3f67792` |
 |---|---|---|---|
-| **Needs** (yours) | goals, and the interfaces between them, in `goals.yaml` | acceptance tests the agent may not edit | 4 goals, 1 interface: **5/5 met** |
+| **Needs** (yours) | goals, and the interfaces between them, in `goals.yaml` | acceptance tests the agent may not edit | 5 goals, 1 interface: **6/6 met** |
 | **Requirements** | axioms and definitions, each axiom naming the goal it serves | every design claim must trace back to them | 18 axioms, 27 definitions, every axiom traced to a goal |
 | **Architecture** | components and the interfaces between them, in `belief.yaml` | interface tests | 14 components, 4 interfaces: **4/4 supported** |
 | **Design** | lemmas and design decisions, each argued from the requirements | refutation attempts by an independent verifier | 23 claims: **23/23 proven**, 0 refuted |
-| **Build and test** | the files each component owns | component tests, run by the server | 14 contracts: **14/14 supported**, 471 cases |
+| **Build and test** | the files each component owns | component tests, run by the server | 14 contracts: **14/14 supported**, 540 cases |
 | **Configuration control** | declarations read from the committed revision only | each result stamped with the file contents it ran on | uncommitted edits change no verdict |
 
 It is traced end to end. A design decision names the component it governs and cites the test
@@ -99,7 +99,7 @@ goal, not at every step.
 
 ## What's in the box
 
-One plugin, `tdlp`, with five MCP servers, three workflow skills, a verifier subagent and a
+One plugin, `tdlp`, with five MCP servers, four workflow skills, a verifier subagent and a
 research scout:
 
 | Server | Answers | In plain words |
@@ -134,7 +134,7 @@ words, and the agent picks the tools:
 | "Are this repo's goals met?" | each goal met, not met, insufficient or stale, with the run that says so | `status(view="goals")` |
 | "Take a goal snapshot of GOL-sound-designs." | `.graph-snapshot/snapshot.html`, the page at the top of this README; open it in a browser and click around | `snapshot(focus=...)` |
 | "Why is BRN-goal-guard proven?" | its proof tree, down to the requirements it rests on | `status(view="tree", subject=...)` |
-| "What did the v0.11.0 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="c563b34")` |
+| "What did the v0.13.4 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="tdlp--v0.13.3")` |
 | "What should be tested next?" | this round's tests, and why every other test was skipped | `status(view="plan")` |
 | "Send scouts to look for research directions on GOL-sound-designs." | directions on the research board, each with the papers behind it and the tweaks they suggest, in `.research/BOARD.md` | `board()`, the `research-scout` agent |
 
@@ -237,6 +237,7 @@ of thing:
 | **component** (`CMP-`) | a part of the system, and the files it owns |
 | **interface** (`IFC-`) | what one part hands to another, and the check the hand-over must pass |
 | **contract** (`CTR-`) | the pass rule a part's test results must meet. A *gate* means every case passes; a *rate* means it passes often enough, with a confidence interval |
+| **arm** (`params:`) | one variant of a test -- a decode setting, a point in a sweep -- run and judged on its own, never pooled with another |
 | **axiom** (`AXM-`) | a requirement, stated as a premise every design argument must trace back to |
 | **definition** (`DEF-`) | a term the requirements use, pinned down |
 | **lemma** (`LMA-`) / **branch** (`BRN-`) | an intermediate claim / a design decision, both argued from axioms. A branch governs a component and cites the contract that measures it |
@@ -247,14 +248,15 @@ of thing:
 | **stamp**, **stale** | the fingerprint of the exact files a result was measured on / a result whose files have changed since: kept, not counted |
 | **insufficient** | too little data for a verdict, reported as such |
 | **policy**, **decide** | the release criteria / the call that checks them and records the decision |
-| **direction** (`DIR-`), **trail**, **spend** | a line of research toward a goal / a paper and the tweak it suggests to a component / points committed to a direction before its work is done. Only results recorded after a spend count for its direction |
+| **direction** (`DIR-`), **trail**, **spend**, **check** | a line of research toward a goal / a paper and the tweak it suggests to a component / points committed to a direction before its work is done -- only results recorded after a spend count for its direction / a measurement a scout proposes the agent make first |
 
 ---
 
 ## Learn more
 
 * **[The guide](docs/guide.md)**: the full manual. Principles, every tool of every server, how
-  the two ledgers join, the systems-engineering mapping, the layout and the test suites.
+  the two ledgers join, the [research board](docs/guide.md#research-board-what-should-we-try-next),
+  the systems-engineering mapping, the layout and the test suites.
 * **[CHANGELOG.md](CHANGELOG.md)**: release notes, newest first.
 * Design notes: [consistency rules](docs/consistency_belief_mcp_design_rules.md) ·
   [component rules](docs/component_belief_mcp_design_rules.md) ·
