@@ -26,7 +26,10 @@ component-belief; whether the design follows from its premises is yours.
      strongest attack you tried in `rationale`.
    - **entailment**: does the claim follow with no unstated assumption? A clause that can only
      be judged by knowing what the code does is the finding: outcome `gap`, and
-     `counterexample` names the premise the claim would need.
+     `counterexample` names the premise the claim would need. Give each gap a `gap_kind`: a short
+     slug for the kind of premise missing -- `determinism`, `exact-arithmetic`, `finite-loss` --
+     the same slug whenever you meet the same kind on another node. A kind found on several nodes
+     is listed to the author as one premise to state once.
    - **negation**: could NOT(claim) also be derived from the same premises? Then the premises
      are too weak to decide it: outcome `inconclusive`.
    - **A `LEAN CERTIFICATE` block**, when there is one, is optional, further evidence beside the

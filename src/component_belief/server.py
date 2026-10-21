@@ -133,6 +133,7 @@ def run_test(
     conditions: dict[str, Any] | None = None,
     repro: dict[str, Any] | None = None,
     wait: bool = True,
+    params: dict[str, Any] | None = None,
 ) -> str:
     """Run a declared test and record its trials as measured evidence.
 
@@ -144,6 +145,7 @@ def run_test(
 
     conditions: captured metadata for bucketing, e.g. {"lighting": "low"}.
     repro:      reproducibility fields, e.g. {"model_revision": "v3", "seed": 7}.
+    params:     for a test that declares params:, one value for each, e.g. {"arm": "noise_seed1"}.
     """
     root = project_root()
     ctx = Context.build(root)
@@ -155,20 +157,25 @@ def run_test(
         return f"unknown test {test_id!r}. Declared tests: {known}"
     if not test.run:
         return f"{test_id} has no run command"
+    values, why = test.bind(params)
+    if why:
+        return f"{why}. Nothing was run."
     if not wait:
         from .jobs import start
-        run_id, pid = start(root, test.id, test.ref, conditions, repro, _actor())
-        return (f"{run_id} {test.ref} started in the background (pid {pid}); it runs to its timeout "
+        run_id, pid = start(root, test.id, test.ref, conditions, repro, _actor(), values)
+        arm = "".join(f" {k}={v}" for k, v in values.items())
+        return (f"{run_id} {test.ref}{arm} started in the background (pid {pid}); it runs to its timeout "
                 f"({test.timeout_s} s) and records its trials when it ends, as a waited run would, and "
                 "they count from then -- for a spend too. status(view=\"runs\") shows it until then; "
                 "keep researching meanwhile.")
 
-    result = execute_test(root, ctx.store, ctx.decl, test, conditions, repro, actor=_actor())
+    result = execute_test(root, ctx.store, ctx.decl, test, conditions, repro, actor=_actor(), params=values)
 
     fresh = Context.build(root)
     slices = fresh.slices(contract_ids=result["contracts"])
     lines = [
-        f"{result['run_id']} {result['test']} exit={result['exit_code']} "
+        f"{result['run_id']} {result['test']}{''.join(f' {k}={v}' for k, v in result['params'].items())} "
+        f"exit={result['exit_code']} "
         f"trials={result['n_trials']} records={result['n_records']}",
         f"outcomes: {result['outcome_counts']}",
         f"artifact: {result['artifact_uri']} sha={result['artifact_hash']}",
@@ -220,6 +227,7 @@ async def run_test_tool(
     conditions: dict[str, Any] | None = None,
     repro: dict[str, Any] | None = None,
     wait: bool = True,
+    params: dict[str, Any] | None = None,
     ctx: ToolContext | None = None,
 ) -> str:
     """Run a declared test and record its trials as measured evidence.
@@ -238,10 +246,13 @@ async def run_test_tool(
     wait:       False starts the test in a process of its own and answers at once, with its RUN- id:
                 for a run longer than the client waits on a call (a training run, an hour's eval).
                 It records its trials when it ends; status(view="runs") shows it until then.
+    params:     for a test that declares params: -- a family of arms in one test -- one value for
+                each, e.g. {"arm": "noise_seed1"}. Each arm is its own slice; run each arm you need.
     """
     if not wait:
-        return run_test(test_id, conditions, repro, wait=False)
-    return await _with_heartbeat(ctx, test_id, lambda: _in_slot(lambda: run_test(test_id, conditions, repro)))
+        return run_test(test_id, conditions, repro, wait=False, params=params)
+    return await _with_heartbeat(ctx, test_id,
+                                 lambda: _in_slot(lambda: run_test(test_id, conditions, repro, params=params)))
 
 
 async def _with_heartbeat(ctx: ToolContext | None, what: str, work: Any) -> Any:

@@ -78,6 +78,14 @@ certify("LMA-x", declaration="TDLP.lma_x", expected_statement="<its Lean type>",
    distinct (strategy, actor) pairs: three `sound`s of one strategy are one probe repeated,
    recorded but not progress.
 
+   **A gap that keeps coming back is a missing definition.** The verifier names each gap's
+   kind (`gap_kind`). When `status(view="contradictions")` lists a kind as recurring -- the
+   same missing premise on several nodes -- stop restating each node: state it once as a
+   `DEF-` or `AXM-` they cite. Two common ones: "claims are about exact arithmetic; rounding
+   is measured (a digest reproduction), never a premise", and "the loop is causally
+   deterministic: equal inputs and draws up to a step give equal outputs there, measured by a
+   two-round reproduction".
+
 2. **The verifier reads no code.** A trial judges entailment from the premises. A clause
    that cannot be judged without opening a file is the finding: `outcome="gap"` naming the
    premise the claim needs. The server refuses a falsification whose counterexample or

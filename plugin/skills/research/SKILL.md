@@ -31,7 +31,10 @@ board() → scouts (background) → approve → spend → build, run_test → bo
    build, and run the target's tests with `run_test`. Only results recorded after the spend count
    for the direction. Work without spending is always allowed, but its results belong to no
    direction. Spend on a **test** (`TST-...`) rather than its contract when several arms share a
-   contract: a spend on a test counts that test's runs only.
+   contract: a spend on a test counts that test's runs only. When the arms are one test with
+   `params:`, fix the arm too -- `spend(..., target="TST-x", params={"arm": "noise"})` -- and run
+   that arm. Runs on a direction's contracts that no spend claims are listed per goal on the
+   board: work the board did not attribute, never a result.
    **Spend when you decide, and launch long runs in the background:** a spend's idle clock starts
    with its first run, not with the spend, so a test funded hours before the machine frees waits
    queued and costs nothing. `run_test(test_id, wait=False)` answers at once with the RUN id and
@@ -55,6 +58,10 @@ goal, your digest, open questions, the latest feedback, the papers already cited
 and then pages through `section=` or fetches one record with `item=`. Two moves keep the head
 useful as a direction grows:
 
+- **`board(view="human")`** -- the board in plain words for the person you work for: whether each
+  goal is met, the best result, what is being tried and what comes next, the work no direction
+  claims, and what needs them. Start your updates to them from it; ledger ids in an update read
+  as narration, not as a summary.
 - **`digest(direction, text)`** -- the facts so far, in at most 4000 characters, which every brief
   on the direction leads with. Rewrite it after each result and each scout round that changed the
   picture. Scouts propose edits in feedback; the digest is yours.

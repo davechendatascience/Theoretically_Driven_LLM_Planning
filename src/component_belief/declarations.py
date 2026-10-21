@@ -13,6 +13,8 @@ see what is wrong with it.
 
 from __future__ import annotations
 
+import re
+import shlex
 import subprocess
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
@@ -236,6 +238,42 @@ class Test:
     #: all of it: an edit to a claimed file outside the scope, which the run never opened, does not
     #: stale it. Declared, so it is reviewed; the files a run opened stay watched whatever it says.
     scope: list[str] = field(default_factory=list)
+    #: A family of arms in one test: each name maps to the values it may take, and the run line
+    #: holds `{name}` where the value goes. A run fixes one value for each, recorded with its trials;
+    #: arms are never pooled into one slice (DEF-contract-slice).
+    params: dict[str, list[Any]] = field(default_factory=dict)
+
+    def bind(self, given: dict[str, Any] | None) -> tuple[dict[str, str], str]:
+        """The parameter values a run uses -- one declared value for each declared parameter, as
+        strings -- and, when `given` does not fit the declaration, why not."""
+        given = {str(k): str(v) for k, v in (given or {}).items()}
+        declared = self.declared_params()
+        if not declared:
+            return {}, (f"{self.id} declares no parameters" if given else "")
+        extra = sorted(set(given) - set(declared))
+        if extra:
+            return {}, f"{self.id} declares no parameter {', '.join(extra)}; it declares {', '.join(sorted(declared))}"
+        for name, values in sorted(declared.items()):
+            if name not in given:
+                return {}, (f"{self.id} runs one arm at a time: give params={{\"{name}\": ...}}, one of "
+                            f"{', '.join(values)}")
+            if given[name] not in values:
+                return {}, f"{given[name]!r} is not a value {self.id} declares for {name}: {', '.join(values)}"
+        return {name: given[name] for name in sorted(declared)}, ""
+
+    def declared_params(self) -> dict[str, list[str]]:
+        """Each parameter and its values, as strings; nothing for a declaration validate() reports."""
+        if not isinstance(self.params, dict):
+            return {}
+        return {str(name): [str(v) for v in values] for name, values in self.params.items() if isinstance(values, list)}
+
+    def command_for(self, values: dict[str, str]) -> str:
+        """The run line with each `{name}` replaced by its value, quoted for the shell. A `${name}`
+        is the shell's own and is left alone."""
+        line = self.run
+        for name, value in values.items():
+            line = re.sub(r"(?<!\$)\{" + re.escape(name) + r"\}", lambda _m, v=value: shlex.quote(v), line)
+        return line
 
     def measures_as(self, ref: str) -> bool:
         """Whether a trial recorded under `ref` is evidence from this test as it stands: this
@@ -251,6 +289,8 @@ class Test:
         spec: dict[str, Any] = {"run": self.run, "metrics": sorted(self.metrics)}
         if self.scope:         # what the evidence watches is part of the procedure: narrowing it is a new version
             spec["scope"] = sorted(self.scope)
+        if self.declared_params():     # so is the family of arms it can run
+            spec["params"] = dict(sorted(self.declared_params().items()))
         return content_hash(spec, 8)
 
     @property
@@ -589,6 +629,30 @@ def _entries(data: dict[str, Any], section: str, cls: type, issues: list[Issue],
     return out
 
 
+_PARAM_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+
+
+def _param_issues(tid: str, test: Test) -> list[Issue]:
+    """A test's parameters: a name the run line holds as `{name}`, and a list of plain values. An
+    arm whose name the run line never holds would run the same command as every other."""
+    if not test.params:
+        return []
+    if not isinstance(test.params, dict):
+        return [Issue("MALFORMED_PARAMS", tid, "params: maps each name to the list of values it may take")]
+    issues = []
+    for name, values in test.params.items():
+        if not _PARAM_NAME.match(str(name)):
+            issues.append(Issue("MALFORMED_PARAMS", tid, f"parameter {name!r} is not a plain name"))
+        elif not isinstance(values, list) or not values or any(isinstance(v, (dict, list)) or v is None for v in values):
+            issues.append(Issue("MALFORMED_PARAMS", tid, f"parameter {name} takes a non-empty list of plain values"))
+        elif len({str(v) for v in values}) != len(values):
+            issues.append(Issue("MALFORMED_PARAMS", tid, f"parameter {name} lists a value twice"))
+        elif not re.search(r"(?<!\$)\{" + re.escape(str(name)) + r"\}", test.run):
+            issues.append(Issue("PARAM_UNUSED", tid, f"the run line holds no {{{name}}}, so every arm would run "
+                                "the same command"))
+    return issues
+
+
 def validate(decl: Declarations) -> list[Issue]:
     issues: list[Issue] = []
 
@@ -600,6 +664,7 @@ def validate(decl: Declarations) -> list[Issue]:
             if not any(matches(entry, c) or matches(c, entry) for c in claimed):
                 issues.append(Issue("SCOPE_UNCLAIMED", tid, f"scope {entry!r} is inside no component's claimed "
                                     "code; a scope only narrows what the components claim"))
+        issues += _param_issues(tid, test)
 
     for cid, comp in decl.components.items():
         missing = [

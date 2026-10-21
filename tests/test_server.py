@@ -691,3 +691,72 @@ def test_two_processes_appending_at_once_never_share_an_id(repo):
     assert all(p.wait(timeout=120) == 0 for p in procs)
     ids = [t["id"] for t in Store(repo).raw_records() if t.get("kind") == "trial"]
     assert len(ids) == 120 and len(set(ids)) == 120
+
+
+ARM_PY = """import json, sys
+arm, out = sys.argv[1], sys.argv[2]
+trials = [{"metrics": {"ik_success": arm == "steady"}, "conditions": {"lighting": "normal"}} for _ in range(6)]
+json.dump(trials, open(out, "w"))
+"""
+
+
+class TestParameters:
+    """Three decode arms of one evaluation became three declared tests differing in one word. A
+    test may now declare its arms: one run line holding `{arm}`, `params: {arm: [...]}`, one value
+    fixed per run and recorded with its trials -- and each arm is its own slice."""
+
+    @pytest.fixture
+    def arms(self, project):
+        (project / "arm.py").write_text(ARM_PY, encoding="utf-8")
+        text = (project / "belief.yaml").read_text(encoding="utf-8").replace(
+            'run: "echo ok"', 'run: "python arm.py {arm} $OUT"\n    params: {arm: [steady, shaky]}')
+        (project / "belief.yaml").write_text(text, encoding="utf-8")
+        git(project, "add", "-A")
+        git(project, "commit", "-q", "-m", "one test, two arms")
+        return project
+
+    def test_each_arm_runs_alone_and_is_never_pooled_with_another(self, arms):
+        from component_belief.model import compute_slices
+
+        refused = server.run_test("TST-grasp-ik")
+        assert "runs one arm at a time" in refused and "steady, shaky" in refused and "Nothing was run" in refused
+        assert "'wobbly' is not a value TST-grasp-ik declares for arm" in server.run_test(
+            "TST-grasp-ik", params={"arm": "wobbly"})
+        assert Store(arms).effective_trials() == []
+
+        assert "arm=steady" in server.run_test("TST-grasp-ik", params={"arm": "steady"})
+        server.run_test("TST-grasp-ik", params={"arm": "shaky"})
+        trials = Store(arms).effective_trials()
+        assert {t["params"]["arm"] for t in trials} == {"steady", "shaky"}
+        assert all(t["conditions"]["raw"]["arm"] == t["params"]["arm"] for t in trials)
+        command = (Store(arms).artifacts_dir / trials[-1]["run_id"] / "command.txt").read_text(encoding="utf-8")
+        assert command.startswith("python arm.py shaky ")
+
+        by_arm = {s.compat_fields.get("param:arm"): s for s in compute_slices(load(arms), trials, ["CTR-grasp-reachable"])}
+        assert set(by_arm) == {"steady", "shaky"}
+        assert by_arm["steady"].point > 0.8 and by_arm["shaky"].point < 0.2      # pooled, both would read 0.5
+        assert by_arm["steady"].n_valid == by_arm["shaky"].n_valid == 6
+        assert "param:arm=steady" in server.status(view="belief")
+
+    def test_a_background_run_carries_its_arm(self, arms):
+        reply = server.run_test("TST-grasp-ik", wait=False, params={"arm": "steady"})
+        run_id = reply.split()[0]
+        assert "arm=steady started in the background" in reply
+        records = TestBackgroundRuns._until(
+            lambda: [t for t in Store(arms).effective_trials() if t.get("run_id") == run_id])
+        assert {t["params"]["arm"] for t in records} == {"steady"}
+
+    def test_the_arms_are_part_of_the_tests_version_and_a_bad_declaration_is_reported(self, project):
+        plain = load(project).tests["TST-grasp-ik"].version
+        text = (project / "belief.yaml").read_text(encoding="utf-8")
+        for declared, code in (('run: "echo ok"\n    params: {arm: [a, b]}', "PARAM_UNUSED"),
+                               ('run: "echo {arm}"\n    params: {arm: []}', "MALFORMED_PARAMS"),
+                               ('run: "echo {arm}"\n    params: [a, b]', "MALFORMED_PARAMS")):
+            (project / "belief.yaml").write_text(text.replace('run: "echo ok"', declared), encoding="utf-8")
+            git(project, "commit", "-qam", code)
+            assert any(i.code == code and i.subject == "TST-grasp-ik" for i in load(project).issues), declared
+        (project / "belief.yaml").write_text(text.replace('run: "echo ok"', 'run: "echo {arm}"\n    params: {arm: [a]}'),
+                                             encoding="utf-8")
+        git(project, "commit", "-qam", "one arm")
+        decl = load(project)
+        assert decl.tests["TST-grasp-ik"].version != plain and not [i for i in decl.issues if "PARAM" in i.code]

@@ -347,9 +347,10 @@ def spend_result(decl: Any, trials: list[dict[str, Any]], staleness: Any, spend:
     if not contracts or since is None:
         return result
     test = spend.get("test") or ""            # a spend that named a test counts that test's runs only
+    arm = spend.get("params") or {}           # ... run with the values it fixed, if it fixed any
     after = [t for t in trials
              if t.get("contract_id") in contracts and t.get("provenance") == "measured"
-             and (not test or t.get("test_id") == test)
+             and (not test or t.get("test_id") == test) and _same_arm(t.get("params"), arm)
              and (when(t.get("timestamp")) or since) > since]
     result.states = _states(decl, after, contracts, staleness)
     for cid in contracts:
@@ -424,6 +425,44 @@ def _closed_after(d: Direction, since: datetime) -> datetime | None:
     return None
 
 
+def unclaimed_runs(board: "Board", goal: str, trials: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The runs that count for no direction on a goal (DEF-research-ledger): measured runs recorded
+    against a contract a spend on one of the goal's directions targets, after the first such spend
+    was recorded, whose records enter no spend's result. Work the board did not attribute -- listed
+    so the human sees it, and never a direction's result. Oldest first."""
+    first: dict[str, datetime] = {}
+    for d in board.directions.values():
+        if d.goal != goal:
+            continue
+        for spend in d.spends:
+            at = when(spend.get("timestamp"))
+            for cid in spend.get("contracts", []):
+                if at is not None and (cid not in first or at < first[cid]):
+                    first[cid] = at
+    if not first:
+        return []
+    claimed = {run for result in board.results.values() for ids in result.runs.values() for run in ids}
+    runs: dict[str, dict[str, Any]] = {}
+    for t in trials:
+        cid, at, rid = t.get("contract_id"), when(t.get("timestamp")), str(t.get("run_id") or "")
+        if (cid not in first or at is None or at <= first[cid] or not rid or rid in claimed
+                or t.get("provenance") != "measured"):
+            continue
+        run = runs.setdefault(rid, {"run": rid, "test": t.get("test_id"), "params": t.get("params") or {},
+                                    "contracts": set(), "outcomes": {}, "at": at})
+        run["contracts"].add(cid)
+        outcome = str(t.get("outcome") or "?")
+        run["outcomes"][outcome] = run["outcomes"].get(outcome, 0) + 1
+        run["at"] = max(run["at"], at)
+    return sorted(runs.values(), key=lambda r: r["at"])
+
+
+def _same_arm(ran: dict[str, Any] | None, fixed: dict[str, Any]) -> bool:
+    """Whether a run was given every value a spend fixed."""
+    ran = ran or {}
+    return all(str(ran.get(k)) == str(v) for k, v in fixed.items())
+
+
 def run_starts(trials: list[dict[str, Any]]) -> dict[str, datetime]:
     """When each recorded run started: the time its records carry, or, for a run recorded before
     runs said, when it was recorded -- which errs toward charging less idle."""
@@ -449,7 +488,8 @@ def wait_start(decl: Any, spend: dict[str, Any], result: Result | None, started:
     test = spend.get("test") or ""
     tests = {test} if test else {tid for cid in spend.get("contracts", []) if cid in decl.contracts
                                  for tid in decl.contracts[cid].evaluable_by}
-    starts += [when(j.get("started")) for j in running if str(j.get("test", "")).split("@", 1)[0] in tests]
+    starts += [when(j.get("started")) for j in running if str(j.get("test", "")).split("@", 1)[0] in tests
+               and _same_arm(j.get("params"), spend.get("params") or {})]
     first = min((m for m in starts if m is not None), default=None)
     return None if first is None else max(recorded, first)
 
@@ -543,6 +583,7 @@ class Board:
     evidence: dict[str, dict[str, Any]] = field(default_factory=dict)
     results: dict[str, Result] = field(default_factory=dict)
     starts: dict[str, datetime | None] = field(default_factory=dict)     # when each spend's wait starts
+    unclaimed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # per goal: runs no direction claims
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
     goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
@@ -709,6 +750,8 @@ def build(root: Path, *, with_results: bool = True) -> Board:
                     board.measures[sl.contract_id] = sl.state
             for cid in measures:
                 board.measures.setdefault(cid, NO_EVIDENCE)
+            for goal_id in sorted({d.goal for d in board.directions.values()}):
+                board.unclaimed[goal_id] = unclaimed_runs(board, goal_id, trials)
         except Exception as exc:                  # a ledger this server does not own
             board.evidence_error = f"component-belief's evidence could not be read ({exc}); no result is shown"
 

@@ -305,6 +305,11 @@ A result stops counting the moment the thing it measured changes — and not bef
   Those files are the test's own and everything its components claim -- or, for a test that
   declares `scope:`, the part of the claim it names plus every claimed file the run actually
   opened. A scope is part of the test: changing it is a new version, so earlier evidence goes stale.
+* A test may declare **parameters**, `params: {arm: [a, b]}`, with `{arm}` in its run line: a family
+  of arms as one test. `run_test(test_id, params={"arm": "a"})` runs one arm, with the value quoted
+  into the run line, recorded on every trial and in its conditions. Trials measured with different
+  values are never pooled (DEF-contract-slice), so each arm is its own slice, shown as
+  `param:arm=a`. The declared values are part of the test's version.
 
 * A **review** is bound to what was reviewed. `review()` records, in the ledger, that someone
   read a code region against the claim it realizes, or a branch's cited contract against the
@@ -335,7 +340,7 @@ declarations in [`consistency.yaml`](../consistency.yaml).
 * **Axiomatic grounding.** Lemmas and branches must trace back to declared axioms (`AXM-`) and definitions; anything else is `UNGROUNDED`.
 * **Mechanical DAG kernel.** Acyclicity is enforced before any semantic reasoning; a cycle ($A \implies B \implies A$) is rejected with its trace.
 * **Open obligations (`sorry`).** A lemma or branch with fewer than $n_{\min}$ independent trials is an open `OBLIGATION`.
-* **Only a counterexample refutes.** A probe with outcome `falsified` makes a node `REFUTED`. A `gap` — a missing premise, an unproven step — leaves it unproven, counts against consensus (so the node reads `DOUBTED` once it has enough trials), and is listed under *Entailment Gaps* in `status(view="contradictions")`.
+* **Only a counterexample refutes.** A probe with outcome `falsified` makes a node `REFUTED`. A `gap` — a missing premise, an unproven step — leaves it unproven, counts against consensus (so the node reads `DOUBTED` once it has enough trials), and is listed under *Entailment Gaps* in `status(view="contradictions")`. A verifier names each gap's kind (`gap_kind`, a slug such as `determinism`); a kind recorded on two or more nodes is listed there as *Recurring gaps*: one missing premise to state once, as a definition or axiom those nodes cite, rather than restating each node.
 * **A proof rests on its steps, like Lean's `sorry`.**
   - A trial vouches for one step: a claim from the statements of the premises it cites.
   - A lemma or branch is `PROVEN` only when its own step and every step beneath it are verified.
@@ -653,13 +658,13 @@ free; its results belong to no direction.
 
 | Tool | Who | Does |
 |---|---|---|
-| `board(direction, section, part, item)` | all | every direction in the order to act on it; with a `DIR-` id, that direction's brief, whose head always fits: the goal and the human's standing rules for it, the director's digest, open questions, the latest feedback, the papers already cited and an index; `section=` pages the rest (trails, spends, feedback, evidence, goal, directions, components); `item=` serves one record whole |
+| `board(direction, section, part, item, view)` | all | every direction in the order to act on it; `view="human"` gives the same in plain words, without ids, for the person the director works for; with a `DIR-` id, that direction's brief, whose head always fits: the goal and the human's standing rules for it, the director's digest, open questions, the latest feedback, the papers already cited and an index; `section=` pages the rest (trails, spends, feedback, evidence, goal, directions, components); `item=` serves one record whole |
 | `ledger(run, contract, node, evidence, limit, fields)` | all | records from all three ledgers, what a run captured (stdout, stderr, `result.json`, the command) and a finding the director attached; `fields="metrics"` for a run too long to read whole; never a source file |
 | `open_direction(name, goal, idea, assessment)` | all | a new direction for a goal, at 0 points |
 | `add_trail(direction, paper, tweak, component, quote, at, expect, kind)` | all | a `tweak` (a component change) or a `method` (a way to measure, naming the component, test or contract it measures with) earns the rules' points for a paper new to the direction, quoted, naming what is declared; otherwise kept, earning nothing, with the reason. `set-aside` records a paper read and not taken up, with why: it earns nothing, and every brief lists it |
 | `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, a check (a measurement proposed for the director to make first), or an answer, addressed to a goal, direction, trail or spend; a note on a goal reaches every brief on it |
 | `approve(target, approved, why, rank)` | director | a direction must be approved before anything is spent on it; `rank` orders them; a rejected trail's points stop counting |
-| `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names and the idle terms; runs measured on them afterwards are the direction's result |
+| `spend(direction, action, target, expect, params)` | director | takes the action's cost and fixes the contracts the target names and the idle terms; runs measured on them afterwards are the direction's result. On a test with `params:`, `params` fixes the arm whose runs count |
 | `reflect(direction, decision, why)` | director | continue, halt or pivot; required after a result settles, before the next spend |
 | `evidence(direction, artifact, summary, reply_to)` | director | attaches a measured finding -- a data file or report no component claims and no test runs; the board keeps a copy and its digest; earns `earn.evidence` (0 by default); never a result. `reply_to` closes the check or question it measured |
 | `retarget(direction, goal, why)` | director | points a direction at another goal in `goals.yaml` -- the subgoal it was for, once committed; its records stay where they are |
@@ -682,7 +687,11 @@ free; its results belong to no direction.
   the idle terms in effect when it was made, so a later edit of the rules reprices nothing already
   waited. A spend that changes code and names no contract waits on nothing.
 * **A spend on a test counts that test's runs.** Three arms of one evaluation, each its own test on
-  one contract and each with its own spend, keep their results apart.
+  one contract and each with its own spend, keep their results apart -- or one test with `params:`,
+  each spend fixing its arm.
+* **Work no direction claims is listed, never counted.** For each goal the board lists the runs
+  measured on its directions' contracts, since the first spend on each, that no spend's result
+  counts: work done without a spend, which belongs to no direction.
 * **Briefs a scout can read.** A scout opens no file, so a reply too long for its client to show
   whole is a reply it cannot read. A brief's head stays under 16,000 characters and leads with the
   human's `constraints:` for the goal (declared in `goals.yaml`, so they are the human's) and the

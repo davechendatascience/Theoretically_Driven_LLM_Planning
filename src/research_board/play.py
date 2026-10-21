@@ -213,9 +213,11 @@ def approve(root: Path, target: str, approved: bool, why: str, rank: int | None 
     return f"{record['id']}: {direction} {verdict}{ranked}. Balance {balance}."
 
 
-def spend(root: Path, direction: str, action: str, target: str, expect: str = "") -> str:
+def spend(root: Path, direction: str, action: str, target: str, expect: str = "",
+          params: dict[str, Any] | None = None) -> str:
     """A spend commits points, and a commitment to test the direction by every measurement recorded
-    afterwards against the contracts it names now (DEF-research-ledger)."""
+    afterwards against the contracts it names now (DEF-research-ledger) -- by the test it names, run
+    with the parameter values it fixes, when it fixes any."""
     _required(direction=direction, action=action, target=target)
     with _LOCK:
         board = B.build(root)
@@ -239,6 +241,13 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
         if not any(target in table for table in (decl.components, decl.contracts, decl.tests, decl.goals,
                                                  decl.interfaces, decl.goal_interfaces)):
             raise Refused(f"{target!r} is not declared in belief.yaml or goals.yaml at HEAD")
+        values: dict[str, str] = {}
+        if params:
+            if target not in decl.tests:
+                raise Refused(f"params fix the arm of a test; {target} is no test")
+            values, why = decl.tests[target].bind(params)
+            if why:
+                raise Refused(why)
         cost = costs[action]
         balance = board.balance(d)
         if balance < cost:
@@ -251,11 +260,14 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
         rules = board.rules                                   # so are the idle terms: a later rule reprices none
         record, _ = _record(root, board, "spend", {
             "direction": d.id, "action": action, "target": target, "contracts": contracts,
-            "test": target if target in decl.tests else "",
+            "test": target if target in decl.tests else "", "params": values,
             "expect": expect.strip(), "cost": cost, "commit": commit, "by": "director",
             "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes,
                      "from": B.FIRST_RUN}})
-    by_test = f"{target}'s runs " if target in decl.tests else "Runs "
+    arm = "".join(f" {k}={v}" for k, v in values.items())
+    by_test = f"{target}{arm}'s runs " if target in decl.tests else "Runs "
+    if target in decl.tests and decl.tests[target].declared_params() and not values:
+        by_test = f"{target}'s runs, every arm of it (fix one with params=), "
     counts = (f"{by_test}measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
               if contracts else
               f"{target} names no contract, so this spend pays for the work and has no result of its own. "

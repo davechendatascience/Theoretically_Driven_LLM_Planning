@@ -14,7 +14,7 @@ from component_belief.project import ProjectServer, project_root as resolve_root
 
 from . import board as B
 from . import play, reading
-from .page import render_board, render_brief, render_item, render_section
+from .page import render_board, render_brief, render_human, render_item, render_section
 
 INSTRUCTIONS = """\
 Research directions for a goal: the papers behind each, the tweak each suggests to a component,
@@ -60,7 +60,7 @@ def _move(fn, *args, **kwargs) -> str:
 
 @mcp.tool()
 def board(direction: str | None = None, section: str | None = None, part: int = 1,
-          item: str | None = None) -> str:
+          item: str | None = None, view: str = "") -> str:
     """The research board: every direction in the order to act on it, with what waits on whom.
 
     direction: a DIR- id for that direction's brief. Its head always fits: the goal and the human's
@@ -71,8 +71,14 @@ def board(direction: str | None = None, section: str | None = None, part: int = 
     part:      which page of a section, from 1.
     item:      any one record in full, by its id (DIR-, TRAIL-, SPD-, FBK-, EVD-), with the
                feedback on it and the replies to it.
+    view:      "human" -- the board in plain words, for the person you work for: each goal, the best
+               result, what is being tried and what comes next, and what needs them. No ids.
     """
     b = B.build(project_root())
+    if view:
+        if view != "human":
+            return f"no view {view!r}; the one view is \"human\""
+        return render_human(b)
     if item:
         return render_item(b, item)
     if direction:
@@ -178,18 +184,20 @@ def approve(target: str, approved: bool, why: str, rank: int | None = None) -> s
 
 
 @mcp.tool()
-def spend(direction: str, action: str, target: str, expect: str = "") -> str:
+def spend(direction: str, action: str, target: str, expect: str = "", params: dict | None = None) -> str:
     """Commit points to work for a direction, before doing it.
 
     action: one the rules price -- e.g. implement, test, dataset_eval, training_run.
     target: what the work is on: a CMP- to implement, or a CTR-/TST- whose results will count for
             this direction from now on.
+    params: for a TST- that declares params:, the arm this spend tests, e.g. {"arm": "noise_seed1"}:
+            only that arm's runs count for it.
     Refused on a direction not approved, short of the cost, or with a settled result nobody has
     reflected on yet. From when the spend's first run starts until its result is in, each hour with
     no research recorded on the board costs this direction the idle points the rules set now; a
     spend whose run has not started is queued and costs nothing, so spend when you decide.
     """
-    return _move(play.spend, direction, action, target, expect)
+    return _move(play.spend, direction, action, target, expect, params)
 
 
 @mcp.tool()

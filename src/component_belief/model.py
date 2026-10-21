@@ -105,11 +105,15 @@ def bucket_for(contract: Contract, trial: dict[str, Any]) -> str:
 
 def compat_for(contract: Contract, trial: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     """Compatibility group: trials differing on any declared key are never
-    pooled (5.6)."""
-    if not contract.compatibility_key:
+    pooled (5.6), nor trials measured with different values of their test's
+    parameters -- two arms of one test are two claims (DEF-contract-slice). A
+    trial with no parameters groups as it always did."""
+    params = trial.get("params") or {}
+    if not contract.compatibility_key and not params:
         return "all", {}
     repro = trial.get("repro") or {}
     fields = {k: repro.get(k) for k in contract.compatibility_key}
+    fields.update({f"param:{k}": v for k, v in sorted(params.items())})
     return content_hash(fields, 6), fields
 
 

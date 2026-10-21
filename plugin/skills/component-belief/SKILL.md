@@ -138,6 +138,12 @@ Eight facts decide whether a declaration measures what you meant.
      current, unless the run opened that file -- what a run opened stays
      watched. The scope is part of the test: changing it makes the earlier
      evidence stale, as editing the run line does.
+   - Arms of one evaluation -- decode variants, a sweep -- are one test, not
+     one test per arm: declare `params: {arm: [execute8, noise_seed1]}` and
+     put `{arm}` in the run line, then `run_test(test_id, params={"arm":
+     "noise_seed1"})` once per arm. Each value is recorded with the run's
+     trials and in their conditions, and each arm is its own slice, never
+     pooled with another (`param:arm=...` in the belief view).
 
 ## Citations
 

@@ -101,8 +101,16 @@ def _result_line(board: B.Board, spend: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
+def _unclaimed_line(run: dict[str, Any]) -> str:
+    arm = "".join(f" {k}={v}" for k, v in sorted(run["params"].items()))
+    outcomes = ", ".join(f"{n} {o}" for o, n in sorted(run["outcomes"].items()))
+    return (f"- {run['run']} · {run['test']}{arm} · {run['at'].strftime('%Y-%m-%d %H:%M')} · "
+            f"{', '.join(sorted(run['contracts']))}: {outcomes}")
+
+
 def _spend_line(board: B.Board, spend: dict[str, Any]) -> str:
-    line = (f"{spend['id']} · {spend.get('action')} -> {spend.get('target')} · "
+    arm = "".join(f" {k}={v}" for k, v in sorted((spend.get("params") or {}).items()))
+    line = (f"{spend['id']} · {spend.get('action')} -> {spend.get('target')}{arm} · "
             f"{_plural(int(spend.get('cost') or 0), 'point')} · at {spend.get('commit') or '?'}")
     if spend.get("expect"):
         line += f" · expect: {_short(spend['expect'])}"
@@ -188,6 +196,13 @@ def render_board(board: B.Board) -> str:
     for goal_id, items in sorted(board.goal_feedback.items()):
         lines += ["", f"## On {goal_id} itself ({_plural(len(items), 'note')}, the latest last)"]
         lines += [_feedback_line(f, 240) for f in items[-3:]]
+    for goal_id, runs in sorted(board.unclaimed.items()):
+        if runs:
+            lines += ["", f"## Runs that count for no direction on {goal_id} ({len(runs)}) -- measured on its "
+                          "directions' contracts with no spend claiming them; never a result"]
+            lines += [_unclaimed_line(r) for r in runs[-10:]]
+            if len(runs) > 10:
+                lines.append(f"- ... and {len(runs) - 10} earlier")
     questions = board.open_questions()
     if questions:
         lines += ["", "## Open questions and checks for the director"]
@@ -335,6 +350,79 @@ def _pages(blocks: list[tuple[str, str]], limit: int = PAGE_CHARS) -> list[list[
         pages[-1].append(text)
         used += len(text) + 1
     return pages
+
+
+def _name(d: B.Direction) -> str:
+    """A direction in words: its idea, cut short -- not its id."""
+    return f"\"{_short(d.record.get('idea'), 120)}\""
+
+
+def render_human(board: B.Board) -> str:
+    """The board for the human, in plain words: for each goal with research on it, whether it is
+    met, the best result so far, what is being tried and what comes next, the work no direction
+    claims, and what needs the human. No ledger ids: an update built from ids reads as narration
+    of the ledger, not as a summary."""
+    goals = sorted({d.goal for d in board.directions.values()}, key=lambda g: (g != board.rules.focus, g))
+    lines = ["# Where the research stands", ""]
+    if not goals:
+        lines.append("No research yet: no direction is open on any goal.")
+    for goal_id in goals:
+        goal = board.decl.goals.get(goal_id)
+        mine = [d for d in board.ordered() if d.goal == goal_id]
+        state = board.measures.get(goal.measure, B.NO_EVIDENCE) if goal and goal.measure else ""
+        met = {"supported": "met", "refuted": "not met", "contested": "not settled",
+               "stale": "not current: the code moved since it was measured"}.get(state, "not measured yet")
+        lines.append(f"## {_short(goal.outcome, 160) if goal else goal_id}")
+        lines.append(f"Goal: {met}." if goal else "Goal: no longer in goals.yaml.")
+
+        settled = [(board.results[s["id"]], d, s) for d in mine for s in d.spends
+                   if board.results.get(s["id"]) and board.results[s["id"]].settled]
+        held = [x for x in settled if x[0].status == "supported"]
+        if held:
+            result, d, _spend = max(held, key=lambda x: x[0].settled_at or board.now)
+            on = result.settled_at.strftime("%Y-%m-%d") if result.settled_at else "?"
+            lines.append(f"Best result so far: {_name(d)} passed its test on {on}.")
+        else:
+            lines.append("Best result so far: none yet" + (f" -- {_plural(len(settled), 'test')} came back, none passing."
+                                                           if settled else "."))
+        active = [d for d in mine if d.state == B.ACTIVE]
+        for d in active:
+            queued = d.idle and d.idle.queued
+            how = "paid for, waiting for its run to start" if queued else "its test is running"
+            if d.idle and d.idle.idle_now:
+                how += f", and no research has been done for {_duration(d.idle.seconds)} of the wait"
+            lines.append(f"Trying now: {_name(d)} -- {how}.")
+        ready = [d for d in mine if d.state == B.READY]
+        if ready:
+            lines.append(f"Next up: {_name(ready[0])}" + (f", then {_plural(len(ready) - 1, 'more')}" if len(ready) > 1 else "")
+                         + " -- approved, with enough research behind it to test.")
+        if not active and not ready:
+            earning = [d for d in mine if d.state in (B.EARNING, B.PROPOSED)]
+            lines.append(f"Next up: nothing ready to test; {_plural(len(earning), 'idea')} still gathering research."
+                         if earning else "Next up: nothing open.")
+        closed = [d for d in mine if d.state in (B.HALTED, B.REJECTED)]
+        papers = sum(1 for d in mine for t in d.trails if t.get("type") != B.SET_ASIDE)
+        put = sum(1 for d in mine for t in d.trails if t.get("type") == B.SET_ASIDE)
+        lines.append(f"Research: {_plural(len(mine) - len(closed), 'idea')} open, {_plural(len(closed), 'set')} aside; "
+                     f"{_plural(papers, 'paper')} cited" + (f" and {put} read and dropped" if put else "") + ".")
+        waiting = [q for q in board.open_questions() if board.direction_of(str(q.get("about"))) in {d.id for d in mine}
+                   or q.get("goal") == goal_id]
+        reflect = [d for d in mine if d.state == B.NEEDS_REFLECTION]
+        if waiting or reflect:
+            lines.append("Waiting on the agent: " + "; ".join(
+                part for part in (f"{_plural(len(reflect), 'result')} to weigh" if reflect else "",
+                                  f"{_plural(len(waiting), 'question')} from its scouts" if waiting else "") if part) + ".")
+        unclaimed = board.unclaimed.get(goal_id) or []
+        if unclaimed:
+            lines.append(f"Work no idea claims: {_plural(len(unclaimed), 'test run')} since research began, "
+                         "paid for by no idea, so they count for none.")
+        lines.append("")
+    needs = list(board.issues())
+    gone = sorted({d.goal for d in board.directions.values()} - set(board.decl.goals))
+    if gone:
+        needs.append(f"research continues on {', '.join(gone)}, which goals.yaml no longer declares")
+    lines.append("Needs you: " + ("; ".join(needs) + "." if needs else "nothing."))
+    return "\n".join(lines)
 
 
 def render_section(board: B.Board, d: B.Direction, section: str, part: int = 1) -> str:

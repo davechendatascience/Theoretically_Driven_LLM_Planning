@@ -4,6 +4,37 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.4 — 2026-10-21 · arms of one test, a board in plain words, unclaimed work, recurring gaps
+
+The rest of a project's notes on 0.13.0, in one patch release.
+
+- **A test may declare its arms.** Three decode arms of one evaluation had to be three declared
+  tests differing in one word. Now a test declares `params: {arm: [execute8, noise_seed1]}` and
+  holds `{arm}` in its run line; `run_test(test_id, params={"arm": "noise_seed1"})` runs one arm,
+  in the foreground or the background. The value is quoted into the run line, recorded on every
+  trial and in its conditions, and the stamp watches the command as run. Trials measured with
+  different values are never pooled: each arm is its own slice, shown as `param:arm=...`. The
+  declared values are part of the test's version. A parameter the run line never holds, or one
+  without plain values, is reported.
+- **A spend can fix an arm.** `spend(..., target="TST-x", params={"arm": "noise"})` counts that
+  arm's runs only, for its result and for when its wait starts.
+- **Work no direction claims is listed.** For each goal, the board lists the runs on its
+  directions' contracts, since the first spend on each, that no spend's result counts: work done
+  without a spend, which belongs to no direction. The list stays apart from every result.
+- **`board(view="human")`.** The director's updates had become ledger narration ("too into the
+  research, hard to follow"). This view gives the state in plain words, without ids: for each
+  goal, whether it is met, the best result, what is being tried and what comes next, what waits on
+  the agent, the work no idea claims, and what needs you.
+- **Recurring gaps are named.** Determinism took three restatements on one branch, and rounding
+  corners three on another; the same gap came back on every decode branch. A verifier now names
+  each gap's kind (`gap_kind`), and `status(view="contradictions")` lists a kind recorded on two or
+  more nodes as one premise to state once. The skill gives two common ones: exact arithmetic and
+  causal determinism.
+- **The theory.** DEF-contract-slice: trials measured with different parameter values are never
+  pooled. DEF-research-ledger: a spend may fix a test's parameter values, and each goal lists the
+  runs that count for no direction. BRN-model-honest and BRN-research-results-follow-their-spend
+  are verified again.
+
 ## 0.13.3 — 2026-10-21 · the research loop: queued spends, checks, retargets, papers set aside
 
 The last of three patch releases from a project's notes on 0.13.0; 0.14.0 follows.

@@ -68,12 +68,13 @@ def _alive(pid: int) -> bool:
 
 
 def start(root: Path, test_id: str, test_ref: str, conditions: dict[str, Any] | None,
-          repro: dict[str, Any] | None, actor: str) -> tuple[str, int]:
+          repro: dict[str, Any] | None, actor: str, params: dict[str, str] | None = None) -> tuple[str, int]:
     """Reserve a run and start its worker; returns the run id and the worker's pid."""
     store = Store(root)
     run_id, artifact_dir = store.reserve_run_id()
     job_path = artifact_dir / JOB_FILE
-    job: dict[str, Any] = {"run_id": run_id, "test": test_ref, "started": utc_now(), "pid": 0, "actor": actor}
+    job: dict[str, Any] = {"run_id": run_id, "test": test_ref, "started": utc_now(), "pid": 0, "actor": actor,
+                           **({"params": params} if params else {})}
     _write(job_path, job)
 
     env = dict(os.environ)
@@ -81,7 +82,7 @@ def start(root: Path, test_id: str, test_ref: str, conditions: dict[str, Any] | 
     package_root = str(Path(__file__).resolve().parents[1])
     env["PYTHONPATH"] = os.pathsep.join([package_root] + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p])
     command = [sys.executable, "-m", "component_belief.jobs", str(root), run_id, test_id,
-               json.dumps(conditions or {}), json.dumps(repro or {}), actor]
+               json.dumps(conditions or {}), json.dumps(repro or {}), actor, json.dumps(params or {})]
     log = (artifact_dir / "job.log").open("ab")
     detach: dict[str, Any] = (
         {"creationflags": subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP}  # type: ignore[attr-defined]
@@ -106,6 +107,7 @@ def work(argv: list[str]) -> int:
 
     root, run_id, test_id = Path(argv[0]), argv[1], argv[2]
     conditions, repro, actor = json.loads(argv[3]), json.loads(argv[4]), argv[5]
+    params = json.loads(argv[6]) if len(argv) > 6 else {}
     store = Store(root)
     artifact_dir = store.artifacts_dir / run_id
     job_path = artifact_dir / JOB_FILE
@@ -116,7 +118,7 @@ def work(argv: list[str]) -> int:
         if test is None:
             raise LookupError(f"{test_id} is no longer declared at HEAD")
         result = run_test(root, store, decl, test, conditions or None, repro or None, actor=actor,
-                          reserved=(run_id, artifact_dir))
+                          reserved=(run_id, artifact_dir), params=params or None)
     except Exception as exc:       # whatever stopped it, job.json says so: a silent death reads as lost
         job.update({"ended": utc_now(), "error": f"{type(exc).__name__}: {exc}"})
         _write(job_path, job)
@@ -154,7 +156,8 @@ def view_runs(root: Path) -> str:
     running = sum(1 for j in listing if j["state"] == RUNNING)
     lines = [f"runs in the background: {running} running, {len(listing)} started in all"]
     for job in listing:
-        line = f"- {job['run_id']} · {job.get('test')} · {job['state']} · started {job.get('started')}"
+        arm = "".join(f" {k}={v}" for k, v in sorted((job.get("params") or {}).items()))
+        line = f"- {job['run_id']} · {job.get('test')}{arm} · {job['state']} · started {job.get('started')}"
         if job["state"] == RUNNING:
             line += f" · pid {job.get('pid')}"
         elif job["state"] == RECORDED:

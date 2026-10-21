@@ -419,7 +419,11 @@ def verify_step(
 
     target_id:      the lemma or branch being verified.
     trials:         several probes in one call, each {"strategy", "outcome", "rationale",
-                    "counterexample"?}; when given, the single-trial fields below are ignored.
+                    "counterexample"?, "gap_kind"?}; when given, the single-trial fields below are
+                    ignored. gap_kind, on a gap: a short slug for the kind of premise missing --
+                    "determinism", "exact-arithmetic" -- the same slug whenever the same kind recurs.
+                    It carries no weight; a kind recorded on several nodes is listed, by
+                    status(view="contradictions"), as one to state once as a DEF- or AXM-.
     strategy:       "counterexample" | "entailment" | "negation" | "contradiction".
     outcome:        "sound" | "falsified" | "gap" | "inconclusive".
     counterexample: concrete counter-scenario if falsified, otherwise null.
@@ -475,6 +479,9 @@ def verify_step(
             "read": ctx.dag.premise_statements(target_id),
             "staged": node.staged,
         }
+        kind = _gap_kind(t.get("gap_kind"))
+        if kind and parsed["outcome"] == "gap":
+            trial_record["gap_kind"] = kind
         trial_id = ctx.store.append_trial(trial_record)
         ctx.store.append_event("verify_step", {
             "target_id": target_id,
@@ -549,6 +556,11 @@ def amend(trial_id: str, validity: str, reason: str) -> str:
         f"updated status: {status_line}",
         basis_line(fresh.slices),
     )
+
+
+def _gap_kind(value: Any) -> str:
+    """A gap's kind as a slug: lower case, words joined by hyphens; "" for none."""
+    return "-".join(re.findall(r"[a-z0-9]+", str(value or "").lower()))[:40]
 
 
 @mcp.tool()

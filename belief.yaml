@@ -31,6 +31,8 @@ components:
          observed_by: CTR-declarations-gate, case: "tests.test_declarations.TestGoals::test_a_goal_measured_by_what_the_agent_writes_is_reported"}
       - {id: FM-duplicate-key-silent, observable: "a key given twice in belief.yaml or goals.yaml loads its last value with no DUPLICATE_KEY issue naming its entry and both lines",
          observed_by: CTR-declarations-gate, case: "tests.test_declarations.TestDuplicateKeys::test_a_key_given_twice_is_reported_with_its_entry_and_both_lines"}
+      - {id: FM-params-misdeclared, observable: "a parameter the run line never holds, or one with no plain values, loads with no issue, or changing a test's arms keeps its version",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestParameters::test_the_arms_are_part_of_the_tests_version_and_a_bad_declaration_is_reported"}
     remediation: Tighten validate() and _validate_goals(); the fatal-code set in Declarations.is_scorable
     goal: GOL-honest-evidence
     code:
@@ -136,6 +138,8 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_conditional_node_names_what_it_waits_on"}
       - {id: FM-audit-understates, observable: "audit_change on a premise list alone leaves out a citing step the server reads STALE once the change is committed, or names one it does not",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_audit_change_says_what_a_premise_list_change_does_to_the_steps_citing_it"}
+      - {id: FM-recurring-gap-unseen, observable: "a kind of gap verifiers recorded on two or more nodes is not listed as recurring, or a kind on one node is",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_kind_of_gap_recorded_on_several_nodes_is_listed_as_one_to_define_once"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -226,6 +230,10 @@ components:
          observed_by: CTR-surface-intact, case: "tests.test_server.TestBackgroundRuns::test_a_run_whose_process_died_unrecorded_reads_as_lost"}
       - {id: FM-cross-process-ids, observable: "two processes recording into one ledger at once hand one evidence id to two records",
          observed_by: CTR-surface-intact, case: "tests.test_server::test_two_processes_appending_at_once_never_share_an_id"}
+      - {id: FM-arms-pooled, observable: "a test with params: runs without one declared value for each, or two of its arms are pooled into one slice",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestParameters::test_each_arm_runs_alone_and_is_never_pooled_with_another"}
+      - {id: FM-arm-lost-in-background, observable: "a background run of one arm records its trials without the value it was given",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestParameters::test_a_background_run_carries_its_arm"}
     remediation: runner.run_test() synthesis branch; jobs.start and jobs.work; store.ledger_lock; the tool list in server.py; the checks in server.ingest()
     goal: [GOL-honest-evidence, GOL-cross-coding-agents]
     code:
@@ -459,7 +467,9 @@ components:
       hour -- one in which a test it paid for, its first run started, waited on its result and no
       research (an earning trail, a direction, a finding, a scout's question or check, or an
       answer; never a note) was recorded -- at the rate the spend fixed when it was made;
-      keeps a scout's check open until it is answered or measured; takes its rules from research.yaml at HEAD;
+      keeps a scout's check open until it is answered or measured; counts for a spend that fixed a
+      test's arm that arm's runs only, and lists per goal, apart from every result, the runs no spend
+      claims; shows the board in plain words, without ids, for the human; takes its rules from research.yaml at HEAD;
       serves a brief whose head always fits, carrying the human's standing rules for the goal, and
       the rest by section or by id; keeps a measured finding as the bytes it hashed, and never a
       source file; serves the ledgers and a run's captured output and never a source file; names
@@ -523,6 +533,10 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_trail_kinds_a_method_earns_and_a_paper_set_aside_is_listed_as_read"}
       - {id: FM-undeclared-read-of-research, observable: "the board records while the latest run of a declared test opened a file in .research/",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_run_that_opened_research_files_stops_recording"}
+      - {id: FM-arm-spend-blurs, observable: "a spend that fixed an arm counts another arm's runs, or a run no spend counts is missing from its goal's list or shown as a result",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_on_one_arm_counts_that_arms_runs_and_the_rest_count_for_no_direction"}
+      - {id: FM-human-view-narrates, observable: "board(view=\"human\") names a ledger id, or leaves out the goal's state, the best result, what is being tried or what needs the human",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_human_view_says_where_the_research_stands_in_plain_words"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

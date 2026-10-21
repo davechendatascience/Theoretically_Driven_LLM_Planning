@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,7 +20,8 @@ from component_belief.store import Store
 from conftest import git
 from research_board import board as B
 from research_board import play, reading
-from research_board.page import BRIEF_CHARS, PAGE_CHARS, render_board, render_brief, render_item, render_section
+from research_board.page import (BRIEF_CHARS, PAGE_CHARS, render_board, render_brief, render_human, render_item,
+                                 render_section)
 
 RULES = "focus: GOL-grasp\ncosts: {research: 0, implement: 1, test: 1, training_run: 3}\nearn: {trail: 1}\nscouts: 2\n"
 QUOTE = "Sampling approach directions from the object's principal axes raised reachable grasps."
@@ -70,9 +72,9 @@ def launched(repo: Path, test_id: str, at: datetime, run_id: str = "RUN-9100") -
                                 "pid": os.getpid()}), encoding="utf-8")
 
 
-def measure(repo: Path, test_id: str = "TST-pick") -> str:
+def measure(repo: Path, test_id: str = "TST-pick", params: dict | None = None) -> str:
     decl = load(repo)
-    return run_test(repo, Store(repo), decl, decl.tests[test_id])["run_id"]
+    return run_test(repo, Store(repo), decl, decl.tests[test_id], params=params)["run_id"]
 
 
 def next_second() -> None:
@@ -428,6 +430,77 @@ def test_a_run_that_opened_research_files_stops_recording(research):
     next_second()
     measure(research)                                     # run again, and it reads nothing there
     assert "recorded" in play.feedback(research, did, "a note")
+
+
+@pytest.fixture
+def arms(research) -> Path:
+    """TST-pick as one test with two arms, plain and noise."""
+    text = (research / "goals.yaml").read_text(encoding="utf-8").replace(
+        "    run: python eval/pick.py $OUT\n", "    run: python eval/pick.py $OUT {arm}\n    params: {arm: [plain, noise]}\n", 1)
+    (research / "goals.yaml").write_text(text, encoding="utf-8")
+    git(research, "commit", "-qam", "the pick eval has two arms")
+    return research
+
+
+def test_a_spend_on_one_arm_counts_that_arms_runs_and_the_rest_count_for_no_direction(arms, clock):
+    """Several spends on one contract blurred, and a family of arms needed a declared test per
+    arm. A spend may fix the arm of a test it names; only that arm's runs are its result. A run of
+    the other arm belongs to no direction, and the board lists it per goal -- never as a result."""
+    did = funded(arms, trails=2)
+    with pytest.raises(play.Refused, match="'wobbly' is not a value TST-pick declares for arm"):
+        play.spend(arms, did, "test", "TST-pick", params={"arm": "wobbly"})
+    with pytest.raises(play.Refused, match="params fix the arm of a test; CTR-pick-success is no test"):
+        play.spend(arms, did, "test", "CTR-pick-success", params={"arm": "noise"})
+    reply = play.spend(arms, did, "test", "TST-pick", params={"arm": "noise"})
+    assert "TST-pick arm=noise's runs" in reply
+    sid = last_spend(arms)
+    assert B.read_ledger(arms)[-1]["params"] == {"arm": "noise"}
+
+    launched(arms, "TST-pick", clock.at)                  # a background run of the other arm ...
+    path = Store(arms).artifacts_dir / "RUN-9100" / "job.json"
+    job = json.loads(path.read_text(encoding="utf-8"))
+    path.write_text(json.dumps({**job, "params": {"arm": "plain"}}), encoding="utf-8")
+    clock.advance(hours=1)
+    assert idle(arms, did) == (0, 0, False)               # ... starts no clock for this spend
+
+    clock.at = datetime.now(timezone.utc)
+    next_second()
+    plain = measure(arms, params={"arm": "plain"})
+    assert result_of(arms, sid).counted["CTR-pick-success"] == 0
+    noise = measure(arms, params={"arm": "noise"})
+    assert result_of(arms, sid).runs["CTR-pick-success"] == [noise]
+
+    b = B.build(arms)
+    assert [r["run"] for r in b.unclaimed["GOL-grasp"]] == [plain]
+    page = render_board(b)
+    assert "## Runs that count for no direction on GOL-grasp (1)" in page
+    assert f"- {plain} · TST-pick arm=plain · " in page and "CTR-pick-success: 1 pass" in page
+    assert f"{sid} · test -> TST-pick arm=noise · " in page
+
+
+def test_the_human_view_says_where_the_research_stands_in_plain_words(arms, clock):
+    """"You are too into the research, it's hard for me to follow": the director's updates had
+    become ledger narration. board(view="human") gives the state in plain words, without ids."""
+    from research_board import server
+
+    did = funded(arms, trails=3)
+    play.spend(arms, did, "test", "TST-pick", params={"arm": "noise"})
+    human = render_human(B.build(arms))
+    assert "## The arm picks up the object it is asked for" in human
+    assert '"Sample grasp approaches from principal axes" -- paid for, waiting for its run to start' in human
+    assert "Best result so far: none yet." in human and "Needs you: nothing." in human
+
+    clock.at = datetime.now(timezone.utc)
+    next_second()
+    measure(arms, params={"arm": "plain"})
+    measure(arms, params={"arm": "noise"})
+    human = render_human(B.build(arms))
+    assert 'Best result so far: "Sample grasp approaches from principal axes" passed its test on' in human
+    assert "Waiting on the agent: 1 result to weigh." in human
+    assert "Work no idea claims: 1 test run since research began" in human
+    assert not re.search(r"\b(DIR|TRAIL|SPD|FBK|EVD|RUN|TST|CTR|CMP)-", human)
+    assert server.board(view="human") == human
+    assert "no view 'robot'" in server.board(view="robot")
 
 
 def test_rules_take_effect_from_head(goals_repo, monkeypatch):

@@ -425,6 +425,29 @@ def view_probe(ctx: Context, subject: str | None = None) -> str:
     return envelope(header + "\n\n" + "\n\n".join(blocks), basis_line([slices[t] for t in targets if t in slices]))
 
 
+def recurring_gaps(ctx: Context) -> dict[str, dict[str, int]]:
+    """Each kind of gap verifiers recorded on two or more nodes, with how often on each -- every
+    valid gap trial ever recorded, set aside or not: a kind that came back after a restatement is
+    exactly the recurrence worth lifting into a definition the branches cite."""
+    kinds: dict[str, dict[str, int]] = {}
+    for t in ctx.store.effective_trials():
+        if t.get("validity") == "valid" and t.get("outcome") == "gap" and t.get("gap_kind"):
+            nodes = kinds.setdefault(str(t["gap_kind"]), {})
+            nodes[str(t.get("target_id"))] = nodes.get(str(t.get("target_id")), 0) + 1
+    return {k: v for k, v in sorted(kinds.items()) if len(v) >= 2}
+
+
+def _recurring_lines(ctx: Context) -> list[str]:
+    recurring = recurring_gaps(ctx)
+    if not recurring:
+        return []
+    lines = [f"Recurring gaps -- one kind of missing premise on several nodes ({len(recurring)}). State it once, "
+             "as a DEF- or AXM- each of these cites, rather than restating each node again:"]
+    for kind, nodes in recurring.items():
+        lines.append(f"• {kind}: " + ", ".join(f"{n} ({c})" for n, c in sorted(nodes.items())))
+    return lines + [""]
+
+
 def view_contradictions(ctx: Context) -> str:
     refuted = [s for s in ctx.slices if s.state == REFUTED]
     ungrounded = [s for s in ctx.slices if s.state == UNGROUNDED]
@@ -433,11 +456,12 @@ def view_contradictions(ctx: Context) -> str:
     resting = [s for s in ctx.slices if s.state == CONDITIONAL
                and any(state in (REFUTED, UNGROUNDED) for _a, state in s.waiting_on)]
 
+    recurring = _recurring_lines(ctx)
     if not refuted and not ungrounded and not gapped and not resting:
-        return envelope("Zero contradictions, entailment gaps or ungrounded branches detected.",
-                        basis_line(ctx.slices))
+        text = "Zero contradictions, entailment gaps or ungrounded branches detected."
+        return envelope("\n".join([text, ""] + recurring).rstrip(), basis_line(ctx.slices))
 
-    lines = []
+    lines = list(recurring)
     if refuted:
         lines.append(f"Refuted Claims / Counterexamples ({len(refuted)}):")
         for s in refuted:

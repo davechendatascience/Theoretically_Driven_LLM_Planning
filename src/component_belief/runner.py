@@ -160,9 +160,16 @@ def run_test(
     repro: dict[str, Any] | None = None,
     actor: str = "agent",
     reserved: tuple[str, Path] | None = None,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run one declared test and record its trials. `reserved` is a run id and artifact directory
-    already taken for it -- a background run's, reserved when it was started (jobs.start)."""
+    already taken for it -- a background run's, reserved when it was started (jobs.start).
+    `params` fixes one declared value for each of the test's parameters: the run line is run with
+    them in place, and every record carries them."""
+    values, why = test.bind(params)
+    if why:
+        raise ValueError(why)
+    run_line = test.command_for(values)
     run_id, artifact_dir = reserved or store.reserve_run_id()
     out_path = artifact_dir / RESULT_FILENAME
 
@@ -171,10 +178,10 @@ def run_test(
     env["BELIEF_RUN_ID"] = run_id
     env, hook_dir = readlog.instrument(env, root, artifact_dir / "reads.log",
                                        store.dir / "cache" / "readhook")
-    command = readlog.weave(_substitute_out(test.run, out_path), hook_dir)
+    command = readlog.weave(_substitute_out(run_line, out_path), hook_dir)
     # Before the command starts: the stamp is of what the run measured, not what it left behind.
     claimed = sorted({entry for comp in decl.components.values() for entry in comp.code})
-    snapshot = Snapshot.take(root, claimed, test.run, test.reads)
+    snapshot = Snapshot.take(root, claimed, run_line, test.reads)    # a value that names a file is watched
 
     # when the run started, on each record it ends with: a research spend's wait starts here
     started = utc_now()
@@ -244,6 +251,7 @@ def run_test(
         trial_metrics = dict(trial.get("metrics") or {})
         trial_conditions = dict(conditions or {})
         trial_conditions.update(trial.get("conditions") or {})
+        trial_conditions.update(values)          # what the run was given, whatever it reports
         trial_repro = dict(base_repro)
         trial_repro.update(trial.get("repro") or {})
 
@@ -275,6 +283,7 @@ def run_test(
                 "artifact_hash": artifact_hash,
                 "stamp": stamp,
                 "started": started,
+                **({"params": values} if values else {}),
             })
 
     ids = store.append_trials(records)
@@ -290,6 +299,7 @@ def run_test(
     return {
         "run_id": run_id,
         "test": test.ref,
+        "params": values,
         "exit_code": exit_code,
         "timed_out": timed_out,
         "n_trials": len(raw_trials),

@@ -147,6 +147,23 @@ def test_audit_change_says_what_a_premise_list_change_does_to_the_steps_citing_i
     assert "BRN-gpu-throttling [STALE" not in status("tree")
 
 
+def test_a_kind_of_gap_recorded_on_several_nodes_is_listed_as_one_to_define_once(committed_repo: Path):
+    """Determinism needed three restatements on one branch and rounding corners three on another;
+    each refutation was right, and the same gap came back on every decode branch. A verifier names
+    a gap's kind; a kind recorded on two nodes is listed, to be stated once as a DEF- or AXM-."""
+    gap = {"strategy": "entailment", "outcome": "gap", "rationale": "nothing says the sum is exact"}
+    verify_step("LMA-compute-cap", trials=[{**gap, "gap_kind": "Exact arithmetic"}])
+    assert "Recurring gaps" not in status("contradictions")              # one node: not yet a pattern
+    verify_step("BRN-gpu-throttling", trials=[{**gap, "gap_kind": "exact-arithmetic"},
+                                              {**gap, "strategy": "negation", "gap_kind": "determinism"}])
+    verify_step("BRN-gpu-throttling", trials=[{"strategy": "counterexample", "outcome": "sound",
+                                               "rationale": "none found", "gap_kind": "determinism"}])
+    out = status("contradictions")
+    assert "Recurring gaps -- one kind of missing premise on several nodes (1)" in out
+    assert "• exact-arithmetic: BRN-gpu-throttling (1), LMA-compute-cap (1)" in out
+    assert "determinism" not in out                   # one node, and a sound trial carries no kind
+
+
 def test_propose_branch_rejects_cycle_and_unknown_premise(committed_repo: Path):
     # Unknown premise
     bad_premise_out = propose_branch(
