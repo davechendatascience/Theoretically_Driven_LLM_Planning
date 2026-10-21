@@ -126,7 +126,7 @@ goes stale when that code changes. Once per clone, install the guard that keeps 
 commits off your goal set:
 
 ```bash
-uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.4" tdlp-guard install
+uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.5" tdlp-guard install
 ```
 
 Then check in with one call, `status(view="goals")`. It shows each goal and interface as met, not
@@ -679,7 +679,7 @@ free; its results belong to no direction.
   result says something (anything but insufficient or no evidence), or the direction is halted,
   every hour in which nobody records research costs that direction `idle.per_hour` points (default
   1). Until a run starts the spend is queued and costs nothing, so a test may be funded before the
-  machine frees; a spend made before 0.13.4 waits from when it was recorded, as it did. Research
+  machine frees; a spend made before 0.13.5 waits from when it was recorded, as it did. Research
   means an earning trail, a new direction, a measured finding, a scout's question or check, or an
   answer; each keeps research running for `idle.running_minutes` (default 30). A note, a trail
   that earned nothing and the director's verdicts do not count. Idle time is
