@@ -409,8 +409,10 @@ definitions:
     term: Contract slice
     meaning: >-
       The belief-eligible trials on one contract that fall in the same
-      declared condition bucket and carry the same value for every key in the
-      contract's declared compatibility key. Each slice is a claim of its own:
+      declared condition bucket, carry the same value for every key in the
+      contract's declared compatibility key, and were measured with the same
+      value for every parameter of the test that measured them -- none, for a
+      test that declares none. Each slice is a claim of its own:
       the verdict a slice issues is on that slice, its sufficiency is counted
       over that slice's trials alone, and the posterior over it is computed
       from that slice's trials and its contract's declared prior alone, with
@@ -704,20 +706,25 @@ definitions:
       and names, when it is recorded, the contracts it targets: the contract
       it names, or each contract the test it names can measure at the head
       revision then, or none; that set does not change afterwards; and, when
-      it names a test, that test. A spend records a commitment to test its
-      direction by every measurement recorded against each contract it
-      targets after the spend was recorded -- by the test it names, when it
-      names one. A measured trial record is recorded when the run that
+      it names a test, that test and the values it fixes for any of that
+      test's parameters. A spend records a commitment to test its direction
+      by every measurement recorded against each contract it targets after
+      the spend was recorded -- by the test it names, run with the values it
+      fixes, when it names one. A measured trial record is recorded when the run that
       captured its artifact ends, and each run captures an artifact of its
       own, so a measured record is the first record of the measurement it
       carries. The result of a spend on a contract it targets is the state
       DEF-contract-state gives that contract when its slices are computed
       from the measured trial records in the evidence ledger recorded against
-      it after the spend was recorded -- by the test the spend names, when it
-      names one -- and from no other record; a spend that
-      targets no contract has no result. For each direction the board shows
-      the results of the spends recorded on that direction and no other
-      result. A research record is a direction, a trail that earned points
+      it after the spend was recorded -- by the test the spend names, run with
+      the values it fixes, when it names one -- and from no other record; a
+      spend that targets no contract has no result. For each direction the
+      board shows the results of the spends recorded on that direction and no
+      other result. For each goal it also lists, apart from every result, the
+      runs that count for no direction: the measured runs recorded against a
+      contract that a spend on one of the goal's directions targets, after
+      the first such spend was recorded, whose records enter no spend's
+      result, each with its test and the outcomes its records carry. A research record is a direction, a trail that earned points
       when it was recorded, a measured finding, a question or a proposed
       check not recorded by the director, or an answer. A spend also fixes,
       when it is recorded, the points an idle hour costs, how long research
@@ -726,8 +733,9 @@ definitions:
       from when it is recorded. A run counts for a spend, once it has ended,
       exactly when the measured records it ended with enter the spend's
       result, and, while it is still running, exactly when it runs the test
-      the spend names or, the spend naming none, a test that can measure a
-      contract the spend targets at the head revision. A spend that targets
+      the spend names, with the values it fixes, or, the spend naming none, a
+      test that can measure a contract the spend targets at the head
+      revision. A spend that targets
       a contract waits from its start -- when it was recorded, or, for one
       that waits from its first run, the later of when it was recorded and
       when the first run that counts for it started -- until the first moment
@@ -1499,17 +1507,22 @@ branches:
       results of the spends recorded on that direction and no other result,
       and the result of a spend on a contract it targets is computed from the
       measured trial records recorded against that contract after the spend
-      was recorded, and from no other record. A measured record is the first
+      was recorded -- by the test it names, run with the values it fixes,
+      when it names one -- and from no other record. A measured record is the first
       record of the measurement it carries, so each such measurement was first
       recorded after the spend. A direction is a line of research; the spend
       recorded a commitment to test it by every measurement recorded against
-      each contract it targets after the spend; and the contracts it targets
-      were fixed when it was recorded. So every measurement a result shown for
+      each contract it targets after the spend -- by the test it names, run
+      with the values it fixes, when it names one -- so by each measurement a
+      result of it rests on; and the contracts it targets were fixed when it
+      was recorded. So every measurement a result shown for
       a direction rests on was recorded after a commitment to test that
       direction by that measurement had been recorded, and
       AXM-attribution-follows-commitment, which bars a measurement from
       counting for a line of research only when no such commitment was
-      recorded before it, bars none of them. Beliefs: by DEF-research-ledger,
+      recorded before it, bars none of them. The runs the board lists for a
+      goal it lists apart from every result, as runs that count for no
+      direction, so no result shown for a direction rests on them. Beliefs: by DEF-research-ledger,
       recording appends one record to the research ledger, which is no trial
       record, rewrites one page and, for a measured finding, writes one copy
       of the file it attaches, neither of which is one either, appends no record to
