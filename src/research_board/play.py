@@ -232,7 +232,10 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
             "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes}})
     by_test = f"{target}'s runs " if target in decl.tests else "Runs "
     counts = (f"{by_test}measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
-              if contracts else f"{target} names no contract, so this spend has no result of its own.")
+              if contracts else
+              f"{target} names no contract, so this spend pays for the work and has no result of its own. "
+              f"Its result comes from a later spend on the contract or test that measures the work, once "
+              f"belief.yaml or goals.yaml declares it at HEAD: commit the declaration, then spend on it.")
     if contracts and rules.idle_per_hour:
         counts += (f" Until the result is in, every hour with no research recorded costs {d.id} "
                    f"{rules.idle_per_hour} point{'s' if rules.idle_per_hour != 1 else ''}: keep scouts out.")

@@ -175,7 +175,11 @@ def _source_of(root: Path, rel: str) -> str:
     return rel
 
 
-def harvest(root: Path, log: Path, limit: int = 400) -> list[str]:
+#: The most paths a run's read list keeps; a list this long may have been cut short.
+READ_LIMIT = 400
+
+
+def harvest(root: Path, log: Path, limit: int = READ_LIMIT) -> list[str]:
     """The distinct project-relative paths the run opened, the environment's own files aside.
 
     A virtualenv's library, the bytecode caches and the ledger's own directory are dropped: the

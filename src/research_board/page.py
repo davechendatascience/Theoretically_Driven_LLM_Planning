@@ -218,7 +218,9 @@ def _trail_lines(board: B.Board, trail: dict[str, Any]) -> list[str]:
     return lines
 
 
-def _feedback_line(item: dict[str, Any], limit: int | None = None) -> str:
+def _feedback_line(item: dict[str, Any], limit: int | None = None, pointer: bool = False) -> str:
+    """One feedback record on a line, cut at `limit` characters. With `pointer`, a line that was
+    cut says where the whole record is: a scout reading a brief has no other way to it."""
     kind = item.get("type")
     about = item.get("about")
     if kind == B.ANSWER:
@@ -230,7 +232,16 @@ def _feedback_line(item: dict[str, Any], limit: int | None = None) -> str:
     else:
         what = f"{kind} on {about}" + (f", replying to {item['reply_to']}" if item.get("reply_to") else "")
     text = item.get("text") if limit is None else _short(item.get("text"), limit)
-    return f"- {item['id']} · {item.get('by')} · {what}: \"{text}\""
+    cut = pointer and limit is not None and len(" ".join(str(item.get("text") or "").split())) > limit
+    whole = f" (cut; in full: board(item=\"{item['id']}\"))" if cut else ""
+    return f"- {item['id']} · {item.get('by')} · {what}: \"{text}\"{whole}"
+
+
+def _head_limit(item: dict[str, Any]) -> int:
+    """How much of a feedback record a brief's head shows: an answer, or the director's own word,
+    is often the fact a scout needs whole -- a table of measured settings, a ruling -- so it gets
+    the room an open question gets."""
+    return 1200 if item.get("type") == B.ANSWER or item.get("by") == "director" else 400
 
 
 def _evidence_line(item: dict[str, Any], limit: int | None = 240) -> str:
@@ -372,12 +383,12 @@ def render_brief(board: B.Board, d: B.Direction) -> str:
     optional: list[tuple[list[str], str]] = []
     if questions:
         optional.append((["", "## Open questions on it, waiting on the director"]
-                         + [_feedback_line(q, 1200) for q in questions], "feedback"))
+                         + [_feedback_line(q, 1200, pointer=True) for q in questions], "feedback"))
     open_ids = {q["id"] for q in questions}
     latest = [f for f in d.feedback if f["id"] not in open_ids][-5:]      # the open ones are above, whole
     if latest:
         optional.append((["", "## The latest feedback, newest last"]
-                         + [_feedback_line(f, 400) for f in latest], "feedback"))
+                         + [_feedback_line(f, _head_limit(f), pointer=True) for f in latest], "feedback"))
     if d.trails:
         optional.append((["", "## Papers already cited here -- a trail on one of these earns nothing"]
                          + [f"- {tr['id']} · {_short(tr.get('paper'), 110)} · "
@@ -386,7 +397,7 @@ def render_brief(board: B.Board, d: B.Direction) -> str:
         optional.append((["", "## Measured findings"] + [_evidence_line(e, 200) for e in d.evidence], "evidence"))
     if goal_items:
         optional.append((["", f"## On {d.goal} itself, the latest last"]
-                         + [_feedback_line(f, 400) for f in goal_items[-5:]], "goal"))
+                         + [_feedback_line(f, _head_limit(f), pointer=True) for f in goal_items[-5:]], "goal"))
     closed = [o for o in board.ordered() if o.goal == d.goal and o.id != d.id and o.state in (B.HALTED, B.REJECTED)]
     if closed:
         optional.append((["", f"## Closed directions on {d.goal} -- do not walk them again"]
@@ -440,7 +451,7 @@ def render_item(board: B.Board, rid: str) -> str:
         item = board.feedback[rid]
         lines = [_feedback_line(item)]
         if item.get("reply_to") in board.feedback:
-            lines.insert(0, "in reply to " + _feedback_line(board.feedback[item["reply_to"]], 600))
+            lines.insert(0, "in reply to " + _feedback_line(board.feedback[item["reply_to"]], 600, pointer=True))
     else:
         return f"no record {rid!r} on the board"
     if about or replies:

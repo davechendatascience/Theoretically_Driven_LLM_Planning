@@ -358,7 +358,8 @@ class CodeStaleness:
             if dirty:
                 return (f"{_shown(dirty)} was measured with uncommitted edits HEAD does not have "
                         f"({trial.get('run_id')})")
-            return f"{_shown(changed)} changed since {trial.get('run_id')} ({stamp.get('head', '')[:7]})"
+            return (f"{_shown(changed)} changed since {trial.get('run_id')} ({stamp.get('head', '')[:7]})"
+                    + self._opened_note(stamp, trial, changed))
 
         moved = self._outside_reason(stamp, trial)
         if moved:
@@ -367,6 +368,29 @@ class CodeStaleness:
         # A path claimed after the run was stamped has no recorded content: judge it by revision.
         uncovered = [e for e in code_paths if e not in covered]
         return self._revision_reason(uncovered, trial, scope) if uncovered else None
+
+    def _opened_note(self, stamp: dict[str, Any], trial: dict[str, Any], changed: list[str]) -> str:
+        """Which changed files the run opened, so a reader can tell an edit to what the run read
+        from one to a file it never touched. Said only when the run's read hook saw it read
+        something, and its list of reads was not cut short: an empty list is also what a run whose
+        Python never ran leaves, and a full one may be missing the file. A file the test names on
+        its run line or in `reads:` stays watched whatever the hook saw, so only claimed files are
+        said not to be opened."""
+        from .readlog import READ_LIMIT, read
+
+        seen = read(self.root / STORE_DIR / "artifacts" / str(trial.get("run_id") or ""))
+        if not seen or len(seen) >= READ_LIMIT:
+            return ""
+        opened = set(stamp.get("opened") or [])
+        named = set(stamp.get("named") or [])
+        hit = [p for p in changed if p in opened]
+        missed = [p for p in changed if p not in opened and p not in named]
+        parts = [f"opened by the run: {_shown(hit)}"] if hit else []
+        if missed:
+            them = "it" if len(missed) == 1 else "them"
+            parts.append(f"not opened by the run: {_shown(missed)} (a `scope:` on {trial.get('test_id') or 'its test'} "
+                         f"leaving {them} out keeps later runs from going stale on {them})")
+        return "".join(f"; {p}" for p in parts)
 
     def _claimed_at_head(self, entries: tuple[str, ...]) -> set[str]:
         """The files at HEAD the entries claim: the same tree for every run, so matched once."""

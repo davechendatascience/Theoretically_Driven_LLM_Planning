@@ -877,9 +877,15 @@ def certify(
 
     target_id:          the lemma or branch the theorem formalizes.
     declaration:        the theorem's name, e.g. TDLP.lma_compute_cap.
-    expected_statement: what the node binds to. lean-prover: the declaration's type, which the
-                        server matches; axle: the formal statement, the theorem with its proof
-                        sorried out (`theorem t (h : ...) : ... := by sorry`, with its imports).
+    expected_statement: what the node binds to. lean-prover: the declaration's type as Lean prints
+                        it once elaborated, which the server matches -- binders as ∀ and →, implicit
+                        and instance arguments shown, names in full, e.g. `∀ {ι : Type u_1}
+                        [inst : Fintype ι] (p : ι → ℝ), (∀ (i : ι), 0 < p i) → TDLP.loss p ≤ 1`,
+                        not the theorem's source binders `(p : ι → ℝ) (hp : ...) : ...`; a
+                        mismatch is recorded as a failed certificate, and the reply gives Lean's
+                        form to certify again with. axle: the formal statement, the theorem with
+                        its proof sorried out (`theorem t (h : ...) : ... := by sorry`, with its
+                        imports).
     files:              the Lean sources, project paths under `workspace`, committed as they stand;
                         the first holds the declaration, the rest are what it imports (axle: one).
     service:            lean-prover (the Lean prover server, the default) or axle (Axiom's AXLE).
@@ -979,6 +985,12 @@ def certify(
                      "before, with this as further evidence. The certificate itself moves no proof state.")
     else:
         lines.append("Not served to the verifier: " + "; ".join(c.why))
+        if r.mismatched:
+            # The proof compiled; only the statement it was matched against was not Lean's form of it.
+            lines.append(f"Lean states {declaration} as on the second line: the elaborated type as Lean prints "
+                         "it, binders as ∀, implicit and instance arguments shown, names in full -- the form "
+                         f"expected_statement is matched against. If it says what {target_id} claims, certify "
+                         f"again with expected_statement={json.dumps(r.statement.strip(), ensure_ascii=False)}")
     return envelope("\n".join(lines), basis_line(Context.build(root).slices))
 
 

@@ -4,6 +4,34 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.2 — 2026-10-21 · messages that say what to do next
+
+The second of three patch releases from a project's notes on 0.13.0.
+
+- **A stale reason says whether the run opened the changed file.** It reads "grasp.py,
+  grasp/tools.py changed since RUN-0042 (abc1234); opened by the run: grasp.py; not opened by the
+  run: grasp/tools.py (a `scope:` on TST-grasp-ik leaving it out keeps later runs from going stale
+  on it)". The run still needs re-running: a scope is part of the test's version. Said only when
+  the run's read hook saw it read something and its list of reads was not cut short, and never of
+  a file the test names on its run line or in `reads:`.
+- **A brief's head says where a cut line is whole.** A feedback line cut in the head ends "(cut; in
+  full: board(item="FBK-..."))". An answer, or the director's own note -- often a table a scout
+  needs whole -- gets 1,200 characters, as an open question does; other lines keep 400. The page
+  written for you names no tool call.
+- **`certify` on a statement mismatch gives Lean's form.** The proof compiled; the reply now says
+  the statement Lean printed is the form `expected_statement` is matched against, and gives it
+  ready to paste. `certify`'s description and the skill show that form, and the skill says to make
+  the claim exactly the formal core, with examples left to the step that uses the lemma.
+- **The probe warns that a printed Lean statement can hide an argument.** `AEStronglyMeasurable[m]
+  V μ` prints as `AEStronglyMeasurable V μ`. The verifier is told to read binders and hypotheses
+  from the Lean source, or, with none recorded, to name the gap.
+- **An implement spend says how its work gets a result:** from a later spend on the contract or
+  test that measures it, once that is declared and committed.
+- **The research board's recording test covers every move.** It now records a measured finding and
+  a digest too, and checks that the finding's copy is the only other file that moves. This is the
+  review of CTR-research-board against BRN-research-results-follow-their-spend that 0.13.0's
+  restatement left open.
+
 ## 0.13.1 — 2026-10-21 · nothing dropped in silence, and an audit that says what the server does
 
 The first of three patch releases from a project's notes on 0.13.0; 0.14.0 follows them.

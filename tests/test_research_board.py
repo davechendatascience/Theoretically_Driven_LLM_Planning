@@ -229,7 +229,8 @@ def test_a_spend_needs_approval_balance_and_reflection(research):
 
 def test_an_idle_hour_costs_the_direction_waiting_on_a_result(research, clock):
     did = funded(research, trails=3)                      # research recorded at t0 runs until t0+30m
-    play.spend(research, did, "implement", "CMP-grasp")   # names no contract, so waits on nothing
+    built = play.spend(research, did, "implement", "CMP-grasp")   # names no contract, so waits on nothing
+    assert "no result of its own" in built and "commit the declaration, then spend on it" in built
     clock.advance(hours=2)
     assert idle(research, did) == (0, 0, False)
 
@@ -369,17 +370,25 @@ def _tree(root: Path) -> dict[str, str]:
 
 
 def test_recording_writes_only_inside_research(research):
+    """Every move, the measured finding and the digest among them: the ledger, the page and, for a
+    finding, its one copy move, and nothing else -- no evidence or consistency ledger, no
+    declaration, no commit."""
     measure(research)
+    (research / "failure_map.csv").write_text("start,closed_on_air\n1,yes\n", encoding="utf-8")
     head = git(research, "rev-parse", "HEAD").stdout
     before = _tree(research)
     did = funded(research, trails=2)
     play.feedback(research, did, "a note", by="scout-1")
+    play.evidence(research, did, "failure_map.csv", "one start closes on air")
+    play.digest(research, did, "facts so far: one start closes on air")
     play.spend(research, did, "implement", "CMP-grasp")
     play.spend(research, did, "test", "TST-pick")
     play.reflect(research, did, "continue", "keep going")
     after = _tree(research)
     moved = {p for p in set(before) | set(after) if before.get(p) != after.get(p)}
-    assert moved == {".research/ledger.jsonl", ".research/BOARD.md"}
+    copy = next(r["copy"] for r in B.read_ledger(research) if r.get("kind") == "evidence")
+    assert copy.startswith(".research/")
+    assert moved == {".research/ledger.jsonl", ".research/BOARD.md", copy}
     assert git(research, "rev-parse", "HEAD").stdout == head
     assert "# DIR-principal-axes" in (research / ".research" / "BOARD.md").read_text(encoding="utf-8")
 
@@ -452,6 +461,25 @@ def test_a_long_brief_has_a_head_that_fits_and_every_record_in_its_sections(rese
         assert all(any(i in page for page in pages) for i in ids), section
     one = d.trails[57]["id"]
     assert LONG.strip() in render_item(b, one)
+
+
+def test_a_feedback_line_the_head_cuts_says_where_it_is_whole(research):
+    """A scout found the director's table of settings cut at about 400 characters in the head, and
+    nothing said the rest was one call away. A director's word and an answer get the room an open
+    question gets; any line the head cuts names the record it came from."""
+    did = funded(research)
+    table = "settings: " + "; ".join(f"arm {i} decodes with {i * 3} Euler steps" for i in range(60))
+    play.feedback(research, did, "scout note " + LONG, by="scout-1")
+    play.feedback(research, did, table[:1000])                  # the director's, under 1,200: whole
+    play.feedback(research, did, table)                         # the director's, over it: cut
+    b = B.build(research)
+    d = b.directions[did]
+    scout, whole, cut = (f["id"] for f in d.feedback if f.get("type") == B.NOTE)
+    head = render_brief(b, d)
+    assert f'(cut; in full: board(item="{scout}"))' in head
+    assert table[:1000] in head and f'(cut; in full: board(item="{whole}"))' not in head
+    assert f'(cut; in full: board(item="{cut}"))' in head and table in render_item(b, cut)
+    assert "(cut; in full" not in render_board(b)          # the page for the human names no tool call
 
 
 def test_the_humans_rules_lead_every_brief_on_the_goal(research):

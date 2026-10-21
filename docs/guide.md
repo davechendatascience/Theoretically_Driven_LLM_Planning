@@ -392,7 +392,12 @@ declarations in [`consistency.yaml`](../consistency.yaml).
     was checked and what each axiom standing for a premise states (`premise_axioms`) — never the
     proof or the file. Whether the Lean statement says what the claim says is the verifier's to
     judge; a stand-in axiom that says more than its premise is a gap.
-  - A certificate moves no proof state. Like a trial it is bound to its node's fingerprint and the
+  - For `lean-prover`, `expected_statement` is the type as Lean prints it once elaborated (binders
+    as `∀`, implicit and instance arguments shown, names in full); on a mismatch the reply gives
+    Lean's form to certify again with. Make the claim exactly the formal core, and leave examples
+    to the step that uses the lemma.
+  - A certificate supports a proof; it is never the proof. It moves no proof state: only the
+    verifier's trials do. Like a trial it is bound to its node's fingerprint and the
     statements of the premises it cites, so a restatement sets it aside. A policy criterion may
     require one: `{target: BRN-x, require: proven, formal: certified}`.
   - The service's address is given per call or in the environment, and keys stay in

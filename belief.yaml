@@ -167,6 +167,8 @@ components:
          observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestContentStamps::test_a_claimed_file_the_run_opened_stays_watched_whatever_the_scope_says"}
       - {id: FM-scope-relaxed-after, observable: "narrowing a test's scope after its run clears the run's evidence of an edit it was stale on",
          observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestContentStamps::test_changing_a_scope_is_a_new_version_of_the_test"}
+      - {id: FM-stale-reason-blind, observable: "a stale reason does not say which changed files the run opened, or says a file went unopened where the run's read hook saw no read",
+         observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestContentStamps::test_a_stale_reason_says_which_changed_files_the_run_opened"}
       - {id: FM-stale-counted, observable: "a trial measured before a claimed file changed still counts as current",
          observed_by: CTR-model-honest, case: "tests.test_gate_and_staleness.TestStaleness::test_evidence_measured_before_a_claimed_file_changed_is_stale"}
       - {id: FM-judged-per-trial, observable: "a view re-judges every trial of a run, its time growing with trials times tracked files",
@@ -438,6 +440,8 @@ components:
          observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_service_briefly_away_is_asked_again"}
       - {id: FM-setting-dropped, observable: "a service setting given twice in its file is used without a word",
          observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_setting_given_twice_is_refused"}
+      - {id: FM-mismatch-unexplained, observable: "a certificate failed on its statement alone does not give the statement in the form Lean prints, to certify again with",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_mismatched_statement_is_answered_with_the_form_lean_prints"}
     remediation: consistency_belief.lean's judge, failures and probe_block; server.certify
     goal: GOL-sound-designs
     code:
@@ -503,6 +507,8 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_ledger_git_ignores_is_named"}
       - {id: FM-rule-given-twice-silent, observable: "a rule given twice in research.yaml takes its last value and the board does not say so",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_rule_given_twice_is_named"}
+      - {id: FM-cut-without-pointer, observable: "a brief's head cuts a feedback line and does not name the record it came from",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_feedback_line_the_head_cuts_says_where_it_is_whole"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

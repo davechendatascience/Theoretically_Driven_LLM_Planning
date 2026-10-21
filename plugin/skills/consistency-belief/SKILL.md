@@ -47,6 +47,15 @@ certify("LMA-x", declaration="TDLP.lma_x", expected_statement="<its Lean type>",
   sources, audits every axiom and keeps a certificate. `service="axle"` is Axiom's AXLE:
   `expected_statement` is then the formal statement, the theorem sorried out with its imports, and
   it admits Lean's standard axioms only, so premises enter as hypotheses.
+- **`expected_statement` is the type as Lean prints it** (lean-prover), not the theorem's source
+  binders: `∀ {ι : Type u_1} [inst : Fintype ι] (p : ι → ℝ), (∀ (i : ι), 0 < p i) → ...`, names in
+  full (`TDLP.trainLoss`). A mismatch is recorded as a failed certificate; the reply gives Lean's
+  form, and you certify again with it once it says what the claim says.
+- **Make the claim exactly the formal core.** The verifier counts every difference between the
+  Lean statement and the claim as a gap. Examples and instances belong to the step that uses the
+  lemma, which shows its own object meets the hypotheses. When a refutation finds the prose
+  claiming more than the Lean -- an example that fails a hypothesis -- that round is the
+  mechanism working: restate the claim to the core, move the example, and certify again.
 - **The address is the user's to give.** Pass the server they named as `url=`. Never write an
   address or a key into the repository: keys go in `LEAN_PROVER_API_KEY` / `AXLE_API_KEY`, or in an
   untracked `.lean-services.yaml`. The ledger records neither.
@@ -55,9 +64,10 @@ certify("LMA-x", declaration="TDLP.lma_x", expected_statement="<its Lean type>",
   one; a proof resting on any other axiom does not certify. `axiom budget (x y : ℝ) : x + y ≤ 100`
   claims it of every pair of reals, which is false and proves anything. The verifier is shown what
   each axiom states, and a stand-in that says more than its premise is a gap.
-- **A certificate moves no proof state.** It is evidence for the verifier, and a policy criterion
-  can require one (`formal: certified`). Restating the node, or a premise it cites, sets it aside.
-  `status(view="certificates")` lists them all.
+- **A certificate supports a proof; it is never the proof.** It moves no proof state: only the
+  verifier's trials do, and it judges the statements as it would without one. A policy criterion
+  can require one (`formal: certified`) beside `proven`. Restating the node, or a premise it cites,
+  sets it aside. `status(view="certificates")` lists them all.
 
 ## Six rules
 

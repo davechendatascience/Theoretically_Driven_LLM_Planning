@@ -351,6 +351,35 @@ class TestContentStamps:
         assert decl.tests["TST-grasp-ik"].version != before
         assert "measured by TST-grasp-ik@" in self.slice_now(scoped).stale_reasons[0]
 
+    def test_a_stale_reason_says_which_changed_files_the_run_opened(self, run_repo):
+        """A LICENSE or a lint config claimed beside the code stales a run that never read it. The
+        reason now says which changed files the run opened, so a reader sees at once whether the
+        edit touched what the evidence rests on, or only what a scope could leave out."""
+        (run_repo / "grasp").mkdir()
+        (run_repo / "grasp" / "tools.py").write_text("# tools\n", encoding="utf-8")
+        git(run_repo, "add", "-A")
+        git(run_repo, "commit", "-q", "-m", "a module the component claims")
+        self.run(run_repo)
+        for path in ("grasp.py", "grasp/tools.py"):
+            (run_repo / path).write_text("# edited\n", encoding="utf-8")
+        git(run_repo, "commit", "-qam", "edit both")
+        reason = self.slice_now(run_repo).stale_reasons[0]
+        assert reason.startswith("grasp.py, grasp/tools.py changed since RUN-")
+        assert "; opened by the run: grasp.py;" in reason
+        assert ("not opened by the run: grasp/tools.py (a `scope:` on TST-grasp-ik leaving it out keeps "
+                "later runs from going stale on it)") in reason
+
+    def test_a_run_whose_hook_saw_no_read_says_nothing_of_what_it_opened(self, run_repo):
+        """An empty read list is also what a run whose Python never ran leaves behind, so it is no
+        evidence that a file went unread."""
+        from component_belief.store import Store
+
+        result = self.run(run_repo)
+        (Store(run_repo).artifacts_dir / result["run_id"] / "reads.json").write_text("[]", encoding="utf-8")
+        self._edit(run_repo, "grasp.py")
+        reason = self.slice_now(run_repo).stale_reasons[0]
+        assert "grasp.py changed since RUN-" in reason and "opened" not in reason
+
     def test_a_scope_outside_every_claim_is_reported(self, run_repo):
         text = (run_repo / "belief.yaml").read_text(encoding="utf-8").replace(
             'run: "python check.py $OUT"', 'run: "python check.py $OUT"\n    scope: [vision/seg.py]')

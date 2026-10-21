@@ -115,6 +115,9 @@ class Reading:
     environment: str
     reference: str                      # the service's id for this check
     problems: list[str] = field(default_factory=list)   # why the service says it failed
+    #: the service matched the declaration's statement against expected_statement and they differ;
+    #: `statement` is then Lean's own, the form expected_statement must take
+    mismatched: bool = False
 
 
 @dataclass
@@ -304,6 +307,7 @@ class LeanProver:
             environment=environment or "(not recorded)",
             reference=str(answer.get("certificate_id") or ""),
             problems=problems,
+            mismatched=statement.get("matches_expected") is not True and bool(statement.get("inferred_type")),
         )
 
 
@@ -555,6 +559,12 @@ def probe_block(c: Certificate) -> list[str]:
         "  hypothesis or axiom it adds that no premise states, an axiom that says more than its premise, a",
         "  different quantifier or domain -- each is a gap, named. A counterexample in the statements",
         "  refutes the claim whatever Lean checked.",
+        "  The printed statement can hide the argument that matters: Lean leaves implicit and instance",
+        "  arguments out when it prints, so `AEStronglyMeasurable[m] V μ` prints as",
+        "  `AEStronglyMeasurable V μ`, the same text as over the ambient space. "
+        + ("Read each binder and hypothesis from the source below, not from the printed line."
+           if c.record.get("lean_files") else
+           "No source is recorded here, so where the claim turns on such an argument, name it as a gap."),
         *_source_lines(c),
     ]
 

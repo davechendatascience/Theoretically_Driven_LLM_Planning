@@ -62,7 +62,7 @@ AXLE_STATEMENT = ("import Mathlib\ntheorem compute_cap (compute motors : ℝ) (b
 
 
 def lean_prover_certificate(request: dict, *, status_: str = "VERIFIED", custom: list[str] | None = None,
-                            matches: bool = True) -> dict:
+                            matches: bool = True, inferred: str = "") -> dict:
     """A certificate as the Lean prover server builds one, digest included."""
     custom = ["TDLP.energy_budget"] if custom is None else custom
     cert = {
@@ -73,7 +73,7 @@ def lean_prover_certificate(request: dict, *, status_: str = "VERIFIED", custom:
         "source": {"repo_url": request["repo_name"], "commit": request["commit"], "workspace_path": "",
                    "target_file": request["target_file"], "declaration": request["declaration"]},
         "statement": {"declaration_name": request["declaration"], "declaration_kind": "theorem",
-                      "inferred_type": request["expected_statement"] if matches else "True",
+                      "inferred_type": inferred or (request["expected_statement"] if matches else "True"),
                       "expected_type": request["expected_statement"], "matches_expected": matches,
                       "mismatch_reason": None if matches else "types differ"},
         "assumption_audit": {"axioms_used": ["propext", "Classical.choice", "Quot.sound", *custom],
@@ -224,6 +224,7 @@ def test_the_verifier_reads_the_statements_and_a_certificate_beside_them(project
             "TDLP.energy_budget : compute + motors ≤ 100") in probe
     assert "LEAN SOURCE TDLP/ComputeCap.lean:" in probe and "    linarith [energy_budget]" in probe
     assert "judge the statements above as you would without it" in probe
+    assert "Read each binder and hypothesis from the source below, not from the printed line." in probe
     assert services not in probe
 
     tree = status("tree")
@@ -287,6 +288,18 @@ def test_a_certificate_that_does_not_certify_is_recorded_and_never_served(projec
     assert len([r for r in evidence(project) if r.get("kind") == "certificate"]) == 1
     assert "LEAN CERTIFICATE" not in status("probe", subject="LMA-compute-cap")
     assert "· LEAN" not in status("tree")
+
+
+def test_a_mismatched_statement_is_answered_with_the_form_lean_prints(project: Path, services: str):
+    """Passed as the theorem's source binders, expected_statement does not match: the server matches
+    the elaborated type Lean prints. The proof compiled; the reply now gives Lean's form, ready to
+    certify again with."""
+    FakeServices.behaviour = {"cert": {"matches": False, "inferred": STATEMENT}}
+    out = certify_lean_prover(services, expected_statement="(h : 60 ≤ motors) : compute ≤ 40")
+    assert "-- FAILED" in out and "the declaration's statement is not the expected one" in out
+    assert f"certify again with expected_statement={json.dumps(STATEMENT, ensure_ascii=False)}" in out
+    FakeServices.behaviour = {}
+    assert "-- CERTIFIED" in certify_lean_prover(services, expected_statement=STATEMENT)
 
 
 def test_a_stored_certificate_edited_after_the_fact_stops_certifying(project: Path, services: str):
@@ -390,6 +403,7 @@ def test_a_held_certificate_is_adopted_by_id_and_binds_to_the_statement_it_was_r
     probe = status("probe", subject="LMA-compute-cap")
     assert "(not recorded -- a step resting on an axiom you cannot read is a gap)" in probe
     assert "LEAN SOURCE: not recorded with this certificate (adopted by id)." in probe
+    assert "No source is recorded here, so where the claim turns on such an argument, name it as a gap." in probe
     # Two certify the node; the probe carries exactly one, the latest.
     assert probe.count("LEAN CERTIFICATE") == 1 and "CRT-0002" in probe and "CRT-0001" not in probe
     restate(project, "cannot exceed 40W", "stays at or below 40W")
