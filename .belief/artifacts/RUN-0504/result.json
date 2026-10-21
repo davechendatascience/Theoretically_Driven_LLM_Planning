@@ -1,0 +1,31 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_design_gate_reads_evidence::test_a_proven_design_over_supported_evidence_passes_the_gate"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_design_gate_reads_evidence::test_a_proven_design_with_no_evidence_does_not"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_design_gate_reads_evidence::test_a_proven_design_over_evidence_gone_stale_does_not"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
