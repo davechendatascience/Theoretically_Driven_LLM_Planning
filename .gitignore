@@ -19,3 +19,6 @@ venv/
 # read a key from a file git tracks.
 .lean-services.yaml
 leanProver-api-key
+
+# user feedbacks
+feedbacks/
