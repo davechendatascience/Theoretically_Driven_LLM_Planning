@@ -718,13 +718,23 @@ definitions:
       targets no contract has no result. For each direction the board shows
       the results of the spends recorded on that direction and no other
       result. A research record is a direction, a trail that earned points
-      when it was recorded, a measured finding, a question not asked by the
-      director, or an answer. A spend also fixes, when it is recorded, the points an
-      idle hour costs and how long research counts as running after a
-      research record. A spend that targets a contract waits from when it is
-      recorded until the first moment at which its result, computed as above
-      from the records recorded by then, is neither insufficient evidence nor
-      no evidence, or until its direction is halted or rejected. A direction
+      when it was recorded, a measured finding, a question or a proposed
+      check not recorded by the director, or an answer. A spend also fixes,
+      when it is recorded, the points an idle hour costs, how long research
+      counts as running after a research record, and whether it waits from
+      when it is recorded or from its first run; one that fixed neither waits
+      from when it is recorded. A run counts for a spend, once it has ended,
+      exactly when the measured records it ended with enter the spend's
+      result, and, while it is still running, exactly when it runs the test
+      the spend names or, the spend naming none, a test that can measure a
+      contract the spend targets at the head revision. A spend that targets
+      a contract waits from its start -- when it was recorded, or, for one
+      that waits from its first run, the later of when it was recorded and
+      when the first run that counts for it started -- until the first moment
+      at which its result, computed as above from the records recorded by
+      then, is neither insufficient evidence nor no evidence, or until its
+      direction is halted or rejected; until a run that counts for it has
+      started, a spend that waits from its first run does not wait. A direction
       is idle at a moment when a spend on it waits then and no research
       record was recorded within that spend's running time before it. A
       direction's balance at a moment is the points earned by its trails that
@@ -735,7 +745,8 @@ definitions:
       the research ledger and the evidence ledger, and recorded in neither.
       Where a component's code claims a file in .research/,
       or a declared test names one on its run line or among what it reads,
-      the board records nothing. Otherwise recording to it appends one record
+      or the read hook saw the latest recorded run of a declared test open
+      one, the board records nothing. Otherwise recording to it appends one record
       to the research ledger, rewrites one page in .research/ and, for a
       measured finding, writes there one copy of the file it attaches, and
       changes nothing else: it appends no record to the ledger DEF-ledger names, of
@@ -1503,8 +1514,9 @@ branches:
       record, rewrites one page and, for a measured finding, writes one copy
       of the file it attaches, neither of which is one either, appends no record to
       the ledger DEF-ledger names, of any provenance, and changes no
-      declaration; and where a component's code claims a file in .research/
-      or a declared test names one, it records nothing. Belief-eligible
+      declaration; and where a component's code claims a file in .research/,
+      a declared test names one, or the latest run of a declared test opened
+      one, it records nothing. Belief-eligible
       evidence, by DEF-belief-eligible, is a trial record, measured or
       imported; recording records no trial record anywhere, so by
       AXM-no-belief-write-path, under which a measured belief changes only
