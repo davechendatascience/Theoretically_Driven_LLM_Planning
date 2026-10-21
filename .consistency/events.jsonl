@@ -612,3 +612,11 @@
 {"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0440"}, "session": "", "timestamp": "2026-10-21T02:27:35+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0441"}, "session": "", "timestamp": "2026-10-21T02:27:35+00:00", "tool": "verify_step"}
 {"actor": "agent", "payload": {"subject": "BRN-research-results-follow-their-spend"}, "session": "", "timestamp": "2026-10-21T02:27:45+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "counterexample", "target_id": "BRN-model-honest", "trial_id": "TRL-0442"}, "session": "", "timestamp": "2026-10-21T02:49:09+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-model-honest", "trial_id": "TRL-0443"}, "session": "", "timestamp": "2026-10-21T02:49:09+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-model-honest", "trial_id": "TRL-0444"}, "session": "", "timestamp": "2026-10-21T02:49:09+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "counterexample", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0445"}, "session": "", "timestamp": "2026-10-21T02:49:24+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "entailment", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0446"}, "session": "", "timestamp": "2026-10-21T02:49:24+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"passed": true, "strategy": "negation", "target_id": "BRN-research-results-follow-their-spend", "trial_id": "TRL-0447"}, "session": "", "timestamp": "2026-10-21T02:49:24+00:00", "tool": "verify_step"}
+{"actor": "agent", "payload": {"subject": "DEF-contract-slice"}, "session": "", "timestamp": "2026-10-21T02:49:26+00:00", "tool": "note"}
+{"actor": "agent", "payload": {"subject": "BRN-research-results-follow-their-spend"}, "session": "", "timestamp": "2026-10-21T02:49:29+00:00", "tool": "note"}

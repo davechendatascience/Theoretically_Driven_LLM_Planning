@@ -1,0 +1,49 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_sound_designs::test_an_unverified_claim_is_an_obligation_not_a_truth"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_sound_designs::test_one_pass_of_three_probes_proves_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_sound_designs::test_a_counterexample_refutes_it"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_sound_designs::test_restating_a_premise_makes_the_claim_stale"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_sound_designs::test_a_falsification_argued_from_the_source_is_refused"
+      },
+      "outcome": "pass"
+    }
+  ]
+}

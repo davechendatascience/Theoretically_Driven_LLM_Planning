@@ -1,0 +1,58 @@
+{
+  "trials": [
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_a_measured_run_counts"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_a_statement_moves_no_belief"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_a_fabricated_import_is_refused_and_cannot_be_adopted"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_sparse_data_is_insufficient_not_a_verdict"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_evidence_stops_counting_when_the_code_it_measured_changes"
+      },
+      "outcome": "pass"
+    },
+    {
+      "metrics": {
+        "passed": true
+      },
+      "conditions": {
+        "case": "acceptance.test_honest_evidence::test_evidence_stops_counting_when_a_checkpoint_it_read_changes"
+      },
+      "outcome": "pass"
+    }
+  ]
+}
