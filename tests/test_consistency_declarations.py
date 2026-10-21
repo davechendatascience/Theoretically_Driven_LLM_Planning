@@ -233,3 +233,24 @@ class TestSourceReferences:
         arxiv = _parse("sources:\n  - {id: SRC-a, title: T, arxiv: \"2210.02747\"}\n").sources["SRC-a"]
         assert arxiv.identifiers() == [("arxiv", "2210.02747", "https://arxiv.org/abs/2210.02747")]
 
+
+
+def test_a_key_given_twice_is_reported_and_the_tree_shows_it(empty_repo, monkeypatch):
+    """A node's statement given twice loads the second; the first is dropped without a word, and the
+    verifier would judge a claim its author may not have meant."""
+    from consistency_belief.server import status
+
+    text = VALID_CONSISTENCY_YAML.replace(
+        "    statement: Clearance must exceed 0.5m.\n",
+        "    statement: Clearance must exceed 0.5m.\n    statement: Clearance must exceed 0.2m.\n")
+    (empty_repo / "consistency.yaml").write_text(text, encoding="utf-8")
+    git(empty_repo, "add", "consistency.yaml")
+    git(empty_repo, "commit", "-q", "-m", "a statement given twice")
+    decl = load(empty_repo)
+    [dup] = [i for i in decl.issues if i.code == "DUPLICATE_KEY"]
+    assert dup.subject == "LMA-clearance"
+    assert "`statement` is given twice in consistency.yaml" in dup.message
+    assert decl.lemmas["LMA-clearance"].statement == "Clearance must exceed 0.2m."
+    monkeypatch.setenv("CONSISTENCY_PROJECT_ROOT", str(empty_repo))
+    tree = status("tree")
+    assert "A key given twice" in tree and dup.render() in tree

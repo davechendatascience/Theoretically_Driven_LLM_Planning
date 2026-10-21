@@ -110,6 +110,43 @@ def test_audit_change_says_when_nothing_restates(committed_repo: Path):
     assert "restates nothing" not in restated
 
 
+def test_audit_change_says_what_a_premise_list_change_does_to_the_steps_citing_it(committed_repo: Path):
+    """Splitting part of a lemma into a node of its own changes its premise list and keeps its
+    statement. The audit said the citing steps' trials are set aside "if its statement changes";
+    after the commit, two citing steps read STALE: their trials, made before 0.7.8, recorded
+    fingerprints, and a fingerprint covers the premise list. The audit now says what the server does."""
+    import json
+
+    for strategy in ("counterexample", "entailment", "negation"):
+        verify_step("BRN-gpu-throttling", strategy=strategy, outcome="sound", rationale="35W sits below 40W")
+    split = dict(proposed_premises=["AXM-energy-budget"])
+
+    current = audit_change("LMA-compute-cap", **split)
+    assert "its statement is unchanged" in current and "0 of them will read STALE" in current
+    assert "BRN-gpu-throttling: keeps its 3 trial(s)" in current
+    assert "if its statement changes" not in current and "Own trials: 0 set aside" in current
+
+    # The same trials as a ledger made before 0.7.8 holds them: fingerprints, no statements read.
+    path = committed_repo / ".consistency" / "evidence.jsonl"
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    path.write_text("".join(json.dumps({k: v for k, v in r.items() if k != "read"}) + "\n" for r in records),
+                    encoding="utf-8")
+    older = audit_change("LMA-compute-cap", **split)
+    assert "1 of them will read STALE" in older
+    assert ("BRN-gpu-throttling: 3 of its 3 trial(s) recorded fingerprints only and are set aside; "
+            "it reads STALE until a verifier pass (0/2 independent left)") in older
+
+    # What the audit said is what the server does once the change is committed.
+    text = (committed_repo / "consistency.yaml").read_text(encoding="utf-8")
+    (committed_repo / "consistency.yaml").write_text(
+        text.replace("premises: [AXM-energy-budget, DEF-subsystem-power]", "premises: [AXM-energy-budget]"),
+        encoding="utf-8")
+    git(committed_repo, "commit", "-qam", "the lemma no longer cites the definition")
+    assert "BRN-gpu-throttling [STALE" in status("tree")
+    path.write_text("".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+    assert "BRN-gpu-throttling [STALE" not in status("tree")
+
+
 def test_propose_branch_rejects_cycle_and_unknown_premise(committed_repo: Path):
     # Unknown premise
     bad_premise_out = propose_branch(

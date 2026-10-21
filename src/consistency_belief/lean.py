@@ -52,8 +52,42 @@ FAILED = "failed"
 SET_ASIDE = "set aside"
 
 
+#: Answers that mean the service is briefly away rather than that it refused: a gateway or tunnel in
+#: front of it failed (Cloudflare's 52x and 530), or it is restarting. Worth asking again shortly.
+TRANSIENT_STATUSES = (502, 503, 504, 520, 521, 522, 523, 524, 530)
+#: How often a call is made before a transient failure is reported, and how long apart.
+TRIES = 3
+RETRY_SECONDS = 10.0
+
+
 class LeanError(Exception):
     """A Lean service could not be reached, refused the call, or answered with nonsense."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status        # the HTTP status it answered; 0 when it was not reached at all
+
+    @property
+    def transient(self) -> bool:
+        return self.status == 0 or self.status in TRANSIENT_STATUSES
+
+
+def _pause(seconds: float) -> None:
+    time.sleep(seconds)
+
+
+def _retrying(call: Any, what: str) -> Any:
+    """call(), made again while the service is briefly away, up to TRIES times. Only for a call that
+    is safe to repeat: a read, or a write whose repeat changes nothing."""
+    for attempt in range(1, TRIES + 1):
+        try:
+            return call()
+        except LeanError as exc:
+            if not exc.transient:
+                raise
+            if attempt == TRIES:
+                raise LeanError(f"{exc} ({what}: tried {TRIES} times, {RETRY_SECONDS:g} s apart)", exc.status) from exc
+        _pause(RETRY_SECONDS)
 
 
 @dataclass
@@ -126,9 +160,9 @@ def _http(config: ServiceConfig, method: str, path: str, body: dict[str, Any] | 
             raw = response.read()
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:300]
-        raise LeanError(f"{method} {path} answered {exc.code}: {detail}") from exc
+        raise LeanError(f"{method} {path} answered {exc.code}: {detail}", exc.code) from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        raise LeanError(f"{method} {path} could not reach {config.host}: {exc}") from exc
+        raise LeanError(f"{method} {path} could not reach {config.host}: {exc}", 0) from exc
     try:
         return json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -167,8 +201,10 @@ class LeanProver:
 
     def check(self, req: Request) -> dict[str, Any]:
         quoted = urllib.parse.quote(self.config.repo)
-        committed = _http(self.config, "POST", f"/api/v1/repos/{quoted}/files",
-                          {"files": req.files, "commit_message": f"{req.target_id}: {req.declaration}"})
+        # the same files committed again change nothing, so this call is safe to repeat
+        committed = _retrying(lambda: _http(self.config, "POST", f"/api/v1/repos/{quoted}/files",
+                                            {"files": req.files, "commit_message": f"{req.target_id}: {req.declaration}"}),
+                              "committing the sources")
         commit = str(committed.get("commit") or "") if isinstance(committed, dict) else ""
         if not commit:
             raise LeanError(f"committing to {self.config.repo} returned no commit: {str(committed)[:200]}")
@@ -180,26 +216,52 @@ class LeanProver:
                                   "allow_custom_axioms": False},
             "timeout_seconds": max(5, min(300, req.timeout_seconds)),
         }
-        try:
-            return self._certificate(_http(self.config, "POST", "/api/v1/verify", body,
-                                           timeout=body["timeout_seconds"] + 30))
-        except LeanError as exc:
-            if not any(f"answered {code}" in str(exc) for code in self.gateway_timeouts) and "timed out" not in str(exc):
-                raise
+        for attempt in range(1, TRIES + 1):
+            try:
+                return self._certificate(_http(self.config, "POST", "/api/v1/verify", body,
+                                               timeout=body["timeout_seconds"] + 30))
+            except LeanError as exc:
+                if exc.status in self.gateway_timeouts or (exc.status == 0 and "timed out" in str(exc)):
+                    break               # it reached the server, which finishes it: wait for it below
+                if not exc.transient:
+                    raise
+                if attempt == TRIES:
+                    raise LeanError(f"{exc} (verifying: tried {TRIES} times, {RETRY_SECONDS:g} s apart, and "
+                                    f"no certificate for {body['claim_id']} was listed)", exc.status) from exc
+            # Briefly away. The request may still have reached the server, so look for its
+            # certificate before asking for another.
+            found = self._listed(body["claim_id"])
+            if found is not None:
+                return found
+            _pause(RETRY_SECONDS)
         deadline = time.monotonic() + body["timeout_seconds"] + 60
         while time.monotonic() < deadline:
-            listed = _http(self.config, "GET", "/api/v1/certificates")
-            for cert in listed if isinstance(listed, list) else []:
-                if isinstance(cert, dict) and (cert.get("planning_binding") or {}).get("claim_id") == body["claim_id"]:
-                    return cert
-            time.sleep(self.poll_seconds)
+            found = self._listed(body["claim_id"])
+            if found is not None:
+                return found
+            _pause(self.poll_seconds)
         raise LeanError(f"the gateway timed out and no certificate for {body['claim_id']} appeared; adopt it "
                         "later with certificate_id once GET /api/v1/certificates lists it")
 
+    def _listed(self, claim_id: str) -> dict[str, Any] | None:
+        """The certificate the server lists for this claim id, or None. A list the server cannot
+        give just now is not an answer either way: None, and the caller looks again."""
+        try:
+            listed = _http(self.config, "GET", "/api/v1/certificates")
+        except LeanError as exc:
+            if exc.transient:
+                return None
+            raise
+        for cert in listed if isinstance(listed, list) else []:
+            if isinstance(cert, dict) and (cert.get("planning_binding") or {}).get("claim_id") == claim_id:
+                return cert
+        return None
+
     def fetch(self, reference: str) -> dict[str, Any]:
         """A certificate by id; no key needed, the id is the capability."""
-        return self._certificate(_http(self.config, "GET", f"/api/v1/verify/{urllib.parse.quote(reference)}",
-                                       auth=False))
+        path = f"/api/v1/verify/{urllib.parse.quote(reference)}"
+        return self._certificate(_retrying(lambda: _http(self.config, "GET", path, auth=False),
+                                           f"fetching {reference}"))
 
     @staticmethod
     def _certificate(out: Any) -> dict[str, Any]:
@@ -270,10 +332,11 @@ class Axle:
         if len(req.files) != 1:
             raise LeanError("axle checks one self-contained file, which imports Mathlib at most; name one file")
         environment = req.environment or self._newest()
-        answer = _http(self.config, "POST", "/api/v1/verify_proof", {
+        # AXLE keeps nothing between calls, so checking the same proof again is safe
+        answer = _retrying(lambda: _http(self.config, "POST", "/api/v1/verify_proof", {
             "content": next(iter(req.files.values())), "formal_statement": req.expected_statement,
             "environment": environment, "timeout_seconds": max(5, min(900, req.timeout_seconds)),
-        }, timeout=req.timeout_seconds + 30)
+        }, timeout=req.timeout_seconds + 30), "verifying")
         if not isinstance(answer, dict) or "okay" not in answer:
             raise LeanError(f"axle answered without a verdict: {str(answer)[:300]}")
         return answer
@@ -282,7 +345,7 @@ class Axle:
         raise LeanError("axle keeps no certificate to fetch again; certify with files")
 
     def _newest(self) -> str:
-        listed = _http(self.config, "GET", "/v1/environments")
+        listed = _retrying(lambda: _http(self.config, "GET", "/v1/environments"), "listing environments")
         names = [str(e.get("name")) for e in listed if isinstance(e, dict) and e.get("name")] \
             if isinstance(listed, list) else []
         if not names:
@@ -323,10 +386,15 @@ def load_service(root: Path, name: str, url: str = "") -> tuple[Any | None, str]
         path = root / path
     section: dict[str, Any] = {}
     if path.exists():
+        from component_belief.declarations import load_yaml
+
         try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            data, duplicates = load_yaml(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:
             return None, f"{path.name} does not parse: {exc}"
+        if duplicates:      # the url or key kept would be the last one written, maybe not the one meant
+            return None, "; ".join(d.describe(path.name) for d in duplicates)
+        data = data or {}
         if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
             return None, f"{path.name} maps each service ({', '.join(SERVICES)}) to its url:, key: and repo:"
         if any(v.get("key") for v in data.values()) and _tracked(root, path):

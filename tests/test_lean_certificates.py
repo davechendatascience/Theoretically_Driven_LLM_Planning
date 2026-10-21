@@ -111,8 +111,19 @@ class FakeServices(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _failing(self) -> bool:
+        """Answer with the next status queued for this path, as a gateway in front of the server does
+        when the server is briefly away: the request never reaches it."""
+        queue = self.behaviour.get("fail", {}).get(self.path)
+        if queue:
+            self._send(queue.pop(0), {"detail": "gateway"})
+            return True
+        return False
+
     def do_GET(self):
         self.seen.append(("GET", self.path, None, self.headers.get("Authorization")))
+        if self._failing():
+            return
         if self.path.startswith("/api/v1/verify/"):
             cid = self.path.rsplit("/", 1)[1]
             return self._send(200, self.held[cid]) if cid in self.held else self._send(404, {"detail": "no"})
@@ -125,6 +136,8 @@ class FakeServices(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode("utf-8"))
         self.seen.append(("POST", self.path, body, self.headers.get("Authorization")))
+        if self._failing():
+            return
         if self.path.endswith("/files"):
             return self._send(200, {"status": "committed", "commit": "a" * 40})
         if self.path == "/api/v1/verify":
@@ -314,6 +327,58 @@ def test_a_certificate_the_gateway_lost_is_found_by_its_claim_id(project: Path, 
     assert any(p == "/api/v1/certificates" for _, p, _, _ in FakeServices.seen)
 
 
+@pytest.fixture
+def waits(monkeypatch) -> list:
+    """Every pause between tries, recorded instead of slept."""
+    import consistency_belief.lean as lean
+
+    paused: list = []
+    monkeypatch.setattr(lean, "_pause", paused.append)
+    return paused
+
+
+def calls() -> list[tuple[str, str]]:
+    return [(method, path) for method, path, _, _ in FakeServices.seen]
+
+
+def test_a_service_briefly_away_is_asked_again(project: Path, services: str, waits: list):
+    """A restarting server's 503 on the commit and a tunnel's 530 on the verify call are asked
+    again, a few seconds apart; before asking for a second certificate the client looks for the one
+    the first call may have made."""
+    from consistency_belief.lean import RETRY_SECONDS
+
+    FakeServices.behaviour = {"fail": {"/api/v1/repos/tdlp-proofs/files": [503], "/api/v1/verify": [530]}}
+    assert "-- CERTIFIED" in certify_lean_prover(services)
+    seen = calls()
+    assert seen.count(("POST", "/api/v1/repos/tdlp-proofs/files")) == 2
+    verifies = [i for i, c in enumerate(seen) if c == ("POST", "/api/v1/verify")]
+    assert len(verifies) == 2 and ("GET", "/api/v1/certificates") in seen[verifies[0]:verifies[1]]
+    assert len(FakeServices.held) == 1 and waits == [RETRY_SECONDS, RETRY_SECONDS]
+
+
+def test_a_certificate_list_the_gateway_drops_is_read_again(project: Path, services: str, waits: list):
+    """The gateway timed out on the verify call, and then answered the first look at the
+    certificate list with a 530: the list is read again, not given up on."""
+    FakeServices.behaviour = {"gateway_timeout": True, "fail": {"/api/v1/certificates": [530]}}
+    assert "-- CERTIFIED" in certify_lean_prover(services)
+    assert calls().count(("GET", "/api/v1/certificates")) == 2
+
+
+def test_a_refusal_is_not_asked_again_and_a_lasting_outage_is_reported(project: Path, services: str,
+                                                                       waits: list):
+    FakeServices.behaviour = {"fail": {"/api/v1/verify": [401]}}
+    out = certify_lean_prover(services)
+    assert "answered 401" in out and "Nothing was recorded" in out
+    assert calls().count(("POST", "/api/v1/verify")) == 1 and waits == []
+
+    FakeServices.seen.clear()
+    FakeServices.behaviour = {"fail": {"/api/v1/verify": [503, 503, 503]}}
+    out = certify_lean_prover(services)
+    assert "answered 503" in out and "tried 3 times" in out and "Nothing was recorded" in out
+    assert calls().count(("POST", "/api/v1/verify")) == 3 and calls().count(("GET", "/api/v1/certificates")) == 2
+    assert evidence(project) == [] and FakeServices.held == {}
+
+
 def test_a_held_certificate_is_adopted_by_id_and_binds_to_the_statement_it_was_requested_for(project: Path,
                                                                                                services: str):
     certify_lean_prover(services)
@@ -364,6 +429,16 @@ def test_the_default_service_is_lean_prover_and_needs_an_address(project: Path, 
     out = certify("LMA-compute-cap", declaration="TDLP.compute_cap", expected_statement=STATEMENT,
                   files=["lean/TDLP/ComputeCap.lean"], workspace="lean")
     assert "lean-prover has no address: pass url=" in out
+
+
+def test_a_setting_given_twice_is_refused(project: Path, services: str):
+    """YAML would keep the second url and drop the first in silence, and the proof would go to
+    whichever server was written last."""
+    (project / ".lean-services.yaml").write_text(
+        f"lean-prover:\n  url: {services}\n  url: http://elsewhere.invalid\n", encoding="utf-8")
+    out = certify_lean_prover("")
+    assert "`url` is given twice in .lean-services.yaml (lines 2 and 3)" in out and "Nothing was recorded" in out
+    assert FakeServices.seen == []
 
 
 def test_a_key_is_never_read_from_a_file_git_tracks(project: Path, services: str, monkeypatch):

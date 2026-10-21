@@ -281,6 +281,17 @@ def _premises_moved(trial: dict[str, Any], read: dict[str, str], premises: dict[
     return []
 
 
+def survives_premise_list_change(trial: dict[str, Any]) -> bool:
+    """Whether a current trial of a step keeps counting when a premise it cites changes its own
+    premise list and keeps its statement, as _premises_moved will judge it then. A trial that
+    recorded the statements it read compares those, and they have not moved; one that recorded its
+    premises' fingerprints, or was made before trials recorded either and is judged by the build it
+    was made in, compares fingerprints -- and a fingerprint covers the premise list."""
+    if trial.get("read") is not None:
+        return True
+    return "statement_sha" in trial and trial.get("basis") is None
+
+
 def _restated_premises(dag: ProofDAG, node_id: str, stale_trials: list[dict[str, Any]]) -> list[str]:
     node = dag.nodes[node_id]
     read = dag.premise_statements(node_id)

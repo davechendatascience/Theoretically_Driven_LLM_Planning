@@ -4,6 +4,36 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.1 — 2026-10-21 · nothing dropped in silence, and an audit that says what the server does
+
+The first of three patch releases from a project's notes on 0.13.0; 0.14.0 follows them.
+
+- **A key given twice is reported.** YAML keeps the last value of a repeated key and drops the
+  first without a word. In one project a component's 38-path `code:` list was followed, after a
+  long comment, by a second `code:` of one path: for two weeks the component claimed that one
+  file, and edits to the others could stale none of its evidence. Every declaration file now
+  loads through one loader that names each repeat: `DUPLICATE_KEY` with the key, the entry's id
+  and both line numbers, in `status(view="graph")`, among `decide()`'s risks, in the consistency
+  tree's header and on the research board. The value in effect is still the last one, as YAML
+  reads it; a whole file is not refused over one repeat. `<<:` merges and the keys that override
+  them are not repeats. A setting given twice in `.lean-services.yaml` is refused, since the proof
+  would otherwise go to whichever server was written last.
+- **`audit_change` on a premise list alone.** It said the citing steps' trials are set aside "if
+  its statement changes"; after the commit, citing steps read STALE. Trials made before 0.7.8
+  recorded fingerprints rather than the statements they read, and a fingerprint covers the
+  premise list. The audit now treats premises proposed alone as keeping the statement, and lists
+  for each citing step how many of its trials are set aside and whether it will read STALE. The
+  `reverify` list it records names exactly those steps.
+- **A Lean service briefly away is asked again.** A 503, a 530 from a tunnel or a dropped
+  connection now gets up to three tries, ten seconds apart, on the source commit, the verify call,
+  a fetch by id and AXLE's check. Before asking for a second certificate, `certify` looks in the
+  server's list for the one the first call may have made. A certificate list the gateway drops
+  while polling is read again rather than given up on. A refusal (a 401, a 404) is not retried.
+- **Not adopted: a certificate counting toward PROVEN.** The notes asked that a verified Lean
+  certificate whose statement matches the claim stand in for the verifier's entailment pass. A
+  certificate supports a proof; it is never the proof. It stays beside the statements, and only
+  the verifier's trials move a proof state.
+
 ## 0.13.0 — 2026-10-19 · research-board feedback
 
 From two days of use on a robot-learning goal: 18 directions, 276 trails, 16 spends.

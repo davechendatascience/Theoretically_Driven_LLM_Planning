@@ -219,7 +219,8 @@ def _risks(decl: Declarations, by_contract: dict[str, list[Slice]]) -> list[str]
                 reasons = ", ".join(f"{k}×{v}" for k, v in sorted(sl.exclusions.items()))
                 risks.append(f"{contract_id}[{sl.bucket}] excluded {sl.n_excluded} trials ({reasons})")
     for issue in decl.issues:
-        if issue.code in ("UNBACKED_ASSUMPTION", "PENDING"):
+        # a key given twice loads its last value, so what is decided on may not be what was written
+        if issue.code in ("UNBACKED_ASSUMPTION", "PENDING", "DUPLICATE_KEY"):
             risks.append(issue.render())
     return risks
 

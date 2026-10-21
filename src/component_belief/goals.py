@@ -43,7 +43,7 @@ from typing import Any
 import yaml
 
 from . import __version__
-from .declarations import DECLARATION_FILE, GOALS_FILE, Declarations, _parse
+from .declarations import DECLARATION_FILE, GOALS_FILE, Declarations, _parse, load_yaml
 from .model import (STATE_CONTESTED, STATE_INSUFFICIENT, STATE_REFUTED, STATE_STALE,
                     STATE_SUPPORTED, Slice)
 from .render import basis_line, bullet, envelope, slice_line
@@ -99,7 +99,7 @@ def goal_set(root: Path, *goal_texts: str | None) -> set[str]:
     paths = {GOALS_FILE}
     for text in goal_texts:
         try:
-            data = yaml.safe_load(text or "") or {}
+            data = load_yaml(text or "")[0] or {}
         except yaml.YAMLError:
             continue
         for raw in (data.get("tests") or []) if isinstance(data, dict) else []:
@@ -116,7 +116,7 @@ def _named_entries(*goal_texts: str | None) -> set[str]:
     entries: set[str] = set()
     for text in goal_texts:
         try:
-            data = yaml.safe_load(text or "") or {}
+            data = load_yaml(text or "")[0] or {}
         except yaml.YAMLError:
             continue
         for raw in (data.get("tests") or []) if isinstance(data, dict) else []:

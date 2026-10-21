@@ -132,11 +132,15 @@ def load_rules(root: Path) -> Rules:
         rules.issues.append(f"PENDING {RULES_FILE}: the working tree differs from HEAD; "
                             "the uncommitted edits are not in effect")
     rules.changed = (git(root, "log", "-1", "--format=%h %cs %s", "--", RULES_FILE) or "").strip()
+    from component_belief.declarations import load_yaml
+
     try:
-        data = yaml.safe_load(committed) or {}
+        data, duplicates = load_yaml(committed)
     except yaml.YAMLError as exc:
         rules.issues.append(f"MALFORMED {RULES_FILE}: {exc}; the defaults are in effect")
         return rules
+    data = data or {}
+    rules.issues += [f"DUPLICATE_KEY {RULES_FILE}: {d.describe(RULES_FILE)}" for d in duplicates]
     if not isinstance(data, dict):
         rules.issues.append(f"MALFORMED {RULES_FILE}: expected a mapping; the defaults are in effect")
         return rules

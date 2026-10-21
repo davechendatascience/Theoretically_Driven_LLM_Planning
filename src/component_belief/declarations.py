@@ -40,6 +40,76 @@ class Issue:
         return f"{self.code} {self.subject}: {self.message}"
 
 
+@dataclass(frozen=True)
+class DuplicateKey:
+    """A mapping that gives one key twice. YAML keeps the value given last and drops the earlier
+    one without a word, so a component's 38-path `code:` list followed, after a long comment, by a
+    second `code:` of one path claims that one path alone -- and nothing reports it."""
+
+    key: str
+    entry: str      # the id of the nearest entry holding it, or "" outside any entry
+    first: int      # line numbers, counted from 1
+    again: int
+
+    def describe(self, where: str) -> str:
+        if self.first == self.again:
+            return (f"`{self.key}` is given twice on line {self.first} of {where}; YAML keeps the value "
+                    "given last and drops the first: merge them into one")
+        return (f"`{self.key}` is given twice in {where} (lines {self.first} and {self.again}); YAML keeps "
+                f"the value at line {self.again} and drops the one at line {self.first}: merge them into one")
+
+    def issue(self, where: str) -> Issue:
+        return Issue("DUPLICATE_KEY", self.entry or where, self.describe(where))
+
+
+#: `<<: *anchor` merges a mapping in, and the keys written beside it override what it brought.
+_MERGE_TAG = "tag:yaml.org,2002:merge"
+
+
+def load_yaml(text: str) -> tuple[Any, list[DuplicateKey]]:
+    """What yaml.safe_load returns for `text`, and every key a mapping in it gives twice.
+
+    The duplicates are read off the composed document before it is constructed: constructing it
+    folds each `<<:` merge into its mapping, after which an override would look like a repeat."""
+    loader = yaml.SafeLoader(text)
+    try:
+        node = loader.get_single_node()
+        if node is None:
+            return None, []
+        duplicates = duplicate_keys(node)
+        return loader.construct_document(node), duplicates
+    finally:
+        loader.dispose()
+
+
+def duplicate_keys(root: yaml.Node) -> list[DuplicateKey]:
+    """Each scalar key given again in the mapping that already holds it, in file order, named by
+    the id of the nearest entry around it. A node an alias reaches twice is read once."""
+    found: list[DuplicateKey] = []
+    seen: set[int] = set()
+    stack: list[tuple[yaml.Node, str]] = [(root, "")]
+    while stack:
+        node, entry = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        if isinstance(node, yaml.MappingNode):
+            entry = next((v.value for k, v in node.value if isinstance(k, yaml.ScalarNode) and k.value == "id"
+                          and isinstance(v, yaml.ScalarNode)), "") or entry
+            lines: dict[tuple[str, str], int] = {}
+            for key, value in node.value:
+                if isinstance(key, yaml.ScalarNode) and key.tag != _MERGE_TAG:
+                    line = key.start_mark.line + 1
+                    if (key.tag, key.value) in lines:
+                        found.append(DuplicateKey(key.value, entry, lines[(key.tag, key.value)], line))
+                    else:
+                        lines[(key.tag, key.value)] = line
+                stack.append((value, entry))
+        elif isinstance(node, yaml.SequenceNode):
+            stack.extend((item, entry) for item in node.value)
+    return sorted(found, key=lambda d: (d.again, d.first))
+
+
 FAILURE_MODE_KEYS = ("id", "observable", "observed_by", "case")
 
 
@@ -412,13 +482,14 @@ def check_code_paths(decl: Declarations, root: Path) -> list[Issue]:
 
 def _parse(text: str, goals_text: str | None = None) -> Declarations:
     try:
-        data = yaml.safe_load(text) or {}
+        data, duplicates = load_yaml(text)
     except yaml.YAMLError as exc:
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, str(exc))])
+    data = data or {}
     if not isinstance(data, dict):
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, "top level must be a mapping")])
 
-    decl = Declarations()
+    decl = Declarations(issues=[d.issue(DECLARATION_FILE) for d in duplicates])
     for c in _entries(data, "components", Component, decl.issues):
         decl.components[c.id] = c
     for i in _entries(data, "interfaces", Interface, decl.issues):
@@ -446,10 +517,12 @@ def _merge_goals(decl: Declarations, text: str) -> None:
     goals are what a decision, a diagnosis and a plan answer to unless another policy is named.
     """
     try:
-        data = yaml.safe_load(text) or {}
+        data, duplicates = load_yaml(text)
     except yaml.YAMLError as exc:
         decl.issues.append(Issue("MALFORMED", GOALS_FILE, str(exc)))
         return
+    data = data or {}
+    decl.issues.extend(d.issue(GOALS_FILE) for d in duplicates)
     if not isinstance(data, dict):
         decl.issues.append(Issue("MALFORMED", GOALS_FILE, "top level must be a mapping"))
         return

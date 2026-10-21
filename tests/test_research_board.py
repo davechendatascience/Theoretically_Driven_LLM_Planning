@@ -301,6 +301,18 @@ def test_rules_take_effect_from_head(goals_repo, monkeypatch):
     assert "tests cost more" in board_text and "PENDING research.yaml" in board_text
 
 
+def test_a_rule_given_twice_is_named(goals_repo):
+    """The second `costs:` replaces the first whole; the board says which one is in effect."""
+    (goals_repo / B.RULES_FILE).write_text("costs: {test: 5}\nscouts: 2\ncosts: {test: 1}\n", encoding="utf-8")
+    git(goals_repo, "add", B.RULES_FILE)
+    git(goals_repo, "commit", "-q", "-m", "costs twice")
+    rules = B.load_rules(goals_repo)
+    assert rules.costs == {"test": 1}
+    assert ("DUPLICATE_KEY research.yaml: `costs` is given twice in research.yaml (lines 1 and 3); YAML keeps "
+            "the value at line 3") in "\n".join(rules.issues)
+    assert "`costs` is given twice" in render_board(B.build(goals_repo))
+
+
 # ---------- reading ----------
 
 def test_the_ledger_serves_records_and_run_output_never_a_source_file(research):

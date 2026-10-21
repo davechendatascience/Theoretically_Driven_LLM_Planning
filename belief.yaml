@@ -20,8 +20,8 @@ components:
     purpose: Load and validate belief.yaml from git HEAD
     outputs: [IFC-declarations__model]
     testable_capability: >-
-      Rejects unmeasurable contracts and non-node components, and refuses to
-      let uncommitted edits take effect
+      Rejects unmeasurable contracts and non-node components, reports a key
+      given twice, and refuses to let uncommitted edits take effect
     failure_modes:
       - {id: FM-worktree-leak, observable: "an uncommitted threshold change alters a verdict",
          observed_by: CTR-declarations-gate, case: "tests.test_declarations::test_working_tree_edits_do_not_take_effect"}
@@ -29,6 +29,8 @@ components:
          observed_by: CTR-declarations-gate, case: "tests.test_declarations::test_not_evaluable_contract_accepts_no_evidence"}
       - {id: FM-goal-measured-by-agent, observable: "a goal whose measure or its test lives in belief.yaml loads with no issue",
          observed_by: CTR-declarations-gate, case: "tests.test_declarations.TestGoals::test_a_goal_measured_by_what_the_agent_writes_is_reported"}
+      - {id: FM-duplicate-key-silent, observable: "a key given twice in belief.yaml or goals.yaml loads its last value with no DUPLICATE_KEY issue naming its entry and both lines",
+         observed_by: CTR-declarations-gate, case: "tests.test_declarations.TestDuplicateKeys::test_a_key_given_twice_is_reported_with_its_entry_and_both_lines"}
     remediation: Tighten validate() and _validate_goals(); the fatal-code set in Declarations.is_scorable
     goal: GOL-honest-evidence
     code:
@@ -55,6 +57,8 @@ components:
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_a_dangling_reference_and_an_unreferenced_source_are_reported"}
       - {id: FM-source-displaces-proposal, observable: "a staged proposal whose id only a source also bears is left out of the premise graph",
          observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations.TestSourceReferences::test_a_source_sharing_a_staged_proposals_id_leaves_it_admitted"}
+      - {id: FM-duplicate-key-silent, observable: "a key given twice in consistency.yaml loads its last value with no DUPLICATE_KEY issue in the tree",
+         observed_by: CTR-consistency-declarations-gate, case: "tests.test_consistency_declarations::test_a_key_given_twice_is_reported_and_the_tree_shows_it"}
     remediation: validate() and validate_links() in the consistency declarations loader
     goal: GOL-sound-designs
     code:
@@ -130,6 +134,8 @@ components:
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_conditional_branch_does_not_meet_a_policy_requiring_proven"}
       - {id: FM-conditional-unnamed, observable: "a conditional node is shown without the unverified steps it waits on, or is served to a verifier as an obligation",
          observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_a_conditional_node_names_what_it_waits_on"}
+      - {id: FM-audit-understates, observable: "audit_change on a premise list alone leaves out a citing step the server reads STALE once the change is committed, or names one it does not",
+         observed_by: CTR-trial-ledger-replay, case: "tests.test_consistency_server::test_audit_change_says_what_a_premise_list_change_does_to_the_steps_citing_it"}
     remediation: Store.staged_proposals / withdrawn; every write goes through append_event; the source-citation refusal in verify_step
     goal: GOL-sound-designs
     code:
@@ -406,8 +412,9 @@ components:
       Records a Lean service's answer against its node's fingerprint and the statements of the
       premises it cites; serves the Lean statement checked, and what each axiom standing for a
       premise states, in the node's probe beside the statements, only while it certifies the node;
-      moves no proof state; sends only committed sources; never reads a key from a file git tracks
-      and never writes a service's address to the ledger
+      moves no proof state; sends only committed sources; asks a service briefly away again, and
+      looks for the certificate it may have made before asking for another; never reads a key from
+      a file git tracks and never writes a service's address to the ledger
     failure_modes:
       - {id: FM-certificate-replaces-statements, observable: "a probe with a certificate lacks a premise, the claim or the derivation rule it served without one, or shows the proof or its file",
          observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_the_verifier_reads_the_statements_and_a_certificate_beside_them"}
@@ -427,6 +434,10 @@ components:
          observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_key_is_never_read_from_a_file_git_tracks"}
       - {id: FM-formal-criterion-unchecked, observable: "a policy requiring formal certification passes a node no certificate certifies",
          observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_policy_may_require_a_certificate_beside_proven"}
+      - {id: FM-gives-up-on-a-blip, observable: "a 503 or 530 from a service briefly away, or a certificate list it drops while polling, ends certify on the first try",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_service_briefly_away_is_asked_again"}
+      - {id: FM-setting-dropped, observable: "a service setting given twice in its file is used without a word",
+         observed_by: CTR-lean-certificates, case: "tests.test_lean_certificates::test_a_setting_given_twice_is_refused"}
     remediation: consistency_belief.lean's judge, failures and probe_block; server.certify
     goal: GOL-sound-designs
     code:
@@ -490,6 +501,8 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_finding_is_never_code"}
       - {id: FM-ledger-ignored-silently, observable: "git ignores the research ledger and the board does not say so",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_ledger_git_ignores_is_named"}
+      - {id: FM-rule-given-twice-silent, observable: "a rule given twice in research.yaml takes its last value and the board does not say so",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_rule_given_twice_is_named"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

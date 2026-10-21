@@ -563,10 +563,12 @@ def audit_change(
     A trial vouches for one step: its node's statement and premises (its fingerprint), and the
     statement of each premise it cites. So a change to the statement or premises restates the
     node and sets its own trials aside; a change to the statement also sets aside the trials of
-    the steps citing it, which need a verifier pass. Everything further down keeps its trials and
-    reads CONDITIONAL until those steps are proven again. A change only to the derivation rule --
-    a CTR- citation, the argument's wording -- restates nothing. Pass the proposal to be told
-    which; without one, the radius is what a restatement would cost.
+    the steps citing it, which need a verifier pass. A change to the premises alone sets aside
+    only those citing trials that recorded fingerprints rather than the statements they read
+    (trials made before 0.7.8), and the audit names the steps it leaves STALE. Everything further
+    down keeps its trials and reads CONDITIONAL until those steps are proven again. A change only
+    to the derivation rule -- a CTR- citation, the argument's wording -- restates nothing. Pass
+    the proposal to be told which; without one, the radius is what a restatement would cost.
     """
     root = project_root()
     ctx = Context.build(root)
@@ -579,7 +581,12 @@ def audit_change(
     further = [b for b in blast if b not in citers]
     anc = sorted(ctx.dag.ancestors(target_id))
     restates = _restates(node, proposed_statement, proposed_premises)
-    rewords = None if not proposed_statement else _restates(node, proposed_statement, None)
+    # premises proposed alone keep the statement as it stands
+    rewords = (_restates(node, proposed_statement, None) if proposed_statement
+               else False if proposed_premises is not None else None)
+    # When only the premise list moves, a citing trial is set aside only if it recorded fingerprints.
+    kept = _citers_kept(ctx, citers) if restates and rewords is False else {}
+    staled = [cid for cid, (_n, gone, left, n_min) in kept.items() if gone and left < n_min]
     own = next((s for s in ctx.slices if s.target_id == target_id), None)
     # An impact analysis is the first step of a change; it is recorded so the chain from impact
     # to approval to re-verification is in the ledger, not in someone's memory.
@@ -589,7 +596,7 @@ def audit_change(
         "proposed_premises": list(proposed_premises or []),
         "reason": reason,
         "blast_radius": list(blast),
-        "reverify": citers if rewords is not False else [],
+        "reverify": citers if rewords is not False else staled,
         "restates": restates,
     }, actor=_actor())
 
@@ -610,14 +617,17 @@ def audit_change(
         lines.append(bullet(blast) if blast else "  (Zero downstream dependents)")
     else:
         if rewords is False:
-            lines.append(f"Steps that cite it ({len(citers)}) -- its statement is unchanged, so their trials "
-                         "that recorded it keep their standing; a trial that recorded fingerprints only, "
-                         "made before trials carried statements, is set aside:")
+            lines.append(f"Steps that cite it ({len(citers)}) -- its statement is unchanged, so a trial that "
+                         "recorded the statements it read keeps its standing; one that recorded fingerprints "
+                         "only (made before 0.7.8) is set aside, since a fingerprint covers the premise list. "
+                         f"{len(staled)} of them will read STALE and need a verifier pass:")
+            lines.append(bullet(_kept_line(cid, *kept[cid]) if cid in kept else cid for cid in citers)
+                         if citers else "  (none)")
         else:
             when = "are set aside" if rewords else "are set aside if its statement changes"
             lines.append(f"Steps that cite it ({len(citers)}) -- they read its statement, so their trials {when} "
                          "and each needs a verifier pass:")
-        lines.append(bullet(citers) if citers else "  (none)")
+            lines.append(bullet(citers) if citers else "  (none)")
         lines.append(f"Further downstream ({len(further)}) -- they keep their trials and read CONDITIONAL "
                      "until the steps above are proven again; no verifier pass is needed for them:")
         lines.append(bullet(further) if further else "  (none)")
@@ -634,6 +644,32 @@ def audit_change(
     lines += _measurements_unreviewed(ctx, target_id, citers, restates)
 
     return envelope("\n".join(lines), basis_line(ctx.slices))
+
+
+def _citers_kept(ctx: Any, citers: list[str]) -> dict[str, tuple[int, int, int, int]]:
+    """For each citing step, what a change to the cited node's premise list alone leaves it: its
+    current trials, how many are set aside, the independent trials left, and the n it needs."""
+    from .model import independent_trials, survives_premise_list_change
+
+    records = {t["id"]: t for t in ctx.store.effective_trials() if "id" in t}
+    slices = {s.target_id: s for s in ctx.slices}
+    out: dict[str, tuple[int, int, int, int]] = {}
+    for cid in citers:
+        s = slices.get(cid)
+        if s is None:
+            continue
+        current = [records[i] for i in s.trial_ids if i in records]
+        left = [t for t in current if survives_premise_list_change(t)]
+        out[cid] = (len(current), len(current) - len(left), independent_trials(left)[0], s.n_min)
+    return out
+
+
+def _kept_line(cid: str, n: int, gone: int, left: int, n_min: int) -> str:
+    if not gone:
+        return f"{cid}: keeps its {n} trial(s)"
+    after = (f"it reads STALE until a verifier pass ({left}/{n_min} independent left)" if left < n_min
+             else f"{left}/{n_min} independent are left, so it stays verified")
+    return f"{cid}: {gone} of its {n} trial(s) recorded fingerprints only and are set aside; {after}"
 
 
 def _measurements_unreviewed(ctx: Any, target_id: str, blast: list[str], restates: bool | None) -> list[str]:

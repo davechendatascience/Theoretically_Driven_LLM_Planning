@@ -555,14 +555,19 @@ def contract_states(root: Path) -> dict[str, str] | None:
 
 
 def _parse(text: str) -> Declarations:
+    from component_belief.declarations import load_yaml
+
     try:
-        data = yaml.safe_load(text) or {}
+        data, duplicates = load_yaml(text)
     except yaml.YAMLError as exc:
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, str(exc))])
+    data = data or {}
     if not isinstance(data, dict):
         return Declarations(issues=[Issue("MALFORMED", DECLARATION_FILE, "top level must be a mapping")])
 
-    decl = Declarations()
+    # A key given twice keeps its last value, and the node loads as if the first were never written.
+    decl = Declarations(issues=[Issue("DUPLICATE_KEY", d.entry or DECLARATION_FILE, d.describe(DECLARATION_FILE))
+                                for d in duplicates])
     for a in _entries(data, "axioms", Axiom, decl.issues):
         decl.axioms[a.id] = a
     for d in _entries(data, "definitions", Definition, decl.issues):

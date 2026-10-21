@@ -161,6 +161,10 @@ def view_tree(ctx: Context, subject: str | None = None) -> str:
                       + ", ".join(sorted(withdrawn)))
     if ctx.staged_issues:
         header += ["Staged proposals that do not resolve:", bullet(ctx.staged_issues)]
+    duplicates = [i for i in ctx.decl.issues if i.code == "DUPLICATE_KEY"]
+    if duplicates:
+        header += ["A key given twice -- the value given last is the one in effect, and the first is "
+                   "dropped:", bullet(i.render() for i in duplicates)]
     # A declared node that failed admission has no slice, so no other view would show it: it is
     # neither an obligation a verifier can close nor anything a policy can adopt.
     unadmitted = sorted(nid for nid in list(ctx.decl.lemmas) + list(ctx.decl.branches)

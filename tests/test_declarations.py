@@ -258,3 +258,53 @@ def test_a_malformed_entry_is_reported_and_loading_goes_on(repo):
     assert set(decl.components) == {"CMP-perception", "CMP-grasp"}
     assert [i.code for i in decl.issues].count("MALFORMED") == 3
     assert decl.policies["POL-release"].criteria == [{"slice": "CTR-grasp-reachable", "require": "supported"}]
+
+
+class TestDuplicateKeys:
+    """YAML keeps the last value of a key given twice and drops the first without a word. A
+    component's 38-path `code:` list, followed after a long comment by a one-path `code:`, claimed
+    that one file for two weeks, so edits to the other 38 could stale none of its evidence."""
+
+    def test_a_key_given_twice_is_reported_with_its_entry_and_both_lines(self, repo):
+        from component_belief.decide import _risks
+
+        text = (repo / "belief.yaml").read_text(encoding="utf-8").replace(
+            "    remediation: Retune approach sampling\n",
+            "    remediation: Retune approach sampling\n    code: [grasp.py, ik.py]\n"
+            "    # ... a long comment ...\n    code: [interface.py]\n")
+        (repo / "belief.yaml").write_text(text, encoding="utf-8")
+        git(repo, "commit", "-qam", "code given twice")
+        lines = text.splitlines()
+        first = lines.index("    code: [grasp.py, ik.py]") + 1
+        again = lines.index("    code: [interface.py]") + 1
+        decl = load(repo)
+        [dup] = [i for i in decl.issues if i.code == "DUPLICATE_KEY"]
+        assert dup.subject == "CMP-grasp"
+        assert f"`code` is given twice in belief.yaml (lines {first} and {again})" in dup.message
+        assert decl.components["CMP-grasp"].code == ["interface.py"]     # what YAML kept, as the issue says
+        assert dup.render() in _risks(decl, {})                          # and a decision names it
+
+    def test_goals_yaml_is_read_the_same_way(self, goals_repo):
+        text = (goals_repo / "goals.yaml").read_text(encoding="utf-8").replace(
+            "    measure: CTR-see-e2e\n", "    measure: CTR-see-e2e\n    measure: CTR-pick-success\n", 1)
+        (goals_repo / "goals.yaml").write_text(text, encoding="utf-8")
+        git(goals_repo, "commit", "-qam", "measure given twice")
+        [dup] = [i for i in load(goals_repo).issues if i.code == "DUPLICATE_KEY"]
+        assert dup.subject == "GOL-see" and "`measure` is given twice in goals.yaml" in dup.message
+
+    def test_a_merge_and_the_keys_that_override_it_are_no_duplicate(self):
+        from component_belief.declarations import load_yaml
+
+        data, duplicates = load_yaml("base: &b {run: a, metrics: [passed]}\ntest:\n  <<: *b\n  run: b\n")
+        assert duplicates == [] and data["test"] == {"run": "b", "metrics": ["passed"]}
+
+    def test_the_loader_reads_what_safe_load_reads(self):
+        import yaml
+        from conftest import BASE_YAML, GOALS_YAML
+        from component_belief.declarations import load_yaml
+
+        for text in (BASE_YAML, GOALS_YAML):
+            assert load_yaml(text) == (yaml.safe_load(text), [])
+        data, [dup] = load_yaml("components: []\ntests: []\ncomponents: [{id: CMP-a}]\n")
+        assert data["components"] == [{"id": "CMP-a"}] and (dup.key, dup.entry, dup.first, dup.again) == ("components", "", 1, 3)
+        assert dup.issue("belief.yaml").subject == "belief.yaml"

@@ -91,7 +91,9 @@ certify("LMA-x", declaration="TDLP.lma_x", expected_statement="<its Lean type>",
    rule. `PROVEN` means every step beneath is verified; a `CONDITIONAL` node waits on the one
    it names, which is where the work is.
    Re-citing a `CTR-` or rewording the argument restates nothing and sets no trial aside.
-   Pass the proposal to `audit_change` and it says which kind of change it is. When you
+   Pass the proposal to `audit_change` and it says which kind of change it is. A change to
+   a node's premise list alone keeps the citing steps' trials, except those made before 0.7.8,
+   which recorded fingerprints; the audit names each step that will read `STALE`. When you
    wrap a folded YAML scalar, never break a line inside an id: the break folds into a
    space, so `CTR-a-` on one line and `b` on the next reads as `CTR-a-`.
 
