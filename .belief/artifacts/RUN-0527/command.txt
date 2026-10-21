@@ -1,0 +1,5 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0527/result.json -- acceptance/test_cross_coding_agents.py -q -p no:asyncio
+exit=0
+test=TST-acceptance-cross-agents@3bd15471
+started=2026-10-21T04:00:50+00:00
+at=2026-10-21T04:00:51+00:00

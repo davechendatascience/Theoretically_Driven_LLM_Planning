@@ -1,0 +1,5 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0541/result.json -- tests/test_lean_certificates.py -q -p no:asyncio
+exit=0
+test=TST-lean-certificates@98c93b8e
+started=2026-10-21T04:01:52+00:00
+at=2026-10-21T04:02:05+00:00
