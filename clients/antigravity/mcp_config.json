@@ -4,7 +4,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.0",
+        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.1",
         "component-belief-mcp"
       ],
       "env": {
@@ -18,7 +18,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.0",
+        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.1",
         "consistency-belief-mcp"
       ],
       "env": {
@@ -32,7 +32,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.0",
+        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.1",
         "stamp-monitor-mcp"
       ],
       "env": {
@@ -44,7 +44,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.0",
+        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.1",
         "graph-snapshot-mcp"
       ],
       "env": {
@@ -56,7 +56,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.0",
+        "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.1",
         "research-board-mcp"
       ],
       "env": {
