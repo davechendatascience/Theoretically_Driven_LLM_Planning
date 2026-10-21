@@ -993,6 +993,29 @@ branches:
       CTR-declarations-gate
     sufficiency: {n_min: 3, min_consensus: 0.8}
 
+  - id: BRN-repeated-keys-reported
+    subject: CMP-declarations
+    claim_type: contract
+    statement: >-
+      No value that belief.yaml, goals.yaml, consistency.yaml or research.yaml
+      gives a key, in a mapping that gives the same key again, is dropped in
+      silence: every such repeat is reported as an issue of its file, naming
+      the key, the id of the nearest entry holding it and the lines at which
+      the key is given, and the value in effect is the one given last.
+    premises: [AXM-no-silent-failure, DEF-declaration-load]
+    derivation_rule: >-
+      By DEF-declaration-load, reading any of the four declaration files keeps
+      the value a repeated key is given last, drops the earlier ones, and
+      reports every repeat as an issue of its file -- belief.yaml's,
+      goals.yaml's and consistency.yaml's among their declaration issues,
+      research.yaml's among the research board's rule issues -- naming the
+      key, the nearest entry's id and the lines at which the key is given. So
+      every earlier value dropped is reported, which is what
+      AXM-no-silent-failure requires of a value a declaration file gives a key
+      in a mapping that gives the key again. evidence: CTR-declarations-gate,
+      CTR-consistency-declarations-gate, CTR-research-board
+    sufficiency: {n_min: 3, min_consensus: 0.8}
+
   - id: BRN-consistency-declarations-gate
     subject: CMP-consistency-declarations
     claim_type: contract
@@ -1584,6 +1607,7 @@ policies:
       - {target: BRN-dag-integrity, require: proven, evidence: supported}
       - {target: BRN-falsification-trial-ledger, require: proven, evidence: supported}
       - {target: BRN-declarations-gate, require: proven, evidence: supported}
+      - {target: BRN-repeated-keys-reported, require: proven, evidence: supported}
       - {target: BRN-consistency-declarations-gate, require: proven, evidence: supported}
       - {target: BRN-model-honest, require: proven, evidence: supported}
       - {target: BRN-diagnosis-coverage-first, require: proven, evidence: supported}
