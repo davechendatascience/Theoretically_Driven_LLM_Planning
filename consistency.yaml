@@ -483,9 +483,11 @@ definitions:
       dropped. Every such repeat is reported as an issue of the file it is in:
       belief.yaml's, goals.yaml's and consistency.yaml's among their
       declaration issues, research.yaml's among the research board's issues
-      with its rules. The issue names the key, the id of the nearest entry
-      holding it, and the lines at which the key is given. A merge key, and a
-      key overriding what a merge key brought, are not a repeat.
+      with its rules. The issue names the key, where it sits -- the id that the
+      nearest entry holding it gives first, or the file, when no entry with an
+      id holds it -- and the lines at which the key is given. A merge key, and
+      a key overriding what a merge key brought, are not a repeat: none of
+      them drops a value given under the same key.
 
   - id: DEF-measured-record
     term: Measured record
@@ -746,7 +748,7 @@ definitions:
       board shows the results of the spends recorded on that direction and no
       other result. For each goal it also lists, apart from every result, the
       runs that count for no direction: the measured runs recorded against a
-      contract that a spend on one of the goal's directions targets, after
+      contract that a spend on a direction serving the goal now targets, after
       the first such spend was recorded, whose records enter no spend's
       result, each with its test and the outcomes its records carry. A research record is a direction, a trail that earned points
       when it was recorded, a measured finding, a question or a proposed
@@ -780,7 +782,8 @@ definitions:
       spends, less the whole points
       its idle time up to that moment costs, each stretch of it priced at the
       highest rate fixed by a spend waiting through it; it is computed from
-      the research ledger and the evidence ledger, and recorded in neither.
+      the research ledger, the evidence ledger and the history of goals.yaml
+      at the head revision, and recorded in none of them.
       Where a component's code claims a file in .research/,
       or a declared test names one on its run line or among what it reads,
       or the read hook saw the latest recorded run of a declared test open
@@ -999,9 +1002,10 @@ branches:
     statement: >-
       No value that belief.yaml, goals.yaml, consistency.yaml or research.yaml
       gives a key, in a mapping that gives the same key again, is dropped in
-      silence: every such repeat is reported as an issue of its file, naming
-      the key, the id of the nearest entry holding it and the lines at which
-      the key is given, and the value in effect is the one given last.
+      silence: every such repeat -- a merge key, and a key overriding what a
+      merge key brought, being none -- is reported as an issue of its file,
+      naming the key, where it sits and the lines at which the key is given,
+      and the value in effect is the one given last.
     premises: [AXM-no-silent-failure, DEF-declaration-load]
     derivation_rule: >-
       By DEF-declaration-load, reading any of the four declaration files keeps
@@ -1009,8 +1013,10 @@ branches:
       reports every repeat as an issue of its file -- belief.yaml's,
       goals.yaml's and consistency.yaml's among their declaration issues,
       research.yaml's among the research board's rule issues -- naming the
-      key, the nearest entry's id and the lines at which the key is given. So
-      every earlier value dropped is reported, which is what
+      key, where it sits and the lines at which the key is given. A merge key,
+      and a key overriding what one brought, are no repeat, and none of them
+      drops a value given under the same key. So every earlier value dropped
+      is reported, which is what
       AXM-no-silent-failure requires of a value a declaration file gives a key
       in a mapping that gives the key again. evidence: CTR-declarations-gate,
       CTR-consistency-declarations-gate, CTR-research-board
