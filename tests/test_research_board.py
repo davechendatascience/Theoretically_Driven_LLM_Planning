@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
+import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -57,6 +59,15 @@ def idle(repo: Path, did: str) -> tuple[int, int, bool]:
     """(idle minutes, idle points, idle now) for a direction, as the board reads now."""
     d = B.build(repo).directions[did]
     return round(d.idle.seconds / 60), d.idle.points, d.idle.idle_now
+
+
+def launched(repo: Path, test_id: str, at: datetime, run_id: str = "RUN-9100") -> None:
+    """A background run of `test_id` started at `at` and running still: its job file, with this
+    test's own process standing in for the worker."""
+    path = Store(repo).artifacts_dir / run_id / "job.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"run_id": run_id, "test": f"{test_id}@0000", "started": at.isoformat(),
+                                "pid": os.getpid()}), encoding="utf-8")
 
 
 def measure(repo: Path, test_id: str = "TST-pick") -> str:
@@ -235,6 +246,7 @@ def test_an_idle_hour_costs_the_direction_waiting_on_a_result(research, clock):
     assert idle(research, did) == (0, 0, False)
 
     play.spend(research, did, "test", "TST-pick")         # t0+2h: waits on CTR-pick-success
+    launched(research, "TST-pick", clock.at)              # ... from its first run, started at once
     clock.advance(minutes=90)
     assert idle(research, did) == (90, 1, True)
     b = B.build(research)
@@ -261,10 +273,52 @@ def test_an_idle_hour_costs_the_direction_waiting_on_a_result(research, clock):
     assert direction(research, did).state == B.NEEDS_REFLECTION
 
 
+def test_a_spend_waits_from_its_first_run(research, clock):
+    """Funding a test four hours before the GPU freed charged the direction for the wait. The
+    clock now starts with the spend's first run; until then the spend is queued and costs nothing."""
+    did = funded(research, trails=3)                      # research recorded at t0 runs until t0+30m
+    reply = play.spend(research, did, "test", "TST-pick")
+    assert "Until a run starts, the spend is queued and costs nothing" in reply
+    launched(research, "TST-grasp-ik", clock.at, "RUN-9102")      # another test's run starts no clock
+    clock.advance(hours=4)
+    assert idle(research, did) == (0, 0, False)
+    b = B.build(research)
+    assert b.directions[did].idle.queued == [last_spend(research)]
+    assert "queued: its idle clock starts with its first run" in render_board(b)
+
+    launched(research, "TST-pick", clock.at)              # t0+4h: the GPU frees, the run starts
+    clock.advance(minutes=90)
+    assert idle(research, did) == (90, 1, True)
+    assert B.build(research).directions[did].idle.queued == []
+
+    other = funded(research, "second-axis", trails=3)     # halted while its spend was queued
+    play.spend(research, other, "test", "TST-see")         # a test nothing else here runs
+    clock.advance(minutes=10)
+    play.reflect(research, other, "halt", "the arm is needed elsewhere")
+    clock.advance(minutes=50)
+    launched(research, "TST-see", clock.at, "RUN-9103")
+    clock.advance(hours=2)
+    assert idle(research, other) == (0, 0, False)
+
+
+def test_a_spend_made_before_the_rule_waits_from_when_it_was_recorded(research, clock):
+    """A spend fixes when its wait starts. One recorded before spends said so fixed no start, and
+    waits from when it was recorded, as it did: no balance already on a board changes."""
+    did = funded(research, trails=3)
+    play.spend(research, did, "test", "TST-pick")
+    path = B.ledger_path(research)
+    records = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    records[-1]["idle"].pop("from")
+    path.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in records), encoding="utf-8")
+    clock.advance(minutes=90)
+    assert idle(research, did) == (60, 1, True)           # from t0+30m, when research stopped running
+
+
 def test_a_spend_keeps_the_idle_terms_it_was_made_under(research, clock):
     did = funded(research, trails=4)
     play.spend(research, did, "test", "TST-pick")         # t0, under one point an idle hour
-    assert B.read_ledger(research)[-1]["idle"] == {"per_hour": 1, "running_minutes": 30}
+    assert B.read_ledger(research)[-1]["idle"] == {"per_hour": 1, "running_minutes": 30, "from": B.FIRST_RUN}
+    launched(research, "TST-pick", clock.at)
 
     (research / B.RULES_FILE).write_text(RULES + "idle: {per_hour: 0}\n", encoding="utf-8")
     git(research, "commit", "-qam", "idle hours are free now")
@@ -275,6 +329,7 @@ def test_a_spend_keeps_the_idle_terms_it_was_made_under(research, clock):
     other = funded(research, "second-axis")               # research at t0+90m runs until t0+2h
     play.spend(research, other, "test", "TST-grasp-ik")   # made under the new rules
     assert B.read_ledger(research)[-1]["idle"]["per_hour"] == 0
+    launched(research, "TST-grasp-ik", clock.at, "RUN-9101")
     clock.advance(hours=3)
     assert idle(research, other)[1] == 0
     assert idle(research, did) == (60 + 150, 3, True)
@@ -282,6 +337,97 @@ def test_a_spend_keeps_the_idle_terms_it_was_made_under(research, clock):
     play.reflect(research, did, "halt", "the eval is not coming back")
     clock.advance(hours=5)
     assert idle(research, did) == (210, 3, False)         # a closed direction waits on nothing
+
+
+def test_a_scouts_check_waits_on_the_director_until_measured_or_answered(research):
+    """"WORTH TESTING FIRST: a free check of X" landed as a note, so the board never showed it
+    waiting on the director. A check stays open until a finding replies to it or an answer does."""
+    did = funded(research)
+    out = play.feedback(research, did, "WORTH TESTING FIRST: count the closes on air in the failure map",
+                        kind="check", by="scout-1")
+    check = B.read_ledger(research)[-1]
+    assert "stays open on the board" in out and B.is_research(check)
+    b = B.build(research)
+    assert [q["id"] for q in b.open_questions()] == [check["id"]]
+    assert "## Open questions and checks on it, waiting on the director" in render_brief(b, b.directions[did])
+    assert f"{check['id']} · scout-1 · check on {did}" in render_board(b)
+
+    (research / "failure_map.csv").write_text("start,closed_on_air\n1,yes\n", encoding="utf-8")
+    play.evidence(research, did, "failure_map.csv", "1 of 1 starts closes on air", reply_to=check["id"])
+    b = B.build(research)
+    assert b.open_questions() == [] and f"replying to {check['id']}" in render_section(b, b.directions[did], "evidence")
+
+    play.feedback(research, did, "check the seed first", kind="check", by="scout-2")
+    second = B.read_ledger(research)[-1]["id"]
+    play.feedback(research, did, "seeded: 7 for every arm", kind="answer", reply_to=second)
+    assert B.build(research).open_questions() == []
+    with pytest.raises(play.Refused, match="no question or check"):
+        play.evidence(research, did, "failure_map.csv", "again", reply_to="FBK-9999")
+    play.feedback(research, did, "a check of my own", kind="check")
+    assert not B.is_research(B.read_ledger(research)[-1])     # the director's own check keeps no clock
+
+
+def test_a_direction_is_retargeted_once_its_goal_is_committed(research):
+    """Directions opened under a parent goal before the subgoal landed stayed "for" the parent for
+    good. retarget moves one, and the ledger keeps the goal it was opened for."""
+    did = funded(research)                                # opened for GOL-grasp
+    with pytest.raises(play.Refused, match="no goal 'GOL-grasp-95' in goals.yaml at HEAD; commit it first"):
+        play.retarget(research, did, "GOL-grasp-95", "the subgoal")
+    with pytest.raises(play.Refused, match="already serves GOL-grasp"):
+        play.retarget(research, did, "GOL-grasp", "the same goal")
+    out = play.retarget(research, did, "GOL-see", "the gap is segmentation, not the grasp")
+    assert "now serves GOL-see (it served GOL-grasp)" in out
+    b = B.build(research)
+    d = b.directions[did]
+    assert d.goal == "GOL-see" and d.record["goal"] == "GOL-grasp"
+    assert "retarget: from GOL-grasp to GOL-see" in render_section(b, d, "feedback")
+    assert "GOL-see: The scene is segmented" in render_brief(b, d)
+    assert f"**{did}** · for GOL-see" in render_board(b)    # off the rules' focus, GOL-grasp, now
+
+
+def test_trail_kinds_a_method_earns_and_a_paper_set_aside_is_listed_as_read(research):
+    """A trail pointing at a way to measure, not a model change, had no kind of its own; and a
+    scout had no way to say "read this, it does not help", so the next scout read it again."""
+    did = funded(research, trails=0)
+    method = play.add_trail(research, did, "Lee 2024, Conditional probing", "probe the prefix for the word",
+                            "TST-pick", QUOTE, kind="method", by="scout-1")
+    assert "+1" in method
+    tweak = play.add_trail(research, did, "Lee 2025, Probes", "probe it", "TST-pick", QUOTE, by="scout-1")
+    assert "0 points" in tweak and "TST-pick is not a component" in tweak
+    put = play.add_trail(research, did, "Kim 2023, Grasp noise", "noise in executed actions, which the human ruled out",
+                         kind="set-aside", by="scout-1")
+    assert "set aside, 0 points" in put and not B.is_research(B.read_ledger(research)[-1])
+    b = B.build(research)
+    d = b.directions[did]
+    head = render_brief(b, d)
+    cited = head.split("## Papers already cited here")[1].split("\n## ")[0]
+    assert "· method" in cited and "Kim 2023" not in cited
+    assert "## Papers read and set aside -- read one again only with a new reason" in head
+    assert "Kim 2023, Grasp noise · why not: noise in executed actions" in head
+    trails = render_section(b, d, "trails")
+    assert "· method · by scout-1" in trails and "why not: noise in executed actions" in trails
+    taken_up = play.add_trail(research, did, "Kim 2023, Grasp noise", "perturb where the episode starts",
+                              "CMP-grasp", QUOTE, by="scout-2")
+    assert "+1" in taken_up                              # a paper set aside may still be taken up
+    with pytest.raises(play.Refused, match="kind must be one of"):
+        play.add_trail(research, did, "X", "y", kind="survey")
+
+
+def test_a_run_that_opened_research_files_stops_recording(research):
+    """A test that read .research/ without declaring it was not caught by the no-record rule: its
+    evidence rested on the ledger, and recording moved it. The board now reads what the latest run
+    of each declared test opened."""
+    did = funded(research)
+    run_id = measure(research)
+    record = [t for t in Store(research).effective_trials() if t.get("run_id") == run_id][0]
+    assert record["started"] <= record["timestamp"]       # a run says when it started
+    (Store(research).artifacts_dir / run_id / "reads.json").write_text(
+        json.dumps(["eval/pick.py", ".research/ledger.jsonl"]), encoding="utf-8")
+    with pytest.raises(play.Refused, match=rf"the latest run of TST-pick \({run_id}\) opened a file in .research/"):
+        play.feedback(research, did, "a note")
+    next_second()
+    measure(research)                                     # run again, and it reads nothing there
+    assert "recorded" in play.feedback(research, did, "a note")
 
 
 def test_rules_take_effect_from_head(goals_repo, monkeypatch):
@@ -412,12 +558,12 @@ def test_a_declaration_naming_research_files_stops_recording(research, claim):
 
 # ---------- the tools ----------
 
-def test_the_server_registers_two_reads_and_eight_moves():
+def test_the_server_registers_two_reads_and_nine_moves():
     from research_board import server
 
     names = {t.name for t in asyncio.run(server.mcp.list_tools())}
     assert names == {"board", "ledger", "open_direction", "add_trail", "feedback", "approve", "spend", "reflect",
-                     "evidence", "digest"}
+                     "evidence", "digest", "retarget"}
 
 
 # ---------- what counts as research for the idle clock ----------

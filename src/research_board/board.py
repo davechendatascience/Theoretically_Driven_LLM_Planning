@@ -34,10 +34,19 @@ DEFAULT_IDLE_PER_HOUR = 1       # points an idle hour costs a direction waiting 
 DEFAULT_RUNNING_MINUTES = 30    # how long research counts as running after a research record
 RULE_KEYS = ("focus", "costs", "earn", "scouts", "idle")
 
-NOTE, QUESTION, ANSWER = "note", "question", "answer"
+NOTE, QUESTION, CHECK, ANSWER = "note", "question", "check", "answer"
 APPROVED, REJECTED = "approved", "rejected"
 CONTINUE, HALT, PIVOT = "continue", "halt", "pivot"
-FEEDBACK_KINDS = (NOTE, QUESTION, ANSWER)
+RETARGET = "retarget"
+#: A check is a measurement a scout proposes the director make first -- often free, on data that
+#: exists. Like a question it waits on the director until answered, or until a finding replies to it.
+FEEDBACK_KINDS = (NOTE, QUESTION, CHECK, ANSWER)
+#: What a trail is: a tweak to a component, a method or instrument to measure with, or a paper read
+#: and set aside, kept so the next scout does not read it again.
+TWEAK, METHOD, SET_ASIDE = "tweak", "method", "set-aside"
+TRAIL_KINDS = (TWEAK, METHOD, SET_ASIDE)
+#: A spend made from 0.13.3 on waits from its first run, not from when it was recorded.
+FIRST_RUN = "first-run"
 VERDICTS = (APPROVED, REJECTED)
 DECISIONS = (CONTINUE, HALT, PIVOT)
 
@@ -249,7 +258,7 @@ def direction_id(name: str) -> str:
 
 def is_research(record: dict[str, Any]) -> bool:
     """What shows research running: a direction opened, a trail that earned when it was recorded,
-    a measured finding attached, a question a scout asked, or an answer to a question. A note, a
+    a measured finding attached, a question asked or a check proposed by a scout, or an answer. A note, a
     trail that earned nothing, a digest and the director's verdicts and reflections are not: a note
     left only to stop the clock would otherwise stop it."""
     kind = record.get("kind")
@@ -259,7 +268,7 @@ def is_research(record: dict[str, Any]) -> bool:
         return int(record.get("points") or 0) > 0
     if kind != "feedback":
         return False
-    return (record.get("type") == QUESTION and record.get("by") != "director") or record.get("type") == ANSWER
+    return (record.get("type") in (QUESTION, CHECK) and record.get("by") != "director") or record.get("type") == ANSWER
 
 
 # ---------- results ----------
@@ -367,6 +376,7 @@ class Idle:
     seconds: float = 0.0           # idle time, counted once however many spends waited through it
     cost: float = 0.0              # idle time priced, in point-hours: rate x hours, summed
     waiting_on: list[str] = field(default_factory=list)    # the spends waiting now
+    queued: list[str] = field(default_factory=list)        # spends waiting for their first run to start
     idle_now: bool = False         # idle at this moment: the clock is running
     rate_now: int = 0
 
@@ -414,21 +424,59 @@ def _closed_after(d: Direction, since: datetime) -> datetime | None:
     return None
 
 
-def direction_idle(d: Direction, results: dict[str, Result], research: list[datetime], now: datetime) -> Idle:
-    """A spend waits from when it is recorded until its result first says something, or its
+def run_starts(trials: list[dict[str, Any]]) -> dict[str, datetime]:
+    """When each recorded run started: the time its records carry, or, for a run recorded before
+    runs said, when it was recorded -- which errs toward charging less idle."""
+    out: dict[str, datetime] = {}
+    for t in trials:
+        run, moment = str(t.get("run_id") or ""), when(t.get("started")) or when(t.get("timestamp"))
+        if run and moment is not None and (run not in out or moment < out[run]):
+            out[run] = moment
+    return out
+
+
+def wait_start(decl: Any, spend: dict[str, Any], result: Result | None, started: dict[str, datetime],
+               running: list[dict[str, Any]]) -> datetime | None:
+    """When a spend starts to wait (DEF-research-ledger): when it was recorded, or, for one that
+    waits from its first run, the later of that and when the first run counting for it started --
+    a run whose records entered its result, or one still running its test (or, naming none, a test
+    that can measure a contract it targets). None while no such run has started."""
+    recorded = when(spend.get("timestamp"))
+    if (spend.get("idle") or {}).get("from") != FIRST_RUN or recorded is None:
+        return recorded
+    runs = {r for ids in (result.runs.values() if result else ()) for r in ids}
+    starts: list[datetime | None] = [started[r] for r in runs if r in started]
+    test = spend.get("test") or ""
+    tests = {test} if test else {tid for cid in spend.get("contracts", []) if cid in decl.contracts
+                                 for tid in decl.contracts[cid].evaluable_by}
+    starts += [when(j.get("started")) for j in running if str(j.get("test", "")).split("@", 1)[0] in tests]
+    first = min((m for m in starts if m is not None), default=None)
+    return None if first is None else max(recorded, first)
+
+
+def direction_idle(d: Direction, results: dict[str, Result], research: list[datetime], now: datetime,
+                   starts: dict[str, datetime | None] | None = None) -> Idle:
+    """A spend waits from its start (wait_start) until its result first says something, or its
     direction is halted or rejected; while one waits and no research record falls within its
     running time, the direction is idle. A spend recorded before idle hours were priced fixed no
-    rate, and costs nothing."""
+    rate, and costs nothing; one that waits from its first run and has none started is queued."""
     idle = Idle()
     segments: list[tuple[datetime, datetime, int]] = []
     for spend in d.spends:
         terms = spend.get("idle") or {}
         rate, running = _count(terms.get("per_hour")), _count(terms.get("running_minutes"))
         result = results.get(spend["id"])
-        start = when(spend.get("timestamp"))
-        if not rate or not running or result is None or not result.states or start is None:
+        start = (starts or {}).get(spend["id"], when(spend.get("timestamp")))
+        if start is None:
+            if result is not None and result.states and _closed_after(d, when(spend.get("timestamp")) or now) is None:
+                idle.queued.append(spend["id"])
             continue
-        ends = [now] + [m for m in (result.waited_until, _closed_after(d, start)) if m is not None]
+        if not rate or not running or result is None or not result.states:
+            continue
+        # closed since the spend, not since its wait began: a direction halted while the spend was
+        # queued waits on nothing when the run starts afterwards
+        closed = _closed_after(d, when(spend.get("timestamp")) or start)
+        ends = [now] + [m for m in (result.waited_until, closed) if m is not None]
         end = min(ends)
         if end == now and start < now:
             idle.waiting_on.append(spend["id"])
@@ -457,6 +505,7 @@ class Direction:
     digest: dict[str, Any] | None = None        # the director's latest "facts so far"
     verdict: dict[str, Any] | None = None       # the latest approval or rejection
     decision: dict[str, Any] | None = None      # the latest continue, halt or pivot
+    retarget: dict[str, Any] | None = None      # the latest move to another goal, if any
     state: str = PROPOSED
     unreflected: list[str] = field(default_factory=list)   # spends whose result settled since the last decision
     idle: Idle | None = None                    # computed with the results; None on a board built without them
@@ -467,7 +516,8 @@ class Direction:
 
     @property
     def goal(self) -> str:
-        return str(self.record.get("goal", ""))
+        """The goal it serves: the one it was opened for, or the one the latest retarget named."""
+        return str((self.retarget or self.record).get("goal", ""))
 
     @property
     def rank(self) -> int | None:
@@ -492,6 +542,7 @@ class Board:
     feedback: dict[str, dict[str, Any]] = field(default_factory=dict)
     evidence: dict[str, dict[str, Any]] = field(default_factory=dict)
     results: dict[str, Result] = field(default_factory=dict)
+    starts: dict[str, datetime | None] = field(default_factory=dict)     # when each spend's wait starts
     trail_verdicts: dict[str, dict[str, Any]] = field(default_factory=dict)
     measures: dict[str, str] = field(default_factory=dict)      # each goal's measure, as it reads now
     goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
@@ -538,8 +589,11 @@ class Board:
         return ""
 
     def open_questions(self) -> list[dict[str, Any]]:
+        """The questions and proposed checks waiting on the director: not answered, and, for a
+        check, no measured finding attached in reply to it."""
         answered = {f.get("reply_to") for f in self.feedback.values() if f.get("type") == ANSWER}
-        return [f for f in self.feedback.values() if f.get("type") == QUESTION and f["id"] not in answered]
+        answered |= {e.get("reply_to") for e in self.evidence.values() if e.get("reply_to")}
+        return [f for f in self.feedback.values() if f.get("type") in (QUESTION, CHECK) and f["id"] not in answered]
 
     def ordered(self) -> list[Direction]:
         """The board's order: what waits on the director, what waits on a run, what can be tried
@@ -627,6 +681,8 @@ def build(root: Path, *, with_results: bool = True) -> Board:
                 d.verdict = item
             elif kind in DECISIONS and about == d.id:
                 d.decision = item
+            elif kind == RETARGET and about == d.id:
+                d.retarget = item
 
     board.ledger_ignored = ignored_ledger(root)
     if with_results:
@@ -635,10 +691,15 @@ def build(root: Path, *, with_results: bool = True) -> Board:
             from component_belief.staleness import CodeStaleness
             from component_belief.store import Store
 
+            from component_belief.jobs import jobs as background_runs
+
             trials = Store(root).effective_trials()
             staleness = CodeStaleness(root)
+            running = [j for j in background_runs(root) if j.get("state") == "running"]
+            started = run_starts(trials)
             for sid, spend in board.spends.items():
                 board.results[sid] = spend_result(board.decl, trials, staleness, spend)
+                board.starts[sid] = wait_start(board.decl, spend, board.results[sid], started, running)
             # what each goal's measure reads now, on all its evidence: context for a direction, never
             # one of its results
             measures = sorted({g.measure for g in board.decl.goals.values() if g.measure in board.decl.contracts})
@@ -656,7 +717,7 @@ def build(root: Path, *, with_results: bool = True) -> Board:
         if research:
             board.research_until = research[-1] + timedelta(minutes=board.rules.running_minutes)
         for d in board.directions.values():
-            d.idle = direction_idle(d, board.results, research, board.now)
+            d.idle = direction_idle(d, board.results, research, board.now, board.starts)
 
     cheapest = board.rules.cheapest_paid()
     for d in board.directions.values():
@@ -702,6 +763,23 @@ def research_files(root: Path) -> set[str]:
     if directory.is_dir():
         paths |= {p.relative_to(root).as_posix() for p in directory.rglob("*") if p.is_file()}
     return paths
+
+
+def reading_research(root: Path, decl: Any) -> list[str]:
+    """The declared tests whose latest recorded run, as its read hook saw, opened a file in
+    .research/ -- each as "TST-x (RUN-n)". Such a run's evidence rests on what is there, though no
+    declaration says so, and recording would move it (DEF-research-ledger). Its latest run only: a
+    test changed to leave .research/ alone and run again stops the refusal."""
+    from component_belief.readlog import read
+    from component_belief.store import Store
+
+    store = Store(root)
+    latest: dict[str, str] = {}
+    for t in store.effective_trials():             # the ledger's order: the last run of a test stands
+        if t.get("test_id") in decl.tests and t.get("run_id"):
+            latest[str(t["test_id"])] = str(t["run_id"])
+    return sorted(f"{tid} ({run})" for tid, run in latest.items()
+                  if any(p.split("/", 1)[0] == RESEARCH_DIR for p in read(store.artifacts_dir / run)))
 
 
 def naming_research(root: Path, decl: Any) -> list[str]:

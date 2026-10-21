@@ -456,14 +456,16 @@ components:
       declares, and takes them back when the trail is rejected; counts for a spend on a test that
       test's runs only; refuses a spend on a direction not approved, one short of its cost, and one
       with a settled result not yet reflected on; takes a point from a direction for each idle
-      hour -- one in which a test it paid for waited on its result and no research (an earning
-      trail, a direction, a finding, a scout's question or an answer; never a note) was recorded --
-      at the rate the spend fixed when it was made; takes its rules from research.yaml at HEAD;
+      hour -- one in which a test it paid for, its first run started, waited on its result and no
+      research (an earning trail, a direction, a finding, a scout's question or check, or an
+      answer; never a note) was recorded -- at the rate the spend fixed when it was made;
+      keeps a scout's check open until it is answered or measured; takes its rules from research.yaml at HEAD;
       serves a brief whose head always fits, carrying the human's standing rules for the goal, and
       the rest by section or by id; keeps a measured finding as the bytes it hashed, and never a
       source file; serves the ledgers and a run's captured output and never a source file; names
       a ledger git would leave out of a commit; and writes nothing outside .research/, and
-      nothing at all where a declaration names a file there
+      nothing at all where a declaration names a file there or the latest run of a declared test
+      opened one
     failure_modes:
       - {id: FM-result-before-spend, observable: "a result recorded before a spend is shown for that spend's direction",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_result_recorded_before_the_spend_is_not_the_directions"}
@@ -509,6 +511,18 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_rule_given_twice_is_named"}
       - {id: FM-cut-without-pointer, observable: "a brief's head cuts a feedback line and does not name the record it came from",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_feedback_line_the_head_cuts_says_where_it_is_whole"}
+      - {id: FM-charged-before-the-run, observable: "a spend costs idle hours before a run that counts for it has started, or a run of another test starts its clock",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_waits_from_its_first_run"}
+      - {id: FM-old-spend-repriced, observable: "a spend recorded before spends fixed their start waits from anything but when it was recorded",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_spend_made_before_the_rule_waits_from_when_it_was_recorded"}
+      - {id: FM-check-untracked, observable: "a scout's proposed check is not shown waiting on the director, or stays open after it is measured or answered",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_scouts_check_waits_on_the_director_until_measured_or_answered"}
+      - {id: FM-retarget-lost, observable: "a direction cannot move to a committed goal, moves to one not at HEAD, or forgets the goal it was opened for",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_direction_is_retargeted_once_its_goal_is_committed"}
+      - {id: FM-set-aside-reread, observable: "a paper set aside earns points, is missing from the brief's head, or keeps a later scout from taking it up",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_trail_kinds_a_method_earns_and_a_paper_set_aside_is_listed_as_read"}
+      - {id: FM-undeclared-read-of-research, observable: "the board records while the latest run of a declared test opened a file in .research/",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_run_that_opened_research_files_stops_recording"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
     goal: GOL-honest-evidence
     code:

@@ -45,6 +45,12 @@ def _record(root: Path, board: B.Board, kind: str, fields: dict[str, Any]) -> tu
             f"{', '.join(named)} name{'s' if len(named) == 1 else ''} a file in {B.RESEARCH_DIR}/, so "
             f"evidence rests on what is there and recording would move it. Drop {B.RESEARCH_DIR}/ "
             "from those declarations to keep research here.")
+    read = B.reading_research(root, board.decl)
+    if read:
+        raise Refused(
+            f"the latest run of {', '.join(read)} opened a file in {B.RESEARCH_DIR}/, as its read hook saw, "
+            "so its evidence rests on what is there and recording would move it. Change the test to leave "
+            f"{B.RESEARCH_DIR}/ alone and run it again.")
     record = {"kind": kind, **fields, "timestamp": B.utc_now()}
     if kind in _PREFIX and not fields.get("id"):
         record = {"id": _next_id(root, kind), **record}
@@ -102,30 +108,44 @@ def open_direction(root: Path, name: str, goal: str, idea: str, assessment: str 
 
 
 def add_trail(root: Path, direction: str, paper: str, tweak: str, component: str = "", quote: str = "",
-              at: str = "", expect: str = "", by: str = "director") -> str:
+              at: str = "", expect: str = "", by: str = "director", kind: str = B.TWEAK) -> str:
+    """A trail: a paper and what it suggests. A tweak names the component it would change; a method
+    -- an instrument or a way to measure -- names the component, test or contract it measures with;
+    a paper set aside says, in `tweak`, why it was read and not taken up, and earns nothing."""
     _required(paper=paper, tweak=tweak)
+    if kind not in B.TRAIL_KINDS:
+        raise Refused(f"kind must be one of {', '.join(B.TRAIL_KINDS)}")
     with _LOCK:
         board = B.build(root, with_results=False)
         d = _direction(board, direction)
+        decl = board.decl
         unearned: list[str] = []
-        if d.state in (B.REJECTED, B.HALTED):
+        if kind == B.SET_ASIDE:
+            unearned.append("a paper set aside earns nothing; it is kept so the next scout does not read it again")
+        elif d.state in (B.REJECTED, B.HALTED):
             unearned.append(f"{d.id} is {d.state}")
-        if not quote.strip():
-            unearned.append("no quote: a paper not quoted is a lead, not yet research")
-        if not component:
-            unearned.append("it names no component")
-        elif component not in board.decl.components:
-            unearned.append(f"{component} is not a component belief.yaml declares at HEAD")
-        key = B.paper_key(paper)
-        for earlier in d.trails:
-            if B.paper_key(str(earlier.get("paper", ""))) == key and not board.rejected(earlier["id"]):
-                unearned.append(f"{earlier['id']} already cites this paper in {d.id}")
-                break
+        if kind != B.SET_ASIDE:
+            if not quote.strip():
+                unearned.append("no quote: a paper not quoted is a lead, not yet research")
+            if not component:
+                unearned.append("it names no component" + (", test or contract" if kind == B.METHOD else ""))
+            elif kind == B.METHOD and not any(component in t for t in (decl.components, decl.tests, decl.contracts)):
+                unearned.append(f"{component} is no component, test or contract declared at HEAD")
+            elif kind == B.TWEAK and component not in decl.components:
+                unearned.append(f"{component} is not a component belief.yaml declares at HEAD")
+            key = B.paper_key(paper)
+            for earlier in d.trails:
+                if (B.paper_key(str(earlier.get("paper", ""))) == key and not board.rejected(earlier["id"])
+                        and earlier.get("type") != B.SET_ASIDE):     # a paper set aside may still be taken up
+                    unearned.append(f"{earlier['id']} already cites this paper in {d.id}")
+                    break
         points = 0 if unearned else board.rules.earn
         record, after = _record(root, board, "trail", {
-            "direction": d.id, "paper": paper.strip(), "at": at.strip(), "quote": quote.strip(),
+            "direction": d.id, "type": kind, "paper": paper.strip(), "at": at.strip(), "quote": quote.strip(),
             "tweak": tweak.strip(), "component": component.strip(), "expect": expect.strip(), "by": by,
             "points": points, "unearned": "; ".join(unearned)})
+    if kind == B.SET_ASIDE:
+        return f"{record['id']} on {d.id}: set aside, 0 points; every brief on {d.id} lists it as read."
     earned = f"+{points}" if points else f"0 points ({'; '.join(unearned)})"
     return f"{record['id']} on {d.id}: {earned}. {d.id} balance {_balance(after, d.id)}."
 
@@ -147,8 +167,8 @@ def feedback(root: Path, about: str, text: str, kind: str = B.NOTE, reply_to: st
             parent = board.feedback.get(reply_to)
             if parent is None:
                 raise Refused(f"no feedback {reply_to!r} to reply to")
-            if kind == B.ANSWER and parent.get("type") != B.QUESTION:
-                raise Refused(f"{reply_to} is a {parent.get('type')}, not a question")
+            if kind == B.ANSWER and parent.get("type") not in (B.QUESTION, B.CHECK):
+                raise Refused(f"{reply_to} is a {parent.get('type')}, not a question or a check")
         elif kind == B.ANSWER:
             raise Refused("an answer names the question it answers: reply_to=<FBK- id>")
         fields = {"about": about, "direction": direction, "type": kind, "text": text.strip(),
@@ -159,6 +179,10 @@ def feedback(root: Path, about: str, text: str, kind: str = B.NOTE, reply_to: st
     if kind == B.QUESTION:
         return (f"{record['id']}: question on {about} recorded; it stays open on the board until the "
                 f"director answers it with feedback(..., kind=\"answer\", reply_to=\"{record['id']}\").")
+    if kind == B.CHECK:
+        return (f"{record['id']}: check on {about} recorded; it stays open on the board until the director "
+                f"answers it (feedback(..., kind=\"answer\", reply_to=\"{record['id']}\")) or attaches what "
+                f"it measured (evidence(..., reply_to=\"{record['id']}\")).")
     where = f"{direction}'s feedback" if direction else f"the notes on {goal}, which every brief on it carries"
     return f"{record['id']}: {kind} on {about} recorded, in {where}."
 
@@ -229,7 +253,8 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
             "direction": d.id, "action": action, "target": target, "contracts": contracts,
             "test": target if target in decl.tests else "",
             "expect": expect.strip(), "cost": cost, "commit": commit, "by": "director",
-            "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes}})
+            "idle": {"per_hour": rules.idle_per_hour, "running_minutes": rules.running_minutes,
+                     "from": B.FIRST_RUN}})
     by_test = f"{target}'s runs " if target in decl.tests else "Runs "
     counts = (f"{by_test}measured on {', '.join(contracts)} from now count for {d.id}; run them with run_test."
               if contracts else
@@ -237,8 +262,9 @@ def spend(root: Path, direction: str, action: str, target: str, expect: str = ""
               f"Its result comes from a later spend on the contract or test that measures the work, once "
               f"belief.yaml or goals.yaml declares it at HEAD: commit the declaration, then spend on it.")
     if contracts and rules.idle_per_hour:
-        counts += (f" Until the result is in, every hour with no research recorded costs {d.id} "
-                   f"{rules.idle_per_hour} point{'s' if rules.idle_per_hour != 1 else ''}: keep scouts out.")
+        counts += (f" From when its first run starts until the result is in, every hour with no research "
+                   f"recorded costs {d.id} {rules.idle_per_hour} point{'s' if rules.idle_per_hour != 1 else ''}: "
+                   "keep scouts out while it runs. Until a run starts, the spend is queued and costs nothing.")
     return f"{record['id']}: {action} -> {target} for {d.id}, {cost} point(s); balance {balance - cost}. {counts}"
 
 
@@ -262,17 +288,24 @@ def reflect(root: Path, direction: str, decision: str, why: str) -> str:
     return f"{record['id']}: {d.id} continues."
 
 
-def evidence(root: Path, direction: str, artifact: str, summary: str, by: str = "director") -> str:
+def evidence(root: Path, direction: str, artifact: str, summary: str, by: str = "director",
+             reply_to: str | None = None) -> str:
     """Attach a measured finding to a direction: a data file or report the director produced
     outside a declared test. The board keeps its own copy of the bytes and their digest, so what a
     scout reads later is what was attached, and serves it through ledger(evidence=...). It is
-    never a result: a spend's result comes from measured runs only (DEF-research-ledger)."""
+    never a result: a spend's result comes from measured runs only (DEF-research-ledger). With
+    `reply_to`, it answers the check or question it measured, which then waits on no one."""
     _required(direction=direction, artifact=artifact, summary=summary)
     from component_belief.staleness import matches, named_paths
 
     with _LOCK:
         board = B.build(root, with_results=False)
         d = _direction(board, direction)
+        if reply_to:
+            parent = board.feedback.get(reply_to)
+            if parent is None or parent.get("type") not in (B.QUESTION, B.CHECK):
+                raise Refused(f"{reply_to} is no question or check on the board; a finding replies to the "
+                              "one it measured")
         path = (root / artifact).resolve()
         try:
             rel = path.relative_to(root.resolve()).as_posix()
@@ -303,10 +336,31 @@ def evidence(root: Path, direction: str, artifact: str, summary: str, by: str = 
         record, after = _record(root, board, "evidence", {
             "id": eid, "direction": d.id, "artifact": rel, "copy": copy.relative_to(root).as_posix(),
             "sha256": digest, "bytes": size, "summary": summary.strip(), "by": by, "points": points,
+            "reply_to": reply_to or "",
             "commit": (B.git(root, "rev-parse", "--short", "HEAD") or "").strip()})
     worth = f"+{points}" if points else "0 points"
     return (f"{eid} on {d.id}: {rel} ({size} bytes, sha256 {digest}) kept as {record['copy']}, {worth}; "
             f"scouts read it with ledger(evidence=\"{eid}\"). {d.id} balance {_balance(after, d.id)}.")
+
+
+def retarget(root: Path, direction: str, goal: str, why: str) -> str:
+    """Point a direction at another goal of yours -- the subgoal it was really for, once committed.
+    Its trails, spends and feedback stay where they are; every brief on it then carries that goal's
+    standing rules and sits among that goal's directions."""
+    _required(direction=direction, goal=goal, why=why)
+    with _LOCK:
+        board = B.build(root, with_results=False)
+        d = _direction(board, direction)
+        if goal not in board.decl.goals:
+            declared = ", ".join(sorted(board.decl.goals)) or "none: goals.yaml declares no goal at HEAD"
+            raise Refused(f"no goal {goal!r} in goals.yaml at HEAD; commit it first. Goals: {declared}")
+        if goal == d.goal:
+            raise Refused(f"{d.id} already serves {goal}")
+        was = d.goal
+        record, _ = _record(root, board, "feedback", {
+            "about": d.id, "direction": d.id, "type": B.RETARGET, "goal": goal, "from_goal": was,
+            "text": why.strip(), "reply_to": "", "by": "director"})
+    return f"{record['id']}: {d.id} now serves {goal} (it served {was}); its briefs carry {goal}'s standing rules."
 
 
 def digest(root: Path, direction: str, text: str) -> str:

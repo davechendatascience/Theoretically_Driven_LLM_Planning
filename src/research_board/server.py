@@ -132,19 +132,23 @@ def open_direction(name: str, goal: str, idea: str, assessment: str = "", by: st
 
 @mcp.tool()
 def add_trail(direction: str, paper: str, tweak: str, component: str = "", quote: str = "",
-              at: str = "", expect: str = "", by: str = "director") -> str:
-    """Record one piece of research on a direction: a paper, and the tweak it suggests.
+              at: str = "", expect: str = "", by: str = "director", kind: str = "tweak") -> str:
+    """Record one piece of research on a direction: a paper, and what it suggests.
 
+    kind:      tweak (a change to a component), method (an instrument or a way to measure), or
+               set-aside (a paper you read and did not take up: earns nothing, and every brief on the
+               direction lists it so the next scout does not read it again).
     paper:     the work -- authors, year, title. Only what you read; never a guessed citation.
     at:        where in it -- section, figure, page.
     quote:     the passage, verbatim, from the source you read.
-    tweak:     what to change, and how.
-    component: the CMP- id in belief.yaml the tweak changes.
+    tweak:     what to change, and how; for a method, how to measure with it; for set-aside, why not.
+    component: the CMP- id in belief.yaml the tweak changes; for a method, the CMP-, TST- or CTR- id
+               it measures with.
     expect:    what a test would show if the tweak helps.
-    The trail earns the rules' points for a paper new to this direction, quoted, on a declared
-    component; otherwise it is kept, earning nothing, with the reason.
+    A tweak or method earns the rules' points for a paper new to this direction, quoted, naming
+    what is declared; otherwise it is kept, earning nothing, with the reason.
     """
-    return _move(play.add_trail, direction, paper, tweak, component, quote, at, expect, by)
+    return _move(play.add_trail, direction, paper, tweak, component, quote, at, expect, by, kind)
 
 
 @mcp.tool()
@@ -154,7 +158,9 @@ def feedback(about: str, text: str, kind: str = "note", reply_to: str | None = N
     a GOL- id reaches every brief on that goal: what has been tried and measured, before any
     direction holds it.
 
-    kind:     note, question (stays open until answered) or answer (reply_to the question).
+    kind:     note; question (stays open until answered); check -- a measurement you propose the
+              director make first, often free on data that exists (stays open until answered, or
+              until a finding replies to it); or answer (reply_to the question or check).
     reply_to: the FBK- id this answers or follows.
     by:       "director", or the scout's name.
     """
@@ -179,8 +185,9 @@ def spend(direction: str, action: str, target: str, expect: str = "") -> str:
     target: what the work is on: a CMP- to implement, or a CTR-/TST- whose results will count for
             this direction from now on.
     Refused on a direction not approved, short of the cost, or with a settled result nobody has
-    reflected on yet. From a spend on a contract until its result is in, each hour with no research
-    recorded on the board costs this direction the idle points the rules set now.
+    reflected on yet. From when the spend's first run starts until its result is in, each hour with
+    no research recorded on the board costs this direction the idle points the rules set now; a
+    spend whose run has not started is queued and costs nothing, so spend when you decide.
     """
     return _move(play.spend, direction, action, target, expect)
 
@@ -193,7 +200,7 @@ def reflect(direction: str, decision: str, why: str) -> str:
 
 
 @mcp.tool()
-def evidence(direction: str, artifact: str, summary: str) -> str:
+def evidence(direction: str, artifact: str, summary: str, reply_to: str | None = None) -> str:
     """Attach a measured finding to a direction: a data file or report you produced outside a
     declared test (a failure map, a table of a free check). The board keeps a copy and its digest,
     and scouts read it with ledger(evidence=...). It earns what research.yaml's earn.evidence sets
@@ -202,8 +209,16 @@ def evidence(direction: str, artifact: str, summary: str) -> str:
     artifact: a path in the project -- .json, .jsonl, .csv, .tsv, .txt, .md or .log, under 2 MB --
               that no component claims and no test runs.
     summary:  what it shows, in a line or two, with the number that matters.
+    reply_to: the FBK- check or question this measures; it then waits on no one.
     """
-    return _move(play.evidence, direction, artifact, summary)
+    return _move(play.evidence, direction, artifact, summary, "director", reply_to)
+
+
+@mcp.tool()
+def retarget(direction: str, goal: str, why: str) -> str:
+    """Point a direction at another of the human's goals -- the subgoal it was for, once committed.
+    Its trails, spends and feedback stay; its briefs then carry that goal's standing rules."""
+    return _move(play.retarget, direction, goal, why)
 
 
 @mcp.tool()

@@ -4,6 +4,38 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.3 — 2026-10-21 · the research loop: queued spends, checks, retargets, papers set aside
+
+The last of three patch releases from a project's notes on 0.13.0; 0.14.0 follows.
+
+- **A spend waits from its first run.** Funding a test four hours before the GPU freed charged the
+  direction for every research-free hour of the wait. A spend's idle clock now starts when a run
+  that counts for it starts: a run of the test it names or, naming none, of a test that can
+  measure a contract it targets, whether it runs in the background or has been recorded. Until
+  then the spend is queued, costs nothing, and the board says so. The runner now records when each
+  run started. A spend made before 0.13.3 fixed no start and waits from when it was recorded, as
+  it did: no balance already on a board changes.
+- **A scout's check waits on the director.** "WORTH TESTING FIRST: a free check of X" landed as a
+  note, so nothing showed it waiting. `feedback(..., kind="check")` records a measurement a scout
+  proposes; it is listed with the open questions until the director answers it or attaches what
+  it measured with `evidence(..., reply_to="FBK-...")`. A scout's check counts as research for the
+  idle clock, as a question does.
+- **`retarget(direction, goal, why)`.** A direction opened under a parent goal before its subgoal
+  was committed stayed "for" the parent for good. The director can now point it at a committed
+  goal; its records stay, and its briefs carry that goal's standing rules.
+- **Trail kinds.** `add_trail(..., kind="method")` records a way to measure -- an instrument, a
+  probe -- naming the component, test or contract it measures with, and earns like a tweak.
+  `kind="set-aside"` records a paper read and not taken up, with why: it earns nothing, every brief
+  on the direction lists it under "Papers read and set aside", and a later scout may still take it
+  up.
+- **A run that read `.research/` stops recording.** A test that opened the research ledger without
+  declaring it was not caught: its evidence rested on the ledger, and recording moved it. The
+  board now refuses to record while the read hook saw the latest run of a declared test open a
+  file in `.research/`, and says to change the test and run it again.
+- **The theory.** DEF-research-ledger restates what research is, when a spend waits, and the
+  no-record rule. That set aside BRN-research-results-follow-their-spend's trials until it is
+  verified again.
+
 ## 0.13.2 — 2026-10-21 · messages that say what to do next
 
 The second of three patch releases from a project's notes on 0.13.0.

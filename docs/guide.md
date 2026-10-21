@@ -656,23 +656,27 @@ free; its results belong to no direction.
 | `board(direction, section, part, item)` | all | every direction in the order to act on it; with a `DIR-` id, that direction's brief, whose head always fits: the goal and the human's standing rules for it, the director's digest, open questions, the latest feedback, the papers already cited and an index; `section=` pages the rest (trails, spends, feedback, evidence, goal, directions, components); `item=` serves one record whole |
 | `ledger(run, contract, node, evidence, limit, fields)` | all | records from all three ledgers, what a run captured (stdout, stderr, `result.json`, the command) and a finding the director attached; `fields="metrics"` for a run too long to read whole; never a source file |
 | `open_direction(name, goal, idea, assessment)` | all | a new direction for a goal, at 0 points |
-| `add_trail(direction, paper, tweak, component, quote, at, expect)` | all | earns the rules' points for a paper new to the direction, quoted, on a declared component; otherwise kept, earning nothing, with the reason |
-| `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, or an answer, addressed to a goal, direction, trail or spend; a note on a goal reaches every brief on it |
+| `add_trail(direction, paper, tweak, component, quote, at, expect, kind)` | all | a `tweak` (a component change) or a `method` (a way to measure, naming the component, test or contract it measures with) earns the rules' points for a paper new to the direction, quoted, naming what is declared; otherwise kept, earning nothing, with the reason. `set-aside` records a paper read and not taken up, with why: it earns nothing, and every brief lists it |
+| `feedback(about, text, kind, reply_to)` | all | a note, a question for the director, a check (a measurement proposed for the director to make first), or an answer, addressed to a goal, direction, trail or spend; a note on a goal reaches every brief on it |
 | `approve(target, approved, why, rank)` | director | a direction must be approved before anything is spent on it; `rank` orders them; a rejected trail's points stop counting |
 | `spend(direction, action, target, expect)` | director | takes the action's cost and fixes the contracts the target names and the idle terms; runs measured on them afterwards are the direction's result |
 | `reflect(direction, decision, why)` | director | continue, halt or pivot; required after a result settles, before the next spend |
-| `evidence(direction, artifact, summary)` | director | attaches a measured finding -- a data file or report no component claims and no test runs; the board keeps a copy and its digest; earns `earn.evidence` (0 by default); never a result |
+| `evidence(direction, artifact, summary, reply_to)` | director | attaches a measured finding -- a data file or report no component claims and no test runs; the board keeps a copy and its digest; earns `earn.evidence` (0 by default); never a result. `reply_to` closes the check or question it measured |
+| `retarget(direction, goal, why)` | director | points a direction at another goal in `goals.yaml` -- the subgoal it was for, once committed; its records stay where they are |
 | `digest(direction, text)` | director | the facts so far, at most 4000 characters, that every brief on the direction leads with |
 
 * **Rules in `research.yaml`, read from HEAD.** `focus` (the goal pursued now), `costs` per
   action, what a trail `earn`s, what an `idle` hour costs, and how many `scouts` run at once. An
   uncommitted edit changes no cost and is named on the board, and the board names the commit that
   last changed the rules.
-* **An idle hour costs the direction waiting on a result.** From a spend on a contract until its
+* **An idle hour costs the direction waiting on a result.** From the first run of a spend on a
+  contract -- a run of the test it names, or one measuring a contract it targets -- until its
   result says something (anything but insufficient or no evidence), or the direction is halted,
   every hour in which nobody records research costs that direction `idle.per_hour` points (default
-  1). Research means an earning trail, a new direction, a measured finding, a scout's question or
-  an answer; each keeps research running for `idle.running_minutes` (default 30). A note, a trail
+  1). Until a run starts the spend is queued and costs nothing, so a test may be funded before the
+  machine frees; a spend made before 0.13.3 waits from when it was recorded, as it did. Research
+  means an earning trail, a new direction, a measured finding, a scout's question or check, or an
+  answer; each keeps research running for `idle.running_minutes` (default 30). A note, a trail
   that earned nothing and the director's verdicts do not count. Idle time is
   totalled, so a point goes at the first idle hour, a second at the second, and so on. A spend keeps
   the idle terms in effect when it was made, so a later edit of the rules reprices nothing already
@@ -700,7 +704,7 @@ free; its results belong to no direction.
   only the director can answer means the contract dropped a metric the research needs.
 * **Moves nothing else.** Recording writes the ledger and the page in `.research/` and nothing
   else: no evidence, no trial, no declaration, no commit. Where a component claims or a test names
-  a file there, it records nothing.
+  a file there, or the latest run of a declared test opened one, it records nothing.
 
 ```text
 # Research board

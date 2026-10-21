@@ -176,6 +176,8 @@ def run_test(
     claimed = sorted({entry for comp in decl.components.values() for entry in comp.code})
     snapshot = Snapshot.take(root, claimed, test.run, test.reads)
 
+    # when the run started, on each record it ends with: a research spend's wait starts here
+    started = utc_now()
     try:
         completed = subprocess.run(
             command, cwd=root, env=env, shell=True,
@@ -197,7 +199,7 @@ def run_test(
     (artifact_dir / "stdout.txt").write_text(stdout or "", encoding="utf-8")
     (artifact_dir / "stderr.txt").write_text(stderr or "", encoding="utf-8")
     (artifact_dir / "command.txt").write_text(
-        f"{command}\nexit={exit_code}\ntest={test.ref}\nat={utc_now()}\n", encoding="utf-8"
+        f"{command}\nexit={exit_code}\ntest={test.ref}\nstarted={started}\nat={utc_now()}\n", encoding="utf-8"
     )
     opened = readlog.harvest(root, artifact_dir / "reads.log")
     readlog.write(artifact_dir, opened)
@@ -272,6 +274,7 @@ def run_test(
                 "artifact_uri": artifact_uri,
                 "artifact_hash": artifact_hash,
                 "stamp": stamp,
+                "started": started,
             })
 
     ids = store.append_trials(records)

@@ -106,6 +106,9 @@ def _spend_line(board: B.Board, spend: dict[str, Any]) -> str:
             f"{_plural(int(spend.get('cost') or 0), 'point')} · at {spend.get('commit') or '?'}")
     if spend.get("expect"):
         line += f" · expect: {_short(spend['expect'])}"
+    d = board.directions.get(str(spend.get("direction")))
+    if d is not None and d.idle is not None and spend["id"] in d.idle.queued:
+        line += " · queued: its idle clock starts with its first run"
     result = _result_line(board, spend)
     return line + (f"\n    result: {result}" if result else "")
 
@@ -187,9 +190,10 @@ def render_board(board: B.Board) -> str:
         lines += [_feedback_line(f, 240) for f in items[-3:]]
     questions = board.open_questions()
     if questions:
-        lines += ["", "## Open questions for the director"]
+        lines += ["", "## Open questions and checks for the director"]
         for q in questions:
-            lines.append(f"- {q['id']} · {q.get('by')} on {q.get('about')}: \"{_short(q.get('text'), 240)}\"")
+            lines.append(f"- {q['id']} · {q.get('by')} · {q.get('type')} on {q.get('about')}: "
+                         f"\"{_short(q.get('text'), 240)}\"")
     nexts = _next(board)
     if nexts:
         lines += ["", "next:"] + [f"  - {n}" for n in nexts]
@@ -199,7 +203,8 @@ def render_board(board: B.Board) -> str:
 def _trail_lines(board: B.Board, trail: dict[str, Any]) -> list[str]:
     points = board.points(trail)
     worth = f"+{points}" if points else "0 points"
-    lines = [f"### {trail['id']} · by {trail.get('by')} · {worth}"]
+    kind = trail.get("type") or B.TWEAK
+    lines = [f"### {trail['id']} · {'' if kind == B.TWEAK else kind + ' · '}by {trail.get('by')} · {worth}"]
     paper = trail.get("paper", "")
     if trail.get("at"):
         paper += f", {trail['at']}"
@@ -207,7 +212,10 @@ def _trail_lines(board: B.Board, trail: dict[str, Any]) -> list[str]:
     if trail.get("quote"):
         lines.append(f"says:   \"{trail['quote']}\"")
     component = trail.get("component") or "(no component)"
-    lines.append(f"tweak:  {component} -- {trail.get('tweak')}")
+    if kind == B.SET_ASIDE:
+        lines.append(f"why not: {trail.get('tweak')}")
+    else:
+        lines.append(f"{'method' if kind == B.METHOD else 'tweak'}:  {component} -- {trail.get('tweak')}")
     if trail.get("expect"):
         lines.append(f"expect: {trail['expect']}")
     if trail.get("unearned"):
@@ -229,6 +237,8 @@ def _feedback_line(item: dict[str, Any], limit: int | None = None, pointer: bool
         what = f"{kind} {about}" + (f" (rank {item['rank']})" if item.get("rank") else "")
     elif kind in B.DECISIONS:
         what = f"reflection: {kind}"
+    elif kind == B.RETARGET:
+        what = f"retarget: from {item.get('from_goal')} to {item.get('goal')}"
     else:
         what = f"{kind} on {about}" + (f", replying to {item['reply_to']}" if item.get("reply_to") else "")
     text = item.get("text") if limit is None else _short(item.get("text"), limit)
@@ -247,7 +257,8 @@ def _head_limit(item: dict[str, Any]) -> int:
 def _evidence_line(item: dict[str, Any], limit: int | None = 240) -> str:
     worth = f"+{item['points']}" if item.get("points") else "0 points"
     summary = item.get("summary") if limit is None else _short(item.get("summary"), limit)
-    return (f"- {item['id']} · by {item.get('by')} · {worth} · {item.get('artifact')} "
+    reply = f" · replying to {item['reply_to']}" if item.get("reply_to") else ""
+    return (f"- {item['id']} · by {item.get('by')} · {worth}{reply} · {item.get('artifact')} "
             f"(sha256 {item.get('sha256')}): \"{summary}\" -- ledger(evidence=\"{item['id']}\")")
 
 
@@ -382,17 +393,24 @@ def render_brief(board: B.Board, d: B.Direction) -> str:
 
     optional: list[tuple[list[str], str]] = []
     if questions:
-        optional.append((["", "## Open questions on it, waiting on the director"]
+        optional.append((["", "## Open questions and checks on it, waiting on the director"]
                          + [_feedback_line(q, 1200, pointer=True) for q in questions], "feedback"))
     open_ids = {q["id"] for q in questions}
     latest = [f for f in d.feedback if f["id"] not in open_ids][-5:]      # the open ones are above, whole
     if latest:
         optional.append((["", "## The latest feedback, newest last"]
                          + [_feedback_line(f, _head_limit(f), pointer=True) for f in latest], "feedback"))
-    if d.trails:
+    cited = [tr for tr in d.trails if tr.get("type") != B.SET_ASIDE]
+    if cited:
         optional.append((["", "## Papers already cited here -- a trail on one of these earns nothing"]
                          + [f"- {tr['id']} · {_short(tr.get('paper'), 110)} · "
-                            f"{'+' + str(board.points(tr)) if board.points(tr) else '0'}" for tr in d.trails], "trails"))
+                            f"{'+' + str(board.points(tr)) if board.points(tr) else '0'}"
+                            + (" · method" if tr.get("type") == B.METHOD else "") for tr in cited], "trails"))
+    put_aside = [tr for tr in d.trails if tr.get("type") == B.SET_ASIDE]
+    if put_aside:
+        optional.append((["", "## Papers read and set aside -- read one again only with a new reason"]
+                         + [f"- {tr['id']} · {_short(tr.get('paper'), 110)} · why not: {_short(tr.get('tweak'), 160)}"
+                            for tr in put_aside], "trails"))
     if d.evidence:
         optional.append((["", "## Measured findings"] + [_evidence_line(e, 200) for e in d.evidence], "evidence"))
     if goal_items:

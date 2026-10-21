@@ -32,15 +32,18 @@ board() → scouts (background) → approve → spend → build, run_test → bo
    for the direction. Work without spending is always allowed, but its results belong to no
    direction. Spend on a **test** (`TST-...`) rather than its contract when several arms share a
    contract: a spend on a test counts that test's runs only.
-   **Spend right before you launch, and launch long runs in the background:**
-   `run_test(test_id, wait=False)` answers at once with the RUN id and records the trials when the
-   run ends; `status(view="runs")` shows it until then. Give a run of hours its `timeout_s`.
-   **Keep scouts out while a test you paid for waits on its result.** Every hour with no research
-   recorded on the board costs the waiting direction a point. Research is an earning trail, a new
-   direction, a measured finding, a scout's question or an answer -- not a note. Each keeps research
-   running for `running_minutes`. Send scouts when you spend, and send the next one when one
-   returns. The board's `next:` line says when the clock is running and when the next point goes.
-   The clock stops when the result is in, or when you halt the direction.
+   **Spend when you decide, and launch long runs in the background:** a spend's idle clock starts
+   with its first run, not with the spend, so a test funded hours before the machine frees waits
+   queued and costs nothing. `run_test(test_id, wait=False)` answers at once with the RUN id and
+   records the trials when the run ends; `status(view="runs")` shows it until then. Give a run of
+   hours its `timeout_s`.
+   **Keep scouts out while a test you paid for runs.** From its first run until its result is in,
+   every hour with no research recorded on the board costs the waiting direction a point. Research
+   is an earning trail, a new direction, a measured finding, a scout's question or check, or an
+   answer -- not a note, and not a paper set aside. Each keeps research running for
+   `running_minutes`. Send scouts when the run starts, and send the next one when one returns. The
+   board's `next:` line says when the clock is running and when the next point goes. The clock
+   stops when the result is in, or when you halt the direction.
 5. **Reflect when a result settles:** `reflect(direction, continue|halt|pivot, why)`. Nothing more
    is spent on that direction until you do. A pivot halts it; open the next one with
    `open_direction(..., pivot_from=...)`.
@@ -62,6 +65,9 @@ useful as a direction grows:
   default) and is never a spend's result.
 - **Notes on a goal** -- `feedback("GOL-...", text)` reaches every brief on that goal: what has been
   measured before any direction holds it.
+- **`retarget(direction, goal, why)`** -- a direction opened under a parent goal before the
+  subgoal it was for was committed: point it at the subgoal once it lands. Its records stay; its
+  briefs then carry the subgoal's standing rules.
 
 The human's standing rules ("actions are executed exactly, with no noise") belong in `goals.yaml`
 under the goal as `constraints:`, which every brief carries. They are the human's: draft them and
@@ -69,8 +75,10 @@ leave them for the human to commit, as you would a goal.
 
 ## Answering scouts
 
-- Open questions are listed on the board. Answer with
-  `feedback(about, text, kind="answer", reply_to="FBK-...")`.
+- Open questions and checks are listed on the board. Answer with
+  `feedback(about, text, kind="answer", reply_to="FBK-...")`. A check is a measurement a scout
+  proposes you make first; when you make it, attach what you measured in reply:
+  `evidence(direction, artifact, summary, reply_to="FBK-...")`. Either closes it.
 - An answer carries no weight: it is context, not a result.
 - A question only you could answer means the evidence ledger dropped something the research
   needs. Answer it, then add that metric to the contract, so the next run records it and the next
