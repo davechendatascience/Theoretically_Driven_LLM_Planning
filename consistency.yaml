@@ -147,12 +147,16 @@ axioms:
     goal: GOL-sound-designs
     statement: >-
       A declared or staged node that cannot take its place in the premise
-      graph, and a declared or staged branch whose subject belief.yaml no
-      longer declares, are reported; neither is dropped in silence.
+      graph, a declared or staged branch whose subject belief.yaml no longer
+      declares, and a value a declaration file gives a key in a mapping that
+      gives the same key again, are reported; none is dropped in silence.
     rationale: >-
       A defect nobody sees reads exactly like a design that holds: a lemma
       whose premise was deleted, or a branch left behind by a removed
-      component, would otherwise vanish from every view and every decision.
+      component, would otherwise vanish from every view and every decision. So
+      would a component's list of claimed files followed, after a long comment,
+      by a second list under the same key: the reader keeps one, and the files
+      in the other belong to no component, with nothing said.
 
   - id: AXM-coverage-binds-first
     domain: diagnosis
@@ -470,6 +474,19 @@ definitions:
       A trial record in the evidence ledger is recorded against exactly one
       contract, and enters the slices of that contract and of no other.
 
+  - id: DEF-declaration-load
+    term: Declaration load
+    meaning: >-
+      How a declaration file -- belief.yaml, goals.yaml, consistency.yaml or
+      research.yaml -- is read: as YAML, where a mapping that gives one key
+      more than once keeps the value given last, and the earlier values are
+      dropped. Every such repeat is reported as an issue of the file it is in:
+      belief.yaml's, goals.yaml's and consistency.yaml's among their
+      declaration issues, research.yaml's among the research board's issues
+      with its rules. The issue names the key, the id of the nearest entry
+      holding it, and the lines at which the key is given. A merge key, and a
+      key overriding what a merge key brought, are not a repeat.
+
   - id: DEF-measured-record
     term: Measured record
     meaning: >-
@@ -477,9 +494,13 @@ definitions:
       artifact the server captured from the run and that artifact's hash. Its
       metrics are those the run wrote into that artifact; when the run wrote
       none and its test declares the metric passed, its only metric is passed,
-      read from the exit code the server captured. A record is scored against
-      its contract's rule from the metrics it carries alone: one that lacks a
-      metric the rule reads is excluded, and no value is supplied for it.
+      read from the exit code the server captured. A run of a test that
+      declares parameters is given one of the values the test declares for
+      each of them, runs the test's run line with each value in place of its
+      name, and every measured record it ends with carries the values it was
+      given. A record is scored against its contract's rule from the metrics it
+      carries alone: one that lacks a metric the rule reads is excluded, and no
+      value is supplied for it.
 
   - id: DEF-set-aside
     term: Set-aside record
@@ -702,7 +723,10 @@ definitions:
       of them is a trial record, and neither is the page the board writes
       beside them, nor the copy of the file a measured finding attaches, which
       the board keeps in .research/ beside the record. A direction is a line
-      of research. A spend is recorded on one direction
+      of research, and serves one goal at a time: the goal it was opened for,
+      until a retarget recorded on it names another, and from then on the
+      goal the latest retarget recorded on it names. A spend is recorded on
+      one direction
       and names, when it is recorded, the contracts it targets: the contract
       it names, or each contract the test it names can measure at the head
       revision then, or none; that set does not change afterwards; and, when
@@ -742,7 +766,13 @@ definitions:
       at which its result, computed as above from the records recorded by
       then, is neither insufficient evidence nor no evidence, or until its
       direction is halted or rejected; until a run that counts for it has
-      started, a spend that waits from its first run does not wait. A direction
+      started, a spend that waits from its first run does not wait; and no
+      spend waits while the goal its direction serves then is paused. A goal
+      is paused from the time of a commit at which goals.yaml marks it paused
+      and the commit before did not, until the time of the next commit at
+      which goals.yaml no longer marks it paused -- or, while no later commit
+      does, until now -- among the commits in the head revision's history
+      that change goals.yaml. A direction
       is idle at a moment when a spend on it waits then and no research
       record was recorded within that spend's running time before it. A
       direction's balance at a moment is the points earned by its trails that
@@ -1044,14 +1074,17 @@ branches:
     claim_type: contract
     statement: >-
       Every measured record carries a reference to the artifact the server
-      captured and that artifact's hash. Its metrics come from that artifact --
+      captured and that artifact's hash, and, for a run given values for its
+      test's parameters, those values. Its metrics come from that artifact --
       or, for a test that declares the metric passed and whose run wrote none,
       from the exit code the server captured -- and a record that lacks a metric
       its contract's rule reads is excluded, never given a value.
     premises: [AXM-no-belief-write-path, DEF-belief-eligible, DEF-measured-record]
     derivation_rule: >-
       By DEF-measured-record a measured record carries a reference to the
-      artifact the server captured and its hash, and its metrics are those the
+      artifact the server captured and its hash, and every measured record a
+      run given parameter values ends with carries the values it was given;
+      and its metrics are those the
       run wrote into that artifact, or, when it wrote none and its test declares
       passed, passed alone from the exit code the server captured; and a record
       is scored from the metrics it carries alone, so one lacking a metric its
