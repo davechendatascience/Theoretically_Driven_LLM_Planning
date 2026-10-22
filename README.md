@@ -9,13 +9,13 @@ result exists only once a tool has measured it, and a design holds only once it 
 attempts to refute it.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-v0.13.7-dark.png">
-  <img alt="Goal snapshot of this repository at e54af04: 20 of 20 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-v0.13.7-light.png">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/goal-snapshot-v0.14.0-dark.png">
+  <img alt="Goal snapshot of this repository at 82f8de3: 21 of 21 design branches and 4 of 4 lemmas proven, 14 of 14 components governed by a design, and the ten requirements (axioms) behind the goal GOL-sound-designs" src="docs/assets/goal-snapshot-v0.14.0-light.png">
 </picture>
 
 <sub>**This repository, drawn by its own plugin.** An AI agent built TDLP under TDLP, so the repo is
 its own demo. The picture is a goal snapshot, `snapshot(focus="GOL-sound-designs")`, taken at
-`e54af04` (v0.13.7, 2026-10-22): every design claim proven, every component covered by a design,
+`82f8de3` (v0.14.0, 2026-10-22): every design claim proven, every component covered by a design,
 and on the left the ten requirements one of its five goals rests on. A snapshot names its commit
 and does not update; take one yourself in the [tour](#try-it-in-five-minutes).</sub>
 
@@ -40,13 +40,13 @@ What that looks like, from this repo's own tools:
 ```text
 status(view="goals")
 GOL-sound-designs  MET -- A design claim counts as proven only after falsification probes judged from ...
-  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0569 (+105 stale)
+  CTR-designs-are-sound [unbucketed] supported gate 5/5 passed in RUN-0593 (+105 stale)
 
 status(view="tree")
-basis: verification_trials×72 set=c20e09 · proven=24 obligations=0 refuted=0
+basis: verification_trials×75 set=669b48 · proven=25 obligations=0 refuted=0
 ```
 
-`RUN-0569` is the run the verdict rests on. `+105 stale` counts older results kept on record that no
+`RUN-0593` is the run the verdict rests on. `+105 stale` counts older results kept on record that no
 longer count, because what they measured has changed since.
 
 ### 2. Systems-engineered: a V-model, with you at the top
@@ -54,13 +54,13 @@ longer count, because what they measured has changed since.
 Every stage of the classic V has a home, and each is checked by something other than the agent's
 word. Your part is the top row. The agent owns the rest.
 
-| Stage | Declared | Checked by | This repo at `e54af04` |
+| Stage | Declared | Checked by | This repo at `82f8de3` |
 |---|---|---|---|
 | **Needs** (yours) | goals, and the interfaces between them, in `goals.yaml` | acceptance tests the agent may not edit | 5 goals, 1 interface: **6/6 met** |
-| **Requirements** | axioms and definitions, each axiom naming the goal it serves | every design claim must trace back to them | 18 axioms, 28 definitions, every axiom traced to a goal |
+| **Requirements** | axioms and definitions, each axiom naming the goal it serves | every design claim must trace back to them | 18 axioms, 29 definitions, every axiom traced to a goal |
 | **Architecture** | components and the interfaces between them, in `belief.yaml` | interface tests | 14 components, 4 interfaces: **4/4 supported** |
-| **Design** | lemmas and design decisions, each argued from the requirements | refutation attempts by an independent verifier | 24 claims: **24/24 proven**, 0 refuted |
-| **Build and test** | the files each component owns | component tests, run by the server | 14 contracts: **14/14 supported**, 551 cases |
+| **Design** | lemmas and design decisions, each argued from the requirements | refutation attempts by an independent verifier | 25 claims: **25/25 proven**, 0 refuted |
+| **Build and test** | the files each component owns | component tests, run by the server | 14 contracts: **14/14 supported**, 563 cases |
 | **Configuration control** | declarations read from the committed revision only | each result stamped with the file contents it ran on | uncommitted edits change no verdict |
 
 It is traced end to end. A design decision names the component it governs and cites the test
@@ -134,7 +134,7 @@ words, and the agent picks the tools:
 | "Are this repo's goals met?" | each goal met, not met, insufficient or stale, with the run that says so | `status(view="goals")` |
 | "Take a goal snapshot of GOL-sound-designs." | `.graph-snapshot/snapshot.html`, the page at the top of this README; open it in a browser and click around | `snapshot(focus=...)` |
 | "Why is BRN-goal-guard proven?" | its proof tree, down to the requirements it rests on | `status(view="tree", subject=...)` |
-| "What did the v0.13.7 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="tdlp--v0.13.6")` |
+| "What did the v0.14.0 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="tdlp--v0.13.7")` |
 | "What should be tested next?" | this round's tests, and why every other test was skipped | `status(view="plan")` |
 | "Send scouts to look for research directions on GOL-sound-designs." | directions on the research board, each with the papers behind it and the tweaks they suggest, in `.research/BOARD.md` | `board()`, the `research-scout` agent |
 | "Let me watch the research board." | the board live in your browser, with what each scout is doing; or, on request, a private Artifact you can comment on | `research-board serve`, `research-board export` |
