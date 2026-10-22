@@ -4,6 +4,47 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.14.0 — 2026-10-22 · a live research board
+
+BOARD.md is a page to read after the fact. On a board of 28 directions it listed everything, in one
+order, every time. Now the person can watch the board as it changes.
+
+- **`research-board serve`** shows the board in a browser on this machine.
+  - It is rebuilt when a ledger, a background run, HEAD or a declaration moves, and every 15 s, and
+    pushed only when it changed.
+  - Every state, balance, result and time on it is the one the board's build computed, at the commit
+    and moment the page names; durations are measured to that moment.
+  - The page carries the prototype that came with the feature request: lanes in the board's order,
+    a goal filter, what waits on the director, 72 hours of activity, search with suggested terms,
+    and a drawer per direction with its digest, spends, results and timeline.
+  - An update never moves a card or redraws an open direction under the reader: "Show" applies it.
+    Ids can be copied.
+- **What the scouts are doing** (`--scouts claude-code`), read from Claude Code's transcripts before
+  a scout records anything.
+  - A scout is working while its transcript is being written.
+  - The directions it works on are taken from its own trails and feedback, not its brief.
+  - Each call is counted once; the transcripts write every call twice.
+- **`research-board export`** writes `.research-board/board.html`, `board.json` and a `.gitignore`:
+  the board as of now, as a page a Claude Artifact can publish.
+  - The agent publishes it only when asked, as a private Artifact.
+  - The person can comment on a direction or a question. The director records each comment on the
+    board, naming the person as its author.
+- **Safe by construction.**
+  - Serving writes nothing, and its git commands never refresh git's index.
+  - It binds 127.0.0.1 and refuses a request addressed to another host, which stops DNS rebinding.
+  - Only its own nonce-tagged scripts run, and it loads nothing from another host. Mermaid 10.9.8,
+    patched against every advisory for 10.x, ships with it.
+  - A diagram is drawn only from a digest, which only the director writes. A mermaid block a scout
+    copied from the web is shown as code.
+  - The export carries no process id, absolute path or exception text.
+- **The theory says what the view may show.**
+  - DEF-live-board defines what the view shows and what it and the export write.
+  - BRN-live-board-is-the-board claims the view shows only the build's states and changes no
+    belief, proof state or research record.
+  - The verifier doubted the first statement: nothing said the export's files are not trial
+    records. Restated, it proved it: 25 of 25 proven.
+  - Twelve failure modes are declared.
+
 ## 0.13.7 — 2026-10-22 · the board reads only what its results use
 
 Speed, with every answer unchanged. On a project with a 1.43 GB evidence ledger (688,231 trials, 152

@@ -83,6 +83,28 @@ under it, committed by the human, stops every wait on its directions from that c
 points -- and refuses spends on them until it is set active again; research on them goes on. If
 the human sets a goal aside in words, propose the line, don't keep paying the clock.
 
+## Showing the board to the person
+
+When the person wants to watch the board, not read your summary of it:
+
+- **Live, on this machine.** Run it in the background and give them the address it prints:
+  `uvx --from "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.14.0" research-board serve --root <project> --scouts claude-code`.
+  - It shows the board as the board computes it, rebuilt when the ledgers move and every 15 s.
+    `--scouts claude-code` adds what each scout is doing before it records anything.
+  - It binds 127.0.0.1. For a remote machine, suggest an SSH tunnel; never bind another address
+    unless they ask.
+- **As a Claude Artifact, only when they ask.** `research-board export --root <project>` writes
+  `.research-board/board.html`, the board as of now; scouts are left out unless `--include-scouts`.
+  - Publish that file as a private Artifact with `capabilities: {comments: {"composer_only": true}}`,
+    so they can comment on a direction or a question. Republish the same file to update it.
+  - It carries every direction and finding. Never share it yourself, and say that every published
+    version is kept.
+- **Their comments are answers you record.** Read the threads with `ArtifactComments`. For each
+  comment the platform attributes to them, record it with `feedback()` on the direction or question
+  it is anchored to: `kind="answer"` with `reply_to` for a question, `by="human"`, and their words
+  followed by "(Artifact comment <thread id>, relayed by the director)". A comment is not on the
+  board until you record it.
+
 ## Answering scouts
 
 - Open questions and checks are listed on the board. Answer with

@@ -1009,3 +1009,215 @@ def test_a_recording_move_saves_no_content_digest(research, clock):
     assert moved == {".research/ledger.jsonl", ".research/BOARD.md"}
     result = B.build(research).results[last_spend(research)]
     assert "stale" in result.states.values(), "the retrained checkpoint was judged, by its content"
+
+
+# ---------- the live board and its export (DEF-live-board) ----------
+
+import http.client
+import threading as _threading
+
+from research_board.data import board_data
+from research_board.live import EXPORT_DIR, export
+from research_board.live.scouts import ScoutWatch, project_folder
+from research_board.live.server import LiveBoard, start
+
+
+class Served:
+    """research-board serve on a free port, its loop not running: the test moves it by hand."""
+
+    def __init__(self, root: Path, **kwargs) -> None:
+        self.server, self.live = start(root, "127.0.0.1", 0, follow=False, **kwargs)
+        self.port = self.server.server_address[1]
+        self.thread = _threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def get(self, path: str, host: str | None = None) -> tuple[int, dict, bytes]:
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        conn.request("GET", path, headers={"Host": host or f"127.0.0.1:{self.port}"})
+        reply = conn.getresponse()
+        if path == "/events":                              # the first events, then hang up
+            body = b""
+            while body.count(b"\n\n") < 2:
+                body += reply.read1(65536)
+        else:
+            body = reply.read()
+        conn.close()
+        return reply.status, dict(reply.getheaders()), body
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+
+
+@pytest.fixture
+def served(research, clock, monkeypatch):
+    monkeypatch.delenv("GIT_OPTIONAL_LOCKS", raising=False)
+    did = funded(research)
+    play.spend(research, did, "test", "TST-pick")
+    next_second()
+    measure(research)
+    instance = Served(research)
+    yield instance
+    instance.close()
+
+
+def test_the_live_view_serves_the_board_its_build_computed(served, research):
+    status, headers, body = served.get("/board.json")
+    shown = json.loads(body)
+    expected = board_data(B.build(research), mode="live")      # the same clock: the same moment
+    head = git(research, "rev-parse", "HEAD").stdout.strip()
+    assert status == 200
+    assert shown["meta"]["commit"] == head and shown["meta"]["generated_at"] == expected["meta"]["generated_at"]
+    shown["meta"].pop("build_seconds")
+    assert shown == json.loads(json.dumps(expected, default=str))
+    status, headers, page = served.get("/")
+    nonce = re.search(r"'nonce-([^']+)'", headers["Content-Security-Policy"]).group(1)
+    assert status == 200 and f'nonce="{nonce}"' in page.decode()
+    assert "https://" not in page.decode().split("<script", 1)[0], "the live page loads nothing from another host"
+
+
+def test_serving_the_live_view_writes_nothing(served, research, clock):
+    import os
+
+    before, index = _tree(research), (research / ".git" / "index").read_bytes()
+    for path in ("/", "/board.json", "/scouts.json", "/static/mermaid.min.js", "/events"):
+        assert served.get(path)[0] == 200, path
+    clock.advance(minutes=20)
+    served.live.rebuild()
+    served.live.tick()
+    assert os.environ["GIT_OPTIONAL_LOCKS"] == "0"
+    assert _tree(research) == before
+    assert (research / ".git" / "index").read_bytes() == index
+
+
+def test_the_server_answers_only_requests_addressed_to_it(served):
+    assert served.get("/board.json", host="evil.example")[0] == 403
+    assert served.get("/board.json", host="evil.example:8765")[0] == 403
+    assert served.get("/", host=f"localhost:{served.port + 1}")[0] == 200     # a tunnel's port
+    assert served.get("/board.json", host="[::1]:9")[0] == 200
+
+
+def test_a_board_is_pushed_only_when_it_changed(research, clock):
+    live = LiveBoard(research, period=15.0)
+    assert live.rebuild() and live.version == 1
+    assert not live.rebuild() and live.version == 1, "nothing moved: no new board"
+    play.open_direction(research, "another-idea", "GOL-grasp", "Try another idea")
+    assert live.rebuild() and live.version == 2
+
+
+def test_a_mermaid_block_a_scout_wrote_is_shown_as_code(research):
+    block = "```mermaid\nflowchart LR\n  A[click] --> B\n```"
+    play.open_direction(research, "copied", "GOL-grasp", f"From a page:\n\n{block}", by="scout-1")
+    did = "DIR-copied"
+    play.add_trail(research, did, "A paper", f"tweak\n\n{block}", "CMP-grasp", QUOTE, by="scout-1")
+    play.feedback(research, did, f"see this\n\n{block}", by="director")      # a scout can claim to be one
+    play.digest(research, did, f"facts\n\n{block}")
+    data = board_data(B.build(research))
+    d = next(x for x in data["directions"] if x["id"] == did)
+    assert "```mermaid" in d["digest"], "the director's digest keeps its diagram"
+    d.pop("digest")
+    data["feed"] = [f for f in data["feed"] if f["kind"] != "digest"]
+    assert "```mermaid" not in json.dumps(data)
+    assert "```text" in d["idea"] and "```text" in d["trails"][0]["tweak"] and "```text" in d["feedback"][0]["text"]
+
+
+def test_an_export_writes_its_three_files_and_nothing_else(research):
+    funded(research)
+    before = _tree(research)
+    said = export(research)
+    moved = {p for p in set(before) | set(_tree(research)) if before.get(p) != _tree(research).get(p)}
+    assert moved == {f"{EXPORT_DIR}/board.html", f"{EXPORT_DIR}/board.json", f"{EXPORT_DIR}/.gitignore"}, said
+    assert git(research, "status", "--porcelain", "--", EXPORT_DIR).stdout == "", "git leaves the directory alone"
+    page = (research / EXPORT_DIR / "board.html").read_text(encoding="utf-8")
+    assert not page.lstrip().lower().startswith(("<!doctype", "<html")), "a fragment an Artifact publishes"
+    assert 'integrity="sha384-' in page and '"mode": "snapshot"' in page
+
+
+def test_an_export_writes_nothing_where_a_declaration_names_its_files(research):
+    text = (research / "belief.yaml").read_text(encoding="utf-8").replace(
+        "    code: [grasp.py]\n", f"    code: [grasp.py, {EXPORT_DIR}/board.json]\n", 1)
+    (research / "belief.yaml").write_text(text, encoding="utf-8")
+    git(research, "commit", "-qam", "a component claims the export's data")
+    said = export(research)
+    assert said.startswith("nothing written") and "CMP-grasp" in said
+    assert not (research / EXPORT_DIR).exists()
+
+
+def test_an_export_writes_nothing_where_a_tests_latest_run_read_its_files(research):
+    from component_belief.store import Store
+
+    run_id = measure(research)
+    (Store(research).artifacts_dir / run_id / "reads.json").write_text(
+        json.dumps(["eval/pick.py", f"{EXPORT_DIR}/board.json"]), encoding="utf-8")
+    said = export(research)
+    assert said.startswith("nothing written") and f"TST-pick ({run_id})" in said
+    assert not (research / EXPORT_DIR).exists()
+
+
+def test_an_exported_board_carries_no_process_id_path_or_exception(research, clock, monkeypatch):
+    from component_belief.store import Store
+
+    did = funded(research)
+    play.spend(research, did, "test", "TST-pick")
+    launched(research, "TST-pick", clock.at)
+
+    def unreadable(self, contracts=(), runs=()):
+        raise OSError(f"cannot open {research}/.belief/evidence.jsonl: secret detail")
+
+    monkeypatch.setattr(Store, "trials_for", unreadable)
+    export(research)
+    data = (research / EXPORT_DIR / "board.json").read_text(encoding="utf-8")
+    assert str(research) not in data and "secret detail" not in data and '"pid"' not in data
+    assert "could not be read" in data
+
+
+def _transcript(folder: Path, name: str, calls: list[dict], brief: str, age: float, meta: dict | None = None) -> None:
+    import os
+
+    sub = folder / "session-1" / "subagents"
+    sub.mkdir(parents=True, exist_ok=True)
+    (sub / f"agent-{name}.meta.json").write_text(json.dumps({"agentType": "tdlp:research-scout",
+                                                              "description": f"Scout {name}", **(meta or {})}))
+    lines = [{"timestamp": "2026-10-22T05:00:00Z", "message": {"role": "user", "content": brief}}]
+    for i, call in enumerate(calls):
+        block = {"type": "tool_use", "id": f"{name}-{i}", "name": call["name"], "input": call["input"]}
+        lines += [{"timestamp": "2026-10-22T05:01:00Z", "message": {"role": "assistant", "content": [block]}}] * 2
+    path = sub / f"agent-{name}.jsonl"
+    path.write_text("\n".join(json.dumps(line) for line in lines) + "\n", encoding="utf-8")
+    moment = time.time() - age
+    os.utime(path, (moment, moment))
+
+
+def test_a_scout_works_while_it_writes_whatever_its_meta_file_says(tmp_path):
+    folder = tmp_path / "project"
+    _transcript(folder, "writing", [], "Deepen DIR-a on GOL-x", age=20)
+    _transcript(folder, "quiet", [], "Deepen DIR-b on GOL-x", age=3600)
+    _transcript(folder, "done", [], "Deepen DIR-c on GOL-x", age=3600, meta={"finished": True})
+    _transcript(folder, "claims-done", [], "Deepen DIR-d on GOL-x", age=5, meta={"finished": True})
+    scouts = {s["id"].removeprefix("agent-"): s for s in ScoutWatch([folder]).poll()["scouts"]}
+    assert scouts["writing"]["working"] and scouts["claims-done"]["working"]
+    assert not scouts["quiet"]["working"] and not scouts["quiet"]["finished"]
+    assert not scouts["done"]["working"] and scouts["done"]["finished"]
+
+
+def test_a_scouts_directions_come_from_its_own_calls_counted_once(tmp_path):
+    folder = tmp_path / "project"
+    calls = [{"name": "mcp__plugin_tdlp_research-board__board", "input": {"direction": "DIR-read-first"}},
+             {"name": "WebSearch", "input": {"query": "door handles"}},
+             *[{"name": "mcp__plugin_tdlp_research-board__add_trail", "input": {"direction": "DIR-door", "paper": f"P{i}"}}
+               for i in range(3)],
+             {"name": "mcp__plugin_tdlp_research-board__feedback", "input": {"about": "DIR-handle", "text": "q"}},
+             {"name": "mcp__plugin_tdlp_research-board__open_direction", "input": {"name": "On-policy labels", "goal": "GOL-x"}}]
+    _transcript(folder, "s", calls, "Research GOL-x, starting from DIR-elsewhere", age=10)
+    scout = ScoutWatch([folder]).poll()["scouts"][0]
+    assert scout["directions"] == [["DIR-door", 3], ["DIR-handle", 1], ["DIR-on-policy-labels", 1]]
+    assert scout["goal"] == "GOL-x" and scout["reading"] == "DIR-read-first"
+    assert scout["counts"] == {"searches": 1, "pages": 0, "trails": 3, "feedback": 1, "directions": 1}
+    assert len(scout["actions"]) == 7
+
+
+def test_the_scouts_view_says_why_it_shows_none(tmp_path):
+    assert "no transcripts found" in ScoutWatch([tmp_path / "missing"]).poll()["empty"]
+    (tmp_path / "empty").mkdir()
+    assert ScoutWatch([tmp_path / "empty"]).poll()["empty"] == "no scout has run in this project"
+    assert project_folder(Path("/home/me/My_Repo.v2"), home=Path("/h")) == Path("/h/.claude/projects/-home-me-My-Repo-v2")

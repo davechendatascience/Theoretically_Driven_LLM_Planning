@@ -1,0 +1,999 @@
+<title>Research Board</title>
+<!--FONTS-->
+<style>
+:root {
+  --bg: #f4f1ea; --surface: #fffdf8; --surface-2: #ece7dc; --ink: #1d1f22; --ink-2: #4a4e55; --ink-3: #6f737a;
+  --line: #ddd6c7; --accent: #1c6b68; --danger: #b3261e; --fresh: #fbe9a8; --new: #c2410c;
+  --s-reflect: #b5651d; --s-active: #2b62a8; --s-ready: #2e7d4f; --s-earning: #7d7f2c; --s-proposed: #6a55b0; --s-closed: #8a8d92;
+  --earned: #2e7d4f; --spent: #2b62a8; --idle: #c27a12;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121416; --surface: #1b1e21; --surface-2: #24282c; --ink: #ece8df; --ink-2: #bdb9b0; --ink-3: #959189;
+  --line: #33383d; --accent: #5fb3ad; --danger: #f08a80; --fresh: #4a4220; --new: #fb923c;
+  --s-reflect: #e39a52; --s-active: #78a6e6; --s-ready: #5fc28a; --s-earning: #bfc260; --s-proposed: #a796e8; --s-closed: #8c9096;
+  --earned: #5fc28a; --spent: #78a6e6; --idle: #e5a43c; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121416; --surface: #1b1e21; --surface-2: #24282c; --ink: #ece8df; --ink-2: #bdb9b0; --ink-3: #959189;
+  --line: #33383d; --accent: #5fb3ad; --danger: #f08a80; --fresh: #4a4220; --new: #fb923c;
+  --s-reflect: #e39a52; --s-active: #78a6e6; --s-ready: #5fc28a; --s-earning: #bfc260; --s-proposed: #a796e8; --s-closed: #8c9096;
+  --earned: #5fc28a; --spent: #78a6e6; --idle: #e5a43c; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--sans); padding: 0 16px; }
+.wrap { max-width: 1480px; margin: 0 auto; padding-block: 18px 48px; display: grid; gap: 16px; }
+h1, h2, h3 { margin: 0; font-weight: 600; text-wrap: balance; }
+h1 { font: 500 26px/1.15 var(--serif); letter-spacing: -0.01em; }
+h2 { font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+button, input { font: inherit; color: inherit; }
+a { color: var(--accent); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--ink-3); }
+
+/* header */
+.top { display: grid; gap: 8px; }
+.title-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; }
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); flex: none; }
+.live[data-state="ok"] .dot { background: var(--s-ready); animation: pulse 2.4s infinite; }
+.live[data-state="building"] .dot { background: var(--idle); }
+.live[data-state="error"] .dot { background: var(--danger); }
+.live[data-state="snapshot"] .dot { display: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--s-ready) 55%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+.focus { display: grid; gap: 4px; max-width: 115ch; }
+.focus .tags { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.kicker { font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-3); }
+.focus .outcome { font: 400 16.5px/1.4 var(--serif); cursor: pointer; min-width: 0; }
+.focus .outcome.folded { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--ink-2); white-space: nowrap; }
+.statusline { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 12.5px; color: var(--ink-2); align-items: baseline; }
+details.rules > summary { cursor: pointer; color: var(--ink-3); }
+details.rules p { margin: 6px 0 0; color: var(--ink-3); max-width: 115ch; font-size: 12.5px; }
+.issues { margin: 0; padding-left: 18px; color: var(--danger); font-size: 12.5px; }
+.activity { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; align-items: end; }
+.activity svg { width: 100%; height: 30px; display: block; }
+.activity .axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 11px; color: var(--ink-3); }
+.activity .key { font-size: 11.5px; color: var(--ink-3); line-height: 1.3; }
+.swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+
+/* toolbar */
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; padding: 10px 12px; background: var(--surface);
+  border: 1px solid var(--line); border-radius: 10px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
+.goals { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 520px; min-width: 0; }
+.goals button, .seg button { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 2px 11px; font-size: 12.5px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
+.goals button[aria-pressed="true"], .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.goals .n { font-family: var(--mono); opacity: 0.75; margin-left: 4px; }
+.search { flex: 0 1 260px; min-width: 160px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 5px 10px; }
+.newbar { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--ink-2); }
+.newbar b { color: var(--new); }
+.newbar button { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 2px 9px; cursor: pointer; font-size: 12px; }
+
+/* search suggestions */
+.searchwrap { position: relative; flex: 0 1 300px; min-width: 180px; }
+.searchwrap .search { width: 100%; }
+.suggest { position: absolute; top: calc(100% + 4px); right: 0; width: max(100%, 460px); max-width: calc(100vw - 32px); z-index: 20; margin: 0; padding: 4px 0 6px;
+  list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 10px 28px color-mix(in srgb, #000 20%, transparent); max-height: 62vh; overflow: auto; }
+.suggest li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 6px 12px; cursor: pointer; }
+.suggest li[aria-selected="true"], .suggest li:not(.group):hover { background: var(--surface-2); }
+.suggest .group { display: block; padding: 8px 12px 2px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); cursor: default; }
+.suggest .kind { font-size: 11px; color: var(--ink-3); }
+.suggest .text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; }
+.suggest .text b { font-weight: 600; }
+.suggest .paper-t { font: italic 14px/1.3 var(--serif); }
+.suggest .count { font: 11.5px var(--mono); color: var(--ink-3); white-space: nowrap; }
+@media (max-width: 560px) { .searchwrap { flex: 1 1 100%; } .suggest { left: 0; right: auto; width: 100%; } .suggest li { grid-template-columns: 52px minmax(0, 1fr); } .suggest .count { grid-column: 2; } }
+
+/* waiting strip */
+.waiting { display: flex; flex-wrap: wrap; gap: 8px; }
+.waiting:empty { display: none; }
+.chip { display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 8px; background: var(--surface);
+  border: 1px solid var(--line); border-left: 3px solid var(--c, var(--accent)); cursor: pointer; text-align: left; max-width: 100%; }
+.chip:hover { background: var(--surface-2); }
+
+/* layout */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 24px; align-items: start; }
+@media (max-width: 1050px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.board { display: grid; gap: 24px; min-width: 0; }
+.lane { display: grid; gap: 10px; }
+.lane-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.lane-head .count { font: 500 13px var(--mono); color: var(--ink-3); }
+.lane-head .why { font-size: 12.5px; color: var(--ink-3); }
+.state-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--c); display: inline-block; flex: none; align-self: center; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 12px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--c); border-radius: 10px; padding: 12px 14px;
+  display: grid; gap: 7px; cursor: pointer; text-align: left; min-width: 0; align-content: start; position: relative; }
+.card:hover, .card:focus-visible { border-color: var(--c); outline: none; }
+.card .name { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.card .name b { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.rank { font: 500 12px var(--mono); color: var(--c); white-space: nowrap; }
+.goal-tag { font-size: 11.5px; color: var(--ink-3); }
+.idea { color: var(--ink-2); font-size: 13px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.latest { font: italic 400 13.5px/1.35 var(--serif); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.points { display: grid; gap: 4px; }
+.points .nums { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--ink-3); }
+.points .nums .left { font: 500 15px var(--mono); color: var(--ink); }
+.bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: var(--surface-2); }
+.bar span { display: block; height: 100%; }
+.foot { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-3); }
+.newcount { color: var(--new); font-weight: 600; }
+.alert { font-size: 12.5px; padding: 6px 8px; border-radius: 6px; background: color-mix(in srgb, var(--c) 12%, transparent); }
+.pill { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: 11.5px; line-height: 18px; white-space: nowrap;
+  background: color-mix(in srgb, var(--c, var(--ink-3)) 16%, transparent); }
+details.closed > summary { cursor: pointer; list-style: none; display: flex; gap: 10px; align-items: baseline; }
+details.closed > summary::-webkit-details-marker { display: none; }
+details.closed > summary::before { content: "+"; font: 500 14px var(--mono); color: var(--ink-3); width: 12px; }
+details.closed[open] > summary::before { content: "\2212"; }
+details.closed .cards { margin-top: 10px; }
+.unclaimed { font-size: 12.5px; color: var(--ink-2); display: grid; gap: 6px; }
+.unclaimed ul { margin: 0; padding-left: 18px; }
+.empty { color: var(--ink-3); padding: 24px; border: 1px dashed var(--line); border-radius: 10px; text-align: center; }
+
+/* side */
+.side { scrollbar-width: thin; scrollbar-color: var(--line) transparent; display: grid; gap: 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 64px); max-height: calc(100vh - 72px); overflow: auto; padding-bottom: 12px; min-width: 0; }
+@media (max-width: 1050px) { .side { position: static; max-height: none; overflow: visible; } }
+.side-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 4px; }
+.questions, .scouts { display: grid; gap: 8px; }
+.q { background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--s-reflect); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.q .who { font-size: 12px; color: var(--ink-3); }
+.q .text { font-size: 13.5px; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.q .text.full { display: block; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.feed li { padding: 9px 10px; border-radius: 8px; display: grid; gap: 3px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+.feed li.isnew { border-left-color: var(--new); }
+.feed .row1 { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 12px; color: var(--ink-3); }
+.linkish { color: var(--ink-2); font-weight: 500; cursor: pointer; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 2px; background: none; border: 0; padding: 0; font-size: inherit; }
+.feed .sum { font-size: 13px; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.feed .paper { font: italic 400 14px/1.35 var(--serif); }
+.feed img { max-width: 100%; border-radius: 6px; border: 1px solid var(--line); }
+.fresh { animation: fresh 9s ease-out; }
+@keyframes fresh { 0%, 30% { background: var(--fresh); } 100% { background: transparent; } }
+.scout { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; cursor: pointer; }
+.scout[data-status="working"] { border-left: 3px solid var(--s-ready); }
+.scout .head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.scout .head b { font-weight: 600; font-size: 13.5px; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; background: var(--ink-3); margin-right: 6px; }
+.scout[data-status="working"] .sdot { background: var(--s-ready); animation: pulse 2.4s infinite; }
+.scout[data-status="stopped"] .sdot { background: var(--idle); }
+.scout .sub { font-size: 12px; color: var(--ink-3); }
+.scout .now { font-size: 12.5px; color: var(--ink-2); overflow-wrap: anywhere; }
+.scout ol { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+.scout ol li { display: grid; grid-template-columns: 50px minmax(0, 1fr); gap: 8px; overflow-wrap: anywhere; }
+.scout ol .t { font: 11.5px var(--mono); color: var(--ink-3); padding-top: 1px; }
+.scout .said { margin-top: 6px; font-size: 12.5px; color: var(--ink-2); white-space: pre-wrap; border-top: 1px solid var(--line); padding-top: 6px; }
+.more { border: 1px solid var(--line); background: transparent; border-radius: 8px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; color: var(--ink-2); justify-self: start; }
+
+/* drawer */
+.drawer { position: fixed; inset: 0; z-index: 10; display: flex; justify-content: flex-end; }
+.drawer[hidden] { display: none; }
+.drawer .scrim { position: absolute; inset: 0; background: color-mix(in srgb, #000 38%, transparent); }
+.panel { scrollbar-width: thin; scrollbar-color: var(--line) transparent; position: relative; width: min(760px, 100%); height: 100%; overflow: auto; background: var(--bg); border-left: 1px solid var(--line);
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 22px calc(28px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 16px; align-content: start; }
+.panel header { display: grid; gap: 6px; }
+.panel .close { justify-self: end; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 2px 10px; cursor: pointer; }
+.panel h3 { font: 500 25px/1.2 var(--serif); }
+.panel .meta { font-size: 12.5px; color: var(--ink-3); display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.panel section { display: grid; gap: 8px; }
+.rich { display: grid; gap: 8px; max-width: 76ch; overflow-wrap: anywhere; }
+.rich p { margin: 0; }
+.digest { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; font-size: 13px; }
+.box .states { display: flex; flex-wrap: wrap; gap: 6px; }
+.box img, .rich img { max-width: 100%; border-radius: 6px; border: 1px solid var(--line); background: var(--surface-2); }
+pre.code, pre.diagram { margin: 0; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; font: 12px var(--mono); white-space: pre; }
+pre.diagram[data-drawn] { white-space: normal; text-align: left; }
+pre.diagram svg { max-width: none; height: auto; }
+.copy { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 0 7px; font: 12px var(--mono); cursor: pointer; color: var(--ink-2); }
+.copy[data-copied] { color: var(--s-ready); border-color: var(--s-ready); }
+.changes { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--s-active);
+  background: color-mix(in srgb, var(--s-active) 10%, var(--surface)); font-size: 13px; }
+.changes[hidden] { display: none; }
+.comment-btn { display: none; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 1px 9px; font-size: 12px; cursor: pointer; color: var(--ink-2); }
+:root[data-comments="on"] .comment-btn { display: inline-block; }
+.changes button { border: 1px solid var(--s-active); background: var(--surface); border-radius: 8px; padding: 2px 10px; cursor: pointer; }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.timeline li { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; border-left: 3px solid transparent; padding-left: 6px; }
+.timeline li.isnew { border-left-color: var(--new); }
+.timeline .when { font: 12px var(--mono); color: var(--ink-3); padding-top: 2px; }
+.timeline .body { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.tl-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: 12.5px; }
+.timeline blockquote { margin: 2px 0 0; padding-left: 10px; border-left: 2px solid var(--line); font: italic 13.5px/1.4 var(--serif); color: var(--ink-2); }
+.timeline .rejected { text-decoration: line-through; color: var(--ink-3); }
+@media (max-width: 560px) { .timeline li { grid-template-columns: minmax(0, 1fr); gap: 2px; } h1 { font-size: 22px; } .toolbar { position: static; } .side { top: 0; } }
+</style>
+<div class="wrap">
+  <header class="top">
+    <div class="title-row">
+      <h1>Research board</h1>
+      <div id="live" class="live" data-state="connecting"><span class="dot"></span><span id="live-text">connecting…</span></div>
+    </div>
+    <div id="focus" class="focus"></div>
+    <div id="statusline" class="statusline"></div>
+    <div id="activity" class="activity"></div>
+  </header>
+  <div class="toolbar">
+    <div id="goals" class="goals" role="group" aria-label="Show directions for"></div>
+    <div class="searchwrap"><input id="search" class="search" type="search" placeholder="Search papers, ideas, notes  ( / )" aria-label="Search the board" role="combobox" aria-expanded="false" aria-controls="suggest" aria-autocomplete="list" autocomplete="off" spellcheck="false"><ul id="suggest" class="suggest" role="listbox" aria-label="Suggestions" hidden></ul></div>
+    <div id="newbar" class="newbar"></div>
+  </div>
+  <div id="changes" class="changes" role="status" hidden></div>
+  <section id="waiting" class="waiting" aria-label="Waiting on the director"></section>
+  <main class="layout">
+    <div id="board" class="board"></div>
+    <aside class="side">
+      <div class="side-head"><h2>Scouts</h2><span id="scout-sum" class="muted" style="font-size:12px"></span></div>
+      <div id="scouts" class="scouts"></div>
+      <div class="side-head"><h2>Open questions</h2><span id="q-sum" class="muted" style="font-size:12px"></span></div>
+      <div id="questions" class="questions"></div>
+      <div class="side-head"><h2 id="feed-title">Live feed</h2><div id="filters" class="seg" role="group" aria-label="Filter the feed"></div></div>
+      <ol id="feed" class="feed"></ol>
+    </aside>
+  </main>
+</div>
+<div id="drawer" class="drawer" hidden><div class="scrim" data-close></div><article id="panel" class="panel" aria-modal="true" role="dialog"></article></div>
+<!--INITIAL-->
+<!--MERMAID-->
+<script nonce="__NONCE__">
+"use strict";
+const STATES = {
+  "needs reflection": { label: "Needs reflection", why: "a result came in: the director decides continue, halt or pivot", c: "--s-reflect" },
+  "active": { label: "Result pending", why: "points spent, waiting on a test", c: "--s-active" },
+  "ready": { label: "Ready", why: "approved, with points for its next paid step", c: "--s-ready" },
+  "earning": { label: "Earning", why: "approved, still short of a paid step", c: "--s-earning" },
+  "proposed": { label: "Proposed", why: "waiting for the director's approval", c: "--s-proposed" },
+  "halted": { label: "Halted", why: "", c: "--s-closed" },
+  "rejected": { label: "Rejected", why: "", c: "--s-closed" },
+};
+const OPEN = ["needs reflection", "active", "ready", "earning", "proposed"];
+const KIND_LABEL = { question: "Question", check: "Check", answer: "Answer", note: "Note", approved: "Approved", rejected: "Rejected",
+  continue: "Continue", halt: "Halted", pivot: "Pivot", retarget: "Retarget" };
+const RESULT_WORDS = { supported: "met", refuted: "not met", contested: "mixed", stale: "stale: the code moved", insufficient_evidence: "too few runs", "no evidence": "no runs yet" };
+const FILTERS = [["all", "All"], ["new", "New"], ["trail", "Trails"], ["qa", "Questions"], ["decision", "Decisions"], ["note", "Notes"]];
+const TL_FILTERS = [["all", "All"], ["trail", "Trails"], ["talk", "Notes and questions"], ["decision", "Decisions"], ["work", "Spends and findings"]];
+
+let board = null, scouts = null, status = { building: false }, connected = false, lastUpdate = null, scoutsAt = Date.now();
+let pending = null;               // a board whose cards would move under the reader, waiting for "Show"
+const MODE = () => (board && board.meta.mode) || "live";
+let goalFilter = null, query = "", feedFilter = "all", tlFilter = "all", openId = null, focusOpen = false;
+let scoutsOpen = new Set(), scoutsAll = false, qOpen = new Set();
+const seen = new Set(), fresh = new Map();
+
+// --- the viewer's last visit, in this browser only ---
+const STORE = "research-board.lastVisit";
+let lastVisit = null;
+try { lastVisit = localStorage.getItem(STORE); } catch (e) { lastVisit = null; }
+function rememberVisit(when) { try { localStorage.setItem(STORE, when); } catch (e) { /* storage blocked: markers last this session */ } }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") rememberVisit(new Date().toISOString()); });
+window.addEventListener("pagehide", () => rememberVisit(new Date().toISOString()));
+const isNew = (ts) => !!(lastVisit && ts && ts > lastVisit);
+
+// --- helpers ---
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const cvar = (name) => `var(${name})`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+// Times are the board's: a duration is measured to the moment it was built, never to the reader's clock.
+const boardTime = () => board ? new Date(board.meta.generated_at).getTime() : Date.now();
+function ago(iso) {
+  if (!iso) return "";
+  if (MODE() === "snapshot") return clockTime(iso);
+  const s = (boardTime() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  return `${Math.floor(s / 86400)} d ago`;
+}
+function minutes(seconds) {
+  const m = Math.max(0, Math.round(seconds / 60));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+}
+const clockTime = (iso) => iso ? new Date(iso).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+const hhmm = (iso) => iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+function span(a, b) {
+  if (!a || !b) return "";
+  const m = Math.round((new Date(b) - new Date(a)) / 60000);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+}
+const ACRONYMS = { vla: "VLA", vlas: "VLAs", vlm: "VLM", vlms: "VLMs", llm: "LLM", llms: "LLMs", gpu: "GPU", cpu: "CPU", api: "API", rl: "RL",
+  rgb: "RGB", "rgb-d": "RGB-D", ik: "IK", slam: "SLAM", mujoco: "MuJoCo", lora: "LoRA", ci: "CI", ui: "UI", io: "IO", sql: "SQL" };
+const nice = (text) => { const s = String(text || "").split(" ").map((w) => ACRONYMS[w.toLowerCase()] || w).join(" "); return s.charAt(0).toUpperCase() + s.slice(1); };
+const goalName = (gid) => nice(String(gid || "").replace(/^GOL-/, "").replace(/-/g, " "));
+const dirById = (id) => board && board.directions.find((d) => d.id === id);
+const nameOf = (id) => nice((dirById(id) || {}).name || id);
+const resultWords = (state) => RESULT_WORDS[state] || String(state || "").replace(/_/g, " ");
+
+// Text from the ledger: paragraphs, clickable links and code blocks, everything escaped first. A mermaid block is drawn
+// as a diagram only in a digest, which only the director writes; the board's data has already turned every other one
+// into a plain code block.
+const FENCE = /```([A-Za-z]*)[ \t]*\n([\s\S]*?)```/;
+function rich(text, diagrams = false) {
+  const parts = String(text || "").split(new RegExp(FENCE.source, "g"));
+  let html = "";
+  for (let i = 0; i < parts.length; i += 3) {
+    html += parts[i].split(/\n\s*\n/).filter((p) => p.trim()).map((p) =>
+      `<p>${esc(p.trim()).replace(/https?:\/\/[^\s<]+[^\s<.,;:)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`).replace(/\n/g, "<br>")}</p>`).join("");
+    if (i + 2 < parts.length) {
+      const lang = parts[i + 1].toLowerCase(), body = esc(parts[i + 2].replace(/\s+$/, ""));
+      html += diagrams && lang === "mermaid" ? `<pre class="diagram">${body}</pre>` : `<pre class="code">${body}</pre>`;
+    }
+  }
+  return html;
+}
+const hasDiagram = (text) => /```[ \t]*mermaid/i.test(String(text || ""));
+const stripDiagrams = (text) => String(text || "").replace(/```[\s\S]*?```/g, " [block] ");
+const copyButton = (id) => `<button class="copy" data-copy="${esc(id)}" title="Copy the id">${esc(id)}</button>`;
+
+function goalOf(item) {
+  if (item.direction) return (dirById(item.direction) || {}).goal;
+  if (item.target && item.target.startsWith("DIR-")) return (dirById(item.target) || {}).goal;
+  if (item.target && item.target.startsWith("GOL-")) return item.target;
+  if (item.goal) return item.goal;
+  if (item.about && String(item.about).startsWith("GOL-")) return item.about;
+  return null;
+}
+const inGoal = (gid) => goalFilter === "all" || gid === goalFilter;
+function matches(...texts) {
+  if (!query) return true;
+  const hay = texts.join(" ").toLowerCase();
+  return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+function dirText(d) {
+  return [d.name, d.idea, d.assessment, d.digest, ...d.trails.map((t) => `${t.paper} ${t.tweak} ${t.quote || ""}`),
+    ...d.feedback.filter(Boolean).map((f) => f.text), ...d.evidence.map((e) => e.summary)].join(" ");
+}
+function dirItems(d) { return [...d.trails, ...d.feedback.filter(Boolean), ...d.spends, ...d.evidence]; }
+const newIn = (d) => dirItems(d).filter((x) => isNew(x.timestamp)).length;
+function feedClass(item) {
+  if (item.kind === "trail") return "trail";
+  if (item.kind === "feedback" && ["question", "check", "answer"].includes(item.type)) return "qa";
+  if (item.kind === "feedback" && item.type === "note") return "note";
+  return "decision";
+}
+function feedLabel(item) {
+  if (item.kind === "trail") return item.type && item.type !== "tweak" ? `Trail (${item.type})` : "Trail";
+  if (item.kind === "feedback") return KIND_LABEL[item.type] || item.type || "Feedback";
+  return { spend: "Spend", direction: "New direction", digest: "Digest", evidence: "Finding" }[item.kind] || item.kind;
+}
+
+// --- search suggestions, built from the board's own words ---
+const STOP = new Set(("the and for with from that this these those into than then was were has have had not can will would should could may might also our are its their there here what which when where who how why does did but such each per via about over under between both all any more most less very much many few one two three four five six new use used using uses only same other just like make made makes onto upon your they them been being off out it's isn't doesn't don't won't can't came come comes get gets got give gives given take takes took see seen show shows shown say says said put puts let lets set sets keep keeps kept run runs ran find finds found need needs needed want wants try tries tried call calls called way ways thing things part parts kind lot lots well still even yet ever never always often again once now today today's yes since until while because though although whether either neither rather instead without within across along around among through after before during above below upon onto toward towards inside outside first second third last next end ends least far near own back left right top bottom high low long short big small large little good bad better best worse worst full half time times day days week weeks year years case cases fact facts point points form forms side sides line lines item items note notes number numbers per cent percent see e.g i.e etc vs").split(" "));
+const RECENT = "research-board.recentSearches";
+let terms = [], termDocs = new Map(), shownSuggestions = [], activeSuggestion = -1;
+const textCache = new Map();
+function recentSearches() { try { return JSON.parse(localStorage.getItem(RECENT) || "[]").slice(0, 8); } catch (e) { return []; } }
+function rememberSearch(q) {
+  q = q.trim();
+  if (q.length < 2) return;
+  try { localStorage.setItem(RECENT, JSON.stringify([q, ...recentSearches().filter((x) => x.toLowerCase() !== q.toLowerCase())].slice(0, 8))); } catch (e) { /* storage blocked */ }
+}
+// The board's words and two-word phrases, each with the records it appears in. Phrases stay inside a clause (an author
+// list's "Wagenmaker, Sergey" is no phrase), hyphenated words count as their parts, and a plural folds into its singular.
+function buildIndex() {
+  const docs = new Map(), casing = new Map();
+  let doc = 0;
+  const ok = (w) => !!w && w.length >= 3 && !STOP.has(w.toLowerCase()) && !/^[\d.+-]+$/.test(w) && !/^(TRAIL|FBK|SPD|EVD|RUN|EV|CTR|TST|CMP|BRN|DIR|GOL)-/i.test(w);
+  const add = (text) => {
+    const clean = String(text || "").replace(/```mermaid[\s\S]*?```/g, " ");
+    const inDoc = new Set();
+    for (const clause of clean.split(/[,;:()\[\]{}"“”!?\/]|\.\s|\.$|\s[-–—]+\s|\s&\s/)) {
+      const words = [];
+      for (const w of clause.match(/[A-Za-z0-9][A-Za-z0-9.+-]*[A-Za-z0-9+]|[A-Za-z]/g) || []) {
+        if (/^(TRAIL|FBK|SPD|EVD|RUN|EV|CTR|TST|CMP|BRN|DIR|GOL|DEF|POL|LEM|AX)-/i.test(w)) { words.push(""); continue; }   // an id breaks the phrase
+        words.push(w);
+      }
+      words.forEach((w, i) => {
+        if (!ok(w)) return;
+        inDoc.add(w);
+        const n = words[i + 1];
+        if (n && ok(n)) inDoc.add(w + " " + n);
+      });
+    }
+    if (!inDoc.size) return;
+    doc += 1;
+    for (const t of inDoc) {
+      const k = t.toLowerCase();
+      if (!docs.has(k)) docs.set(k, new Set());
+      docs.get(k).add(doc);
+      const c = casing.get(k) || new Map();
+      c.set(t, (c.get(t) || 0) + 1);
+      casing.set(k, c);
+    }
+  };
+  for (const d of board.directions) {
+    add(nice(d.name)); add(d.idea); add(d.assessment); add(d.digest);
+    for (const t of d.trails) { add(t.paper); add(t.tweak); add(t.quote); }
+    for (const f of d.feedback) if (f) add(f.text);
+    for (const e of d.evidence) add(e.summary);
+  }
+  for (const sc of (scouts && scouts.scouts) || []) { add(sc.description); for (const a of sc.actions) add(a.what); }
+  for (const k of [...docs.keys()]) {          // "camera-pose" into "camera pose" where the phrase exists
+    const parts = k.split("-"), spaced = parts.join(" ");
+    if (parts.length === 2 && !k.includes(" ") && docs.has(spaced)) { for (const d of docs.get(k)) docs.get(spaced).add(d); docs.delete(k); }
+  }
+  for (const k of [...docs.keys()]) {          // "cameras" into "camera", "camera poses" into "camera pose"
+    if (k.length > 4 && k.endsWith("s") && !k.endsWith("ss") && !k.endsWith("us") && docs.has(k.slice(0, -1))) {
+      for (const d of docs.get(k)) docs.get(k.slice(0, -1)).add(d);
+      docs.delete(k);
+    }
+  }
+  terms = [...docs].filter(([, set]) => set.size >= 2).map(([k, set]) => {
+    let best = k, top = 0;
+    for (const [t, m] of casing.get(k)) if (m > top) { best = t; top = m; }
+    best = best.split(" ").map((w) => ACRONYMS[w.toLowerCase()] || w).join(" ");
+    return { key: k, text: best, n: set.size, words: k.includes(" ") ? 2 : 1 };
+  }).sort((a, b) => b.n - a.n).slice(0, 8000);
+  termDocs = docs;
+  textCache.clear();
+}
+function cachedDirText(d) { if (!textCache.has(d.id)) textCache.set(d.id, dirText(d).toLowerCase()); return textCache.get(d.id); }
+function hits(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const has = (hay) => words.every((w) => hay.includes(w));
+  return {
+    dirs: board.directions.filter((d) => inGoal(d.goal) && has(cachedDirText(d))).length,
+    items: board.feed.filter((it) => (goalFilter === "all" || inGoal(goalOf(it))) && has(`${it.summary} ${it.quote || ""}`.toLowerCase())).length,
+  };
+}
+function suggestFor(raw) {
+  const typed = raw.replace(/^\s+/, "");
+  if (!typed.trim()) return recentSearches().map((text) => ({ kind: "recent", text }));
+  const lower = typed.toLowerCase(), parts = lower.split(/\s+/), last = parts[parts.length - 1];
+  const prev = parts.length > 1 ? parts[parts.length - 2] : null;
+  const headWords = typed.split(/\s+/);
+  headWords.pop();
+  // the records holding every earlier word: a completion is ranked by how often it appears with them
+  let headDocs = null;
+  for (const w of parts.slice(0, -1)) {
+    const set = termDocs.get(w) || termDocs.get(w.replace(/s$/, ""));
+    if (!set) continue;
+    headDocs = headDocs ? new Set([...headDocs].filter((d) => set.has(d))) : new Set(set);
+  }
+  const out = [], seenText = new Set([lower.trim()]);
+  if (last) {
+    const scored = [];
+    for (const t of terms) {
+      let weight = 0, replacePrev = false, replaceAll = false;
+      if (parts.length > 1 && t.words === 1 && t.key.includes("-") && t.key.startsWith(parts.join("-"))) { weight = 3; replaceAll = true; }
+      else if (prev && t.words === 2 && t.key.startsWith(prev + " " + last)) { weight = 2; replacePrev = true; }
+      else if (t.key.startsWith(last)) weight = 1;
+      else if (t.words === 2 && t.key.includes(" " + last)) weight = 0.4;
+      if (!weight || (headWords.length && !replacePrev && parts.slice(0, -1).includes(t.key))) continue;
+      let score = t.n;
+      if (headDocs && !replacePrev && !replaceAll) { score = 0; for (const d of termDocs.get(t.key)) if (headDocs.has(d)) score += 1; }
+      if (score) scored.push({ t, score: score * weight, replacePrev, replaceAll });
+    }
+    scored.sort((a, b) => b.score - a.score);
+    for (const { t, replacePrev, replaceAll } of scored) {
+      const text = replaceAll ? t.text : [...(replacePrev ? headWords.slice(0, -1) : headWords), t.text].join(" ");
+      const k = text.toLowerCase();
+      if (seenText.has(k)) continue;
+      seenText.add(k);
+      const h = hits(text);
+      if (h.dirs || h.items) out.push({ kind: "term", text, hits: h });
+      if (out.length >= 6) break;
+    }
+  }
+  const words = lower.split(/\s+/).filter(Boolean);
+  const dirs = board.directions.filter((d) => words.every((w) => nice(d.name).toLowerCase().includes(w) || d.id.toLowerCase().includes(w)))
+    .slice(0, 3).map((d) => ({ kind: "direction", text: nice(d.name), id: d.id, goal: d.goal }));
+  const papers = [], seenPaper = new Set();
+  outer: for (const d of board.directions) for (const t of d.trails) {
+    const p = String(t.paper || ""), k = p.toLowerCase();
+    if (!p || seenPaper.has(k) || !words.every((w) => k.includes(w))) continue;
+    seenPaper.add(k);
+    papers.push({ kind: "paper", text: p, id: d.id, trail: t.id, dir: nice(d.name) });
+    if (papers.length >= 3) break outer;
+  }
+  return [...out, ...dirs, ...papers];
+}
+function boldRest(text, typed) {   // as a search engine does: what you typed plain, the completion bold
+  const t = typed.replace(/^\s+/, "");
+  if (t && text.toLowerCase().startsWith(t.toLowerCase())) return esc(text.slice(0, t.length)) + "<b>" + esc(text.slice(t.length)) + "</b>";
+  return "<b>" + esc(text) + "</b>";
+}
+function closeSuggestions() { $("suggest").hidden = true; $("search").setAttribute("aria-expanded", "false"); $("search").removeAttribute("aria-activedescendant"); }
+function renderSuggestions() {
+  const box = $("suggest"), input = $("search");
+  if (!board || document.activeElement !== input) return closeSuggestions();
+  shownSuggestions = suggestFor(input.value);
+  if (activeSuggestion >= shownSuggestions.length) activeSuggestion = -1;
+  if (!shownSuggestions.length) return closeSuggestions();
+  let html = "", group = null;
+  shownSuggestions.forEach((sg, i) => {
+    const g = { recent: "Recent searches", term: "Search for", direction: "Directions", paper: "Papers" }[sg.kind];
+    if (g !== group) { html += `<li class="group" role="presentation">${g}</li>`; group = g; }
+    const count = sg.hits ? [sg.hits.dirs ? plural(sg.hits.dirs, "direction") : "", sg.hits.items ? plural(sg.hits.items, "item") : ""].filter(Boolean).join(" · ")
+      : sg.kind === "direction" ? esc(goalName(sg.goal)) : sg.kind === "paper" ? esc(sg.dir) : "";
+    const text = sg.kind === "paper" ? `<span class="paper-t">${esc(sg.text)}</span>` : sg.kind === "direction" ? esc(sg.text) : boldRest(sg.text, input.value);
+    const kind = { term: "search", recent: "recent", direction: "open", paper: "paper" }[sg.kind];
+    html += `<li role="option" id="sg-${i}" data-sg="${i}" aria-selected="${i === activeSuggestion}"><span class="kind">${kind}</span><span class="text">${text}</span><span class="count">${count}</span></li>`;
+  });
+  box.innerHTML = html;
+  box.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  if (activeSuggestion >= 0) input.setAttribute("aria-activedescendant", `sg-${activeSuggestion}`); else input.removeAttribute("aria-activedescendant");
+  const active = box.querySelector('[aria-selected="true"]');
+  if (active) active.scrollIntoView({ block: "nearest" });
+}
+function runSearch(text) {
+  const input = $("search");
+  input.value = text;
+  query = text.trim();
+  rememberSearch(query);
+  activeSuggestion = -1;
+  renderBoard(); renderSide(); renderScouts(); renderWaiting();
+}
+function chooseSuggestion(i) {
+  const sg = shownSuggestions[i];
+  if (!sg) return;
+  $("search").blur();
+  closeSuggestions();
+  if (sg.kind === "term" || sg.kind === "recent") return runSearch(sg.text);
+  openDirection(sg.id);
+  if (sg.kind === "paper") {
+    tlFilter = "trail";
+    renderDrawer();
+    const li = document.querySelector(`.timeline [data-id="${CSS.escape(sg.trail)}"]`);
+    if (li) { li.scrollIntoView({ block: "center" }); li.classList.add("fresh"); }
+  }
+}
+
+// --- header ---
+function renderHeader() {
+  const r = board.rules, goal = board.goals[r.focus];
+  $("focus").innerHTML = `<div class="tags"><span class="kicker">Focus</span>` + (goal
+    ? (goal.paused ? `<span class="badge">paused</span>` : "") +
+      (goal.measure ? `<span class="badge" title="${esc(goal.measure)}">measure: ${esc(resultWords(goal.measure_state || "no evidence"))}</span>` : "") +
+      `</div><span class="outcome${focusOpen ? "" : " folded"}" data-focus title="${esc(goal.id)}: click to ${focusOpen ? "fold" : "read all"}">${esc(goal.outcome)}</span>`
+    : `</div><span class="outcome">${esc(r.focus || "no focus goal set")}</span>`);
+  const costs = Object.entries(r.costs).filter(([, v]) => v).map(([k, v]) => `${k.replace(/_/g, " ")} ${v}`).join(", ");
+  const where = r.source === "HEAD" ? `research.yaml at ${esc(r.changed)}` : "the default rules (no research.yaml committed)";
+  $("statusline").innerHTML = `<span id="research"></span>` +
+    `<details class="rules"><summary>Rules</summary><p>From ${where}. A trail earns ${plural(r.earn, "point")}; paid steps cost ${esc(costs)}. ` +
+    (r.idle_per_hour ? `An hour with no research costs a direction waiting on a result ${plural(r.idle_per_hour, "point")}; research counts as running for ${r.running_minutes} min after each record. ` : "Idle hours cost nothing. ") +
+    `Up to ${r.scouts} scouts at once.</p></details>` +
+    (board.issues.length ? `<ul class="issues">${board.issues.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "");
+  $("feed-title").textContent = MODE() === "snapshot" ? "Latest records" : "Live feed";
+  renderResearchClock();
+  renderActivity();
+}
+
+function renderResearchClock() {
+  const el = $("research");
+  if (!el || !board) return;
+  const until = board.research_until ? new Date(board.research_until).getTime() : 0, left = (until - boardTime()) / 1000;
+  const paying = board.directions.filter((d) => d.idle && d.idle.idle_now);
+  const waiting = board.directions.filter((d) => d.state === "active");
+  const snap = MODE() === "snapshot";
+  el.innerHTML = left > 0
+    ? `Research ${snap ? "was" : "is"} running: it counts until <b class="mono">${esc(hhmm(board.research_until))}</b>, ${minutes(left)} after this board.`
+    : paying.length
+      ? `<span style="color:var(--idle)">No research running</span>: ${paying.map((d) => esc(nice(d.name))).join(", ")} ${paying.length === 1 ? (snap ? "was" : "is") : (snap ? "were" : "are")} paying for idle hours until a scout records something.`
+      : waiting.length
+        ? `No research running. ${plural(waiting.length, "direction")} ${waiting.length === 1 ? "waits" : "wait"} on a result, none paying for idle hours.`
+        : `No research running, and nothing waits on a result.`;
+}
+
+function renderActivity() {
+  const a = board.activity.slice().reverse();
+  const max = Math.max(1, ...a.map((h) => h.trail + h.feedback + h.other));
+  const w = 10, H = 30;
+  let bars = "";
+  a.forEach((h, i) => {
+    let y = H;
+    for (const [key, color] of [["trail", "--accent"], ["feedback", "--s-proposed"], ["other", "--ink-3"]]) {
+      if (!h[key]) continue;
+      const bh = (h[key] / max) * (H - 2);
+      y -= bh;
+      bars += `<rect x="${i * w + 1}" y="${y.toFixed(2)}" width="${w - 2}" height="${bh.toFixed(2)}" fill="${cvar(color)}"><title>${h.ago} h ago: ${h[key]} ${key}</title></rect>`;
+    }
+  });
+  const total = a.reduce((s, h) => s + h.trail + h.feedback + h.other, 0);
+  $("activity").innerHTML =
+    `<div class="key">Last 72 h: <span class="mono">${total}</span> records, peak <span class="mono">${max}</span>/h<br>` +
+    `<span class="swatch" style="background:var(--accent)"></span>trails <span class="swatch" style="background:var(--s-proposed);margin-left:6px"></span>feedback</div>` +
+    `<svg viewBox="0 0 ${a.length * w} ${H}" preserveAspectRatio="none" role="img" aria-label="Research records per hour over the last 72 hours">` +
+    `<line x1="0" y1="${H - 0.5}" x2="${a.length * w}" y2="${H - 0.5}" stroke="var(--line)" stroke-width="1"/>${bars}</svg>` +
+    `<div class="axis"><span>−72 h</span><span>−48 h</span><span>−24 h</span><span>this board</span></div>`;
+}
+
+// --- toolbar ---
+function renderToolbar() {
+  const focus = board.rules.focus, counts = {};
+  for (const d of board.directions) counts[d.goal] = (counts[d.goal] || 0) + 1;
+  if (goalFilter === null) goalFilter = counts[focus] ? focus : "all";
+  const others = Object.keys(counts).filter((g) => g !== focus).sort((a, b) => counts[b] - counts[a]);
+  const button = (gid, label, n) => `<button data-goal="${esc(gid)}" aria-pressed="${goalFilter === gid}">${label}<span class="n">${n}</span></button>`;
+  $("goals").innerHTML = (counts[focus] ? button(focus, `Focus: ${esc(goalName(focus))}`, counts[focus]) : "") +
+    others.map((g) => button(g, esc(goalName(g)) + ((board.goals[g] || {}).paused ? " (paused)" : ""), counts[g])).join("") +
+    button("all", "All goals", board.directions.length);
+  const fresh = board.directions.reduce((s, d) => s + newIn(d), 0);
+  $("newbar").innerHTML = lastVisit
+    ? (fresh ? `<span><b>${fresh}</b> new since your last visit (${esc(clockTime(lastVisit))})</span>` : `<span>Nothing new since ${esc(clockTime(lastVisit))}</span>`) +
+      `<button data-markseen>Mark all seen</button>`
+    : `<span class="muted">First visit: new items will be marked from now on</span>`;
+}
+
+function renderWaiting() {
+  const chips = [];
+  for (const d of board.directions) {
+    if (!inGoal(d.goal)) continue;
+    if (d.state === "needs reflection") chips.push({ c: "--s-reflect", html: `<b>${esc(nice(d.name))}</b>: a result came in, decide continue, halt or pivot`, id: d.id });
+    if (d.state === "proposed") chips.push({ c: "--s-proposed", html: `<b>${esc(nice(d.name))}</b>: proposed, ${plural(d.balance, "point")} of research behind it`, id: d.id });
+    if (d.idle && d.idle.idle_now && d.idle.next_point_in != null) {
+      chips.push({ c: "--idle", html: `<b>${esc(nice(d.name))}</b> is idle: its next point goes ${minutes(d.idle.next_point_in)} after this board`, id: d.id });
+    }
+  }
+  const qs = visibleQuestions();
+  if (qs.length) chips.push({ c: "--s-reflect", html: `<b>${qs.length}</b> scout ${qs.length === 1 ? "question" : "questions"} waiting for an answer`, id: "#questions" });
+  $("waiting").innerHTML = chips.map((ch) => `<button class="chip" style="--c:${cvar(ch.c)}" data-open="${esc(ch.id)}"><span>${ch.html}</span></button>`).join("");
+}
+
+// --- board ---
+function pointsBar(d, scale) {
+  const left = Math.max(0, d.balance), pct = (n) => `${(100 * n / scale).toFixed(2)}%`;
+  return `<div class="points"><div class="nums"><span><span class="left">${d.balance}</span> left</span>` +
+    `<span>earned ${d.earned} · spent ${d.spent}${d.idle_points ? ` · idle ${d.idle_points}` : ""}</span></div>` +
+    `<div class="bar" title="left ${d.balance}, spent ${d.spent}, idle ${d.idle_points}"><span style="width:${pct(left)};background:var(--earned)"></span>` +
+    `<span style="width:${pct(d.spent)};background:var(--spent)"></span><span style="width:${pct(d.idle_points)};background:var(--idle)"></span></div></div>`;
+}
+function latestActivity(d) { return dirItems(d).reduce((best, x) => (!best || (x.timestamp || "") > (best.timestamp || "") ? x : best), null); }
+function resultPills(s) {
+  return Object.entries(s.result.states).map(([cid, state]) =>
+    `<span class="pill" title="${esc(cid)}">${esc(resultWords(state))} · ${plural(s.result.counted[cid] || 0, "record")}</span>`).join(" ");
+}
+
+function card(d, scale) {
+  const st = STATES[d.state] || STATES.halted, focus = board.rules.focus;
+  const trail = d.trails.length ? d.trails[d.trails.length - 1] : null, last = latestActivity(d), nNew = newIn(d);
+  const charts = hasDiagram(d.digest) ? 1 : 0;
+  let alert = "";
+  if (d.state === "active") {
+    alert = d.spends.filter((s) => s.result && !s.result.settled && Object.keys(s.result.states).length)
+      .map((s) => `<div class="alert">Waiting on ${esc(s.action.replace(/_/g, " "))}: ${resultPills(s)}</div>`).join("");
+  } else if (d.state === "needs reflection") {
+    alert = `<div class="alert">A result settled: ${plural(d.unreflected.length, "spend")} to reflect on</div>`;
+  } else if (d.state === "halted" && d.decision) {
+    alert = `<div class="alert">${esc(KIND_LABEL[d.decision.type] || d.decision.type)} ${esc(clockTime(d.decision.timestamp))}: ${esc(d.decision.text)}</div>`;
+  } else if (d.state === "rejected" && d.verdict) {
+    alert = `<div class="alert">Rejected: ${esc(d.verdict.text)}</div>`;
+  }
+  return `<article class="card${last && fresh.has(last.id) ? " fresh" : ""}" id="card-${esc(d.id)}" data-comment-target style="--c:${cvar(st.c)}" tabindex="0" data-open="${esc(d.id)}" title="${esc(d.id)}">` +
+    `<div class="name"><b>${esc(nice(d.name))}</b>${d.rank ? `<span class="rank">#${d.rank}</span>` : ""}</div>` +
+    (d.goal !== focus || goalFilter === "all" ? `<div class="goal-tag">for ${esc(goalName(d.goal))}</div>` : "") +
+    `<div class="idea">${esc(d.idea)}</div>` +
+    (trail && trail.paper ? `<div class="latest">${esc(trail.paper)}</div>` : "") +
+    alert + pointsBar(d, scale) +
+    `<div class="foot">${nNew ? `<span class="newcount">${nNew} new</span>` : ""}<span>${plural(d.trails.length, "trail")}</span>` +
+    `<span>${plural(d.spends.length, "spend")}</span>${charts ? `<span>a diagram</span>` : ""}` +
+    (last ? `<span>last ${esc(ago(last.timestamp))}</span>` : "") + `</div></article>`;
+}
+
+function renderBoard() {
+  const shown = board.directions.filter((d) => inGoal(d.goal) && matches(dirText(d)));
+  const scale = Math.max(1, ...shown.map((d) => Math.max(0, d.balance) + d.spent + d.idle_points));
+  let html = "";
+  for (const state of OPEN) {
+    const group = shown.filter((d) => d.state === state);
+    if (!group.length) continue;
+    const st = STATES[state];
+    html += `<section class="lane"><div class="lane-head"><span class="state-dot" style="--c:${cvar(st.c)}"></span><h2>${st.label}</h2>` +
+      `<span class="count">${group.length}</span><span class="why">${esc(st.why)}</span></div>` +
+      `<div class="cards">${group.map((d) => card(d, scale)).join("")}</div></section>`;
+  }
+  const closed = shown.filter((d) => !OPEN.includes(d.state));
+  if (closed.length) {
+    const wasOpen = document.querySelector("details.closed")?.open;
+    html += `<details class="closed lane"${wasOpen || query ? " open" : ""}><summary><h2>Closed</h2><span class="count mono">${closed.length}</span>` +
+      `<span class="why">halted or rejected</span></summary><div class="cards">${closed.map((d) => card(d, scale)).join("")}</div></details>`;
+  }
+  const unclaimed = Object.entries(board.unclaimed).filter(([gid]) => inGoal(gid));
+  if (unclaimed.length && !query) {
+    html += `<section class="lane unclaimed"><div class="lane-head"><h2>Runs no direction claims</h2>` +
+      `<span class="why">measured on directions' contracts with no spend behind them: never a result</span></div>` +
+      unclaimed.map(([gid, u]) => `<div>${esc(goalName(gid))}: <span class="mono">${u.count}</span> runs, the latest:<ul>` +
+        u.latest.map((r) => `<li><span class="mono">${esc(r.run)}</span> ${esc(r.test)} · ${esc(clockTime(r.at))} · ` +
+          Object.entries(r.outcomes).map(([o, n]) => `${n} ${esc(o)}`).join(", ") + `</li>`).join("") + `</ul></div>`).join("") + `</section>`;
+  }
+  if (!shown.length) html = `<div class="empty">${query ? `Nothing matches “${esc(query)}”${goalFilter !== "all" ? " for this goal; try All goals" : ""}.` : "No directions for this goal yet."}</div>`;
+  $("board").innerHTML = html;
+}
+
+// --- side ---
+function visibleQuestions() { return board.questions.filter((q) => (goalFilter === "all" || inGoal(goalOf(q))) && matches(q.text, q.about)); }
+function renderSide() {
+  const qs = visibleQuestions();
+  $("q-sum").textContent = qs.length ? `${qs.length} waiting` : "";
+  $("questions").innerHTML = qs.length ? qs.map((q) =>
+    `<div class="q${fresh.has(q.id) ? " fresh" : ""}" id="q-${esc(q.id)}" data-comment-target><div class="who">${copyButton(q.id)} ${esc(KIND_LABEL[q.type] || q.type)} from ${esc(q.by)}` +
+    (q.direction ? ` on <button class="linkish" data-open="${esc(q.direction)}">${esc(nameOf(q.direction))}</button>` : q.about ? ` on ${esc(q.about)}` : "") +
+    ` · ${esc(ago(q.timestamp))} <button class="comment-btn" data-comment="q-${esc(q.id)}">Reply</button></div><div class="text${qOpen.has(q.id) ? " full" : ""}" data-q="${esc(q.id)}">${esc(q.text)}</div></div>`).join("")
+    : `<p class="muted" style="margin:0">None waiting${goalFilter !== "all" ? " for this goal" : ""}.</p>`;
+  $("filters").innerHTML = FILTERS.map(([key, label]) => `<button data-filter="${key}" aria-pressed="${feedFilter === key}">${label}</button>`).join("");
+  const items = board.feed.filter((it) => (goalFilter === "all" || inGoal(goalOf(it))) && matches(it.summary, it.quote || "")
+    && (feedFilter === "all" || (feedFilter === "new" ? isNew(it.timestamp) : feedClass(it) === feedFilter))).slice(0, 120);
+  $("feed").innerHTML = items.map((it) => {
+    const summary = stripDiagrams(it.summary);
+    const paper = it.kind === "trail" ? summary.split(" -- ")[0] : "", rest = it.kind === "trail" ? summary.slice(paper.length + 4) : summary;
+    const kindColor = it.kind === "trail" ? "--accent" : feedClass(it) === "qa" ? "--s-reflect" : feedClass(it) === "decision" ? "--s-active" : "--ink-3";
+    return `<li class="${fresh.has(it.id) ? "fresh " : ""}${isNew(it.timestamp) ? "isnew" : ""}" title="${esc(it.id)}"><div class="row1">` +
+      `<span class="pill" style="--c:${cvar(kindColor)}">${esc(feedLabel(it))}</span>` +
+      (it.direction ? `<button class="linkish" data-open="${esc(it.direction)}">${esc(nameOf(it.direction))}</button>` : "") +
+      `<span>${esc(it.by || "")}</span><span>${esc(ago(it.timestamp))}</span>${it.kind === "digest" && hasDiagram(it.summary) ? `<span class="pill">diagram</span>` : ""}</div>` +
+      (paper ? `<div class="paper">${esc(paper)}</div>` : "") + `<div class="sum">${esc(rest)}</div></li>`;
+  }).join("") || `<li class="muted">Nothing here${feedFilter === "new" ? " since your last visit" : ""}.</li>`;
+}
+
+function scoutGoal(s) {
+  for (const [did] of s.directions || []) { const d = dirById(did); if (d) return d.goal; }
+  return s.goal || null;
+}
+function scoutWrote(s) {        // a scout is not the board: in the live view this is the reader's own clock
+  if (MODE() === "snapshot") return `last wrote ${hhmm(s.last_write)}`;
+  const seconds = Math.max(0, (Date.now() - new Date(s.last_write).getTime()) / 1000);
+  return `wrote ${seconds < 60 ? Math.round(seconds) + " s" : minutes(seconds)} ago`;
+}
+function renderScouts() {
+  const data = scouts || { enabled: false, scouts: [], empty: "" };
+  if (!data.enabled) {
+    $("scout-sum").textContent = "";
+    $("scouts").innerHTML = `<p class="muted" style="margin:0">${MODE() === "snapshot" ? "Not included in this snapshot." :
+      "Off. Start the board with <span class=\"mono\">--scouts claude-code</span> to see what scouts are doing before they record it."}</p>`;
+    return;
+  }
+  const visible = data.scouts.filter((s) => (goalFilter === "all" || !board || inGoal(scoutGoal(s)) || scoutGoal(s) === null) &&
+    matches(s.description, ...s.actions.map((a) => a.what)));
+  const working = visible.filter((s) => s.working);
+  $("scout-sum").textContent = working.length ? `${working.length} working now` : "none working now";
+  const shown = scoutsAll ? visible : [...working, ...visible.filter((s) => !s.working).slice(0, Math.max(0, 3 - working.length))];
+  const html = shown.map((s) => {
+    const open = scoutsOpen.has(s.id) || (s.working && !scoutsOpen.has("closed:" + s.id) && working.length <= 2);
+    const status = s.working ? "working" : s.finished ? "finished" : "quiet";
+    const on = (s.directions || []).slice(0, 2).map(([did, n]) => `${esc(nameOf(did))} <span class="mono">(${n})</span>`).join(", ") ||
+      (s.reading ? `reading ${esc(s.reading.startsWith("DIR-") ? nameOf(s.reading) : goalName(s.reading))}` : s.goal ? esc(goalName(s.goal)) : "");
+    const c = s.counts, latest = s.actions[0];
+    return `<div class="scout" data-status="${status === "working" ? "working" : "stopped"}" data-scout="${esc(s.id)}">` +
+      `<div class="head"><b><span class="sdot"></span>${esc(s.description.replace(/^Scout:?\s*/i, ""))}</b>` +
+      `<span class="sub">${status} · ${esc(scoutWrote(s))}</span></div>` +
+      `<div class="sub">${on ? `on ${on} · ` : ""}${c.searches} searches · ${c.pages} pages · ${plural(c.trails, "trail")}` +
+      `${c.directions ? ` · ${plural(c.directions, "new direction")}` : ""}</div>` +
+      (latest ? `<div class="now">${s.working ? "now: " : "last: "}${esc(latest.what)}</div>` : "") +
+      (open ? `<ol>${s.actions.map((a) => `<li><span class="t">${esc(hhmm(a.at))}</span><span>${esc(a.what)}</span></li>`).join("")}</ol>` +
+        (!s.working && s.said ? `<div class="said">${esc(s.said)}</div>` : "") : "") + `</div>`;
+  }).join("");
+  const more = visible.length > shown.length || scoutsAll ? `<button class="more" data-more>${scoutsAll ? "show fewer" : `show ${visible.length - shown.length} more`}</button>` : "";
+  $("scouts").innerHTML = html + more || `<p class="muted" style="margin:0">${esc(data.empty || "No scout for this goal.")}</p>`;
+}
+
+// --- drawer ---
+function tlClass(kind, type) {
+  if (kind === "trail") return "trail";
+  if (kind === "feedback") return ["question", "check", "answer", "note"].includes(type) ? "talk" : "decision";
+  return "work";
+}
+function renderDrawer() {
+  const d = openId && dirById(openId);
+  if (!d) { $("drawer").hidden = true; return; }
+  const st = STATES[d.state] || STATES.halted;
+  const events = [
+    ...d.trails.map((t) => ({ t: t.timestamp, k: "trail", id: t.id, html: `<div class="tl-head"><span class="pill" style="--c:var(--accent)">Trail${t.type && t.type !== "tweak" ? ` (${esc(t.type)})` : ""}</span>` +
+      `<span class="mono muted">${t.verdict === "rejected" ? "rejected" : `+${t.points}`}</span><span class="muted">${esc(t.by || "")}</span></div>` +
+      `<div class="${t.verdict === "rejected" ? "rejected" : ""}" style="font:italic 15px/1.35 var(--serif)">${esc(t.paper)}</div><div class="rich">${rich(t.tweak)}</div>` +
+      (t.component ? `<div class="muted">component: ${esc(t.component)}</div>` : "") + (t.expect ? `<div class="muted">expects: ${esc(t.expect)}</div>` : "") +
+      (t.quote ? `<blockquote>${esc(t.quote)}</blockquote>` : "") })),
+    ...d.feedback.filter(Boolean).map((f) => ({ t: f.timestamp, k: tlClass("feedback", f.type), id: f.id,
+      html: `<div class="tl-head"><span class="pill" style="--c:var(${["question", "check", "answer"].includes(f.type) ? "--s-reflect" : f.type === "note" ? "--ink-3" : "--s-active"})">${esc(KIND_LABEL[f.type] || f.type)}</span>` +
+        `<span class="muted">${esc(f.by || "")}</span></div><div class="rich">${rich(f.text)}</div>` })),
+    ...d.evidence.map((e) => ({ t: e.timestamp, k: "work", id: e.id, html: `<div class="tl-head"><span class="pill" style="--c:var(--s-ready)">Finding</span><span class="muted">${esc(e.by || "")}</span></div>` +
+      `<div class="rich">${rich(e.summary)}</div>` })),
+    ...d.spends.map((s) => ({ t: s.timestamp, k: "work", id: s.id, html: `<div class="tl-head"><span class="pill" style="--c:var(--spent)">Spend</span><span class="mono muted">${plural(s.cost, "point")}</span></div><div>${esc(s.action.replace(/_/g, " "))} → ${esc(s.target)}</div>` })),
+  ].sort((a, b) => (b.t || "").localeCompare(a.t || ""));
+  const shownEvents = events.filter((e) => tlFilter === "all" || e.k === tlFilter);
+  $("panel").innerHTML = `<header><button class="close" data-close aria-label="Close">Close</button>` +
+    `<div><span class="pill" style="--c:${cvar(st.c)}">${st.label}</span>${d.rank ? ` <span class="rank" style="--c:${cvar(st.c)}">rank ${d.rank}</span>` : ""}</div>` +
+    `<h3>${esc(nice(d.name))}</h3><div class="meta">${copyButton(d.id)}<button class="comment-btn" data-comment="card-${esc(d.id)}">Comment</button><span>for ${esc(goalName(d.goal))}</span>` +
+    `<span>opened by ${esc(d.by || "?")} ${esc(clockTime(d.opened))}</span>${d.pivot_from ? `<span>pivoted from ${esc(nameOf(d.pivot_from))}</span>` : ""}</div></header>` +
+    pointsBar(d, Math.max(1, Math.max(0, d.balance) + d.spent + d.idle_points)) +
+    `<section><h2>Idea</h2><div class="rich">${rich(d.idea)}</div></section>` +
+    (d.assessment ? `<section><h2>Assessment</h2><div class="rich">${rich(d.assessment)}</div></section>` : "") +
+    (d.digest ? `<section><h2>Facts so far <span class="muted" style="text-transform:none;letter-spacing:0">· ${esc(ago(d.digest_at))}</span></h2><div class="digest rich">${rich(d.digest, true)}</div></section>` : "") +
+    (d.spends.length ? `<section><h2>Spends</h2>${d.spends.map((s) => `<div class="box"><div><b>${esc(s.action.replace(/_/g, " "))}</b> → ${esc(s.target)} · <span class="mono">${plural(s.cost, "point")}</span> · ${esc(clockTime(s.timestamp))}${s.commit ? ` · at <span class="mono">${esc(s.commit)}</span>` : ""}</div>` +
+      (s.expect ? `<div class="muted">expects: ${esc(s.expect)}</div>` : "") +
+      (s.result ? `<div class="states">${resultPills(s)}<span class="pill">${s.result.settled ? `settled ${esc(clockTime(s.result.settled_at))}` : "not settled"}</span></div>` : `<div class="muted">no result yet</div>`) + `</div>`).join("")}</section>` : "") +
+    `<section><div class="side-head"><h2>Timeline <span class="muted mono" style="letter-spacing:0">${shownEvents.length}</span></h2>` +
+    `<div class="seg">${TL_FILTERS.map(([key, label]) => `<button data-tl="${key}" aria-pressed="${tlFilter === key}">${label}</button>`).join("")}</div></div>` +
+    `<ol class="timeline">${shownEvents.map((e) => `<li class="${fresh.has(e.id) ? "fresh " : ""}${isNew(e.t) ? "isnew" : ""}" title="${esc(e.id)}" data-id="${esc(e.id)}"><div class="when">${esc(clockTime(e.t))}</div><div class="body">${e.html}</div></li>`).join("") || `<li class="muted">Nothing of this kind.</li>`}</ol></section>`;
+  $("drawer").hidden = false;
+  drawDiagrams($("panel"));
+  drawn = JSON.stringify(withoutIdle(d));
+}
+
+// Diagrams, drawn by Mermaid in "strict" mode. Its own class, not "mermaid", so nothing else on the page draws them twice.
+let mermaidReady = false, diagramCount = 0;
+function drawDiagrams(root) {
+  if (!window.mermaid) return;
+  if (!mermaidReady) {
+    const dark = getComputedStyle(document.documentElement).colorScheme === "dark";
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "neutral", fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+      flowchart: { useMaxWidth: false, htmlLabels: false }, themeVariables: { fontSize: "14px" } });
+    mermaidReady = true;
+  }
+  for (const node of root.querySelectorAll("pre.diagram:not([data-drawn])")) {
+    node.dataset.drawn = "1";
+    window.mermaid.render(`diagram-${++diagramCount}`, node.textContent)
+      .then(({ svg }) => { node.innerHTML = svg; })
+      .catch((err) => { node.removeAttribute("data-drawn"); node.classList.replace("diagram", "code"); console.warn("diagram", err); });
+  }
+}
+
+// --- updates ---
+let drawn = null;                  // the open direction as last drawn, idle clock aside
+function withoutIdle(d) { const { idle, ...rest } = d; return rest; }
+function lanes(b) { return b.directions.map((d) => `${d.id}:${d.state}`).join("|"); }
+function allIds(b) {
+  const ids = b.feed.map((f) => f.id);
+  for (const d of b.directions) for (const x of dirItems(d)) ids.push(x.id);
+  return ids;
+}
+function renderAll(keepDrawer = false) {
+  renderHeader(); renderToolbar(); renderWaiting(); renderBoard(); renderSide(); renderScouts();
+  if (openId) {
+    const d = dirById(openId);
+    if (!keepDrawer || !d || JSON.stringify(withoutIdle(d)) !== drawn) {
+      const panel = $("panel"), top = panel.scrollTop;
+      renderDrawer();
+      panel.scrollTop = top;
+    }
+  }
+  tick();
+}
+function apply(next, force = false) {
+  if (!next) return;
+  const first = board === null;
+  if (!first && !force && lanes(next) !== lanes(board)) {     // cards would move under the reader: wait for "Show"
+    pending = next;
+    const moved = next.directions.filter((d) => { const was = dirById(d.id); return !was || was.state !== d.state; }).length;
+    $("changes").innerHTML = `<span>The board changed: ${moved ? plural(moved, "direction") + " moved" : "the order changed"}.</span><button data-show-changes>Show</button>`;
+    $("changes").hidden = false;
+    return tick();
+  }
+  pending = null;
+  $("changes").hidden = true;
+  for (const id of allIds(next)) { if (!seen.has(id)) { seen.add(id); if (!first) fresh.set(id, Date.now()); } }
+  board = next;
+  lastUpdate = Date.now();
+  buildIndex();
+  renderAll(true);
+}
+function tick() {
+  const now = Date.now();
+  for (const [id, t] of fresh) if (now - t > 12000) fresh.delete(id);
+  const live = $("live"), text = $("live-text");
+  if (!board) return;
+  const commit = board.meta.commit ? ` · commit ${board.meta.commit.slice(0, 7)}` : "";
+  if (MODE() === "snapshot") { live.dataset.state = "snapshot"; text.textContent = `as of ${clockTime(board.meta.generated_at)}${commit} · not live`; return; }
+  if (!connected) { live.dataset.state = "error"; text.textContent = "reconnecting…"; return; }
+  if (status.error) { live.dataset.state = "error"; text.textContent = `last rebuild failed: ${status.error}`; return; }
+  if (status.building) { live.dataset.state = "building"; text.textContent = `rebuilding… ${Math.round(now / 1000 - status.since)} s`; return; }
+  live.dataset.state = "ok";
+  const age = Math.max(0, Math.round((now - boardTime()) / 1000));
+  const checked = status.checked_at ? Math.max(0, Math.round((now - new Date(status.checked_at).getTime()) / 1000)) : age;
+  text.textContent = `live · board of ${hhmm(board.meta.generated_at)}${commit}` +
+    (checked < age - 5 ? ` · unchanged when checked ${checked} s ago` : ` (${age < 90 ? age + " s" : minutes(age)} ago)`) +
+    (status.seconds != null ? ` · builds in ${status.seconds} s` : "");
+  if (scouts && scouts.enabled) renderScouts();
+}
+
+// --- interaction ---
+function openDirection(id) { openId = id; tlFilter = "all"; try { history.replaceState(null, "", "#" + id); } catch (e) {} renderDrawer(); }
+function closeDirection() { openId = null; try { history.replaceState(null, "", location.pathname); } catch (e) {} renderDrawer(); }
+document.addEventListener("click", (e) => {
+  const t = e.target;
+  if (t.closest("[data-close]")) return closeDirection();
+  const cp = t.closest("[data-copy]");
+  if (cp) {
+    const done = () => { cp.dataset.copied = "1"; setTimeout(() => delete cp.dataset.copied, 1200); };
+    try { navigator.clipboard.writeText(cp.dataset.copy).then(done, () => selectText(cp)); } catch (err) { selectText(cp); }
+    return;
+  }
+  if (t.closest("[data-show-changes]")) return apply(pending, true);
+  const cm = t.closest("[data-comment]");
+  if (cm) return openComment(cm.dataset.comment);
+  const g = t.closest("[data-goal]"); if (g) { goalFilter = g.dataset.goal; return renderAll(); }
+  if (t.closest("[data-markseen]")) { lastVisit = new Date().toISOString(); rememberVisit(lastVisit); return renderAll(); }
+  if (t.closest("[data-focus]")) { focusOpen = !focusOpen; return renderHeader(); }
+  const f = t.closest("[data-filter]"); if (f) { feedFilter = f.dataset.filter; return renderSide(); }
+  const tl = t.closest("[data-tl]"); if (tl) { tlFilter = tl.dataset.tl; return renderDrawer(); }
+  const q = t.closest("[data-q]"); if (q) { qOpen.has(q.dataset.q) ? qOpen.delete(q.dataset.q) : qOpen.add(q.dataset.q); return renderSide(); }
+  if (t.closest("[data-more]")) { scoutsAll = !scoutsAll; return renderScouts(); }
+  const o = t.closest("[data-open]");
+  if (o) {
+    if (o.dataset.open === "#questions") return $("questions").scrollIntoView({ behavior: "smooth", block: "start" });
+    return openDirection(o.dataset.open);
+  }
+  const sc = t.closest("[data-scout]");
+  if (sc && !t.closest("a")) {
+    const id = sc.dataset.scout, isOpen = !!sc.querySelector("ol");
+    if (isOpen) { scoutsOpen.delete(id); scoutsOpen.add("closed:" + id); } else { scoutsOpen.add(id); scoutsOpen.delete("closed:" + id); }
+    renderScouts();
+  }
+});
+// Comments, in an Artifact only: the page opens claude.ai's own composer on a card or a question and posts nothing
+// itself. The director reads the threads and records each answer on the board, naming the person who wrote it.
+let commentsApi = null;
+async function initComments() {
+  if (MODE() !== "snapshot" || !window.claude || typeof window.claude.use !== "function") return;
+  try { commentsApi = await window.claude.use("comments"); } catch (err) { commentsApi = null; }
+  if (commentsApi) document.documentElement.dataset.comments = "on";
+}
+function openComment(targetId) {
+  if (!commentsApi) return;
+  if (targetId.startsWith("card-") && openId) closeDirection();
+  if (targetId.startsWith("card-") && !$(targetId)) { goalFilter = "all"; renderAll(); }
+  const el = $(targetId) || $("panel");
+  el.scrollIntoView({ block: "center" });
+  commentsApi.openComposer({ element: el }).catch((err) => {
+    if (err && ["unavailable", "not_granted", "capability_disabled", "capability_removed"].includes(err.code)) {
+      commentsApi = null; delete document.documentElement.dataset.comments;
+    }
+  });
+}
+function selectText(el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+let searchTimer = null;
+const search = $("search");
+search.addEventListener("input", (e) => {
+  activeSuggestion = -1;
+  renderSuggestions();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { query = e.target.value.trim(); renderBoard(); renderSide(); renderScouts(); renderWaiting(); }, 150);
+});
+search.addEventListener("focus", () => renderSuggestions());
+search.addEventListener("blur", () => setTimeout(closeSuggestions, 150));
+search.addEventListener("keydown", (e) => {
+  const n = shownSuggestions.length, open = !$("suggest").hidden;
+  if (e.key === "ArrowDown" && n) { e.preventDefault(); if (!open) return renderSuggestions(); activeSuggestion = (activeSuggestion + 1) % n; renderSuggestions(); }
+  else if (e.key === "ArrowUp" && n && open) { e.preventDefault(); activeSuggestion = activeSuggestion <= 0 ? n - 1 : activeSuggestion - 1; renderSuggestions(); }
+  else if (e.key === "Enter") { e.preventDefault(); if (open && activeSuggestion >= 0) chooseSuggestion(activeSuggestion); else { closeSuggestions(); runSearch(search.value); } }
+  else if (e.key === "Tab" && open && activeSuggestion >= 0 && ["term", "recent"].includes(shownSuggestions[activeSuggestion].kind)) {
+    e.preventDefault();
+    search.value = shownSuggestions[activeSuggestion].text + " ";
+    search.dispatchEvent(new Event("input"));
+  }
+  else if (e.key === "Escape" && open) { e.preventDefault(); e.stopPropagation(); closeSuggestions(); }
+});
+$("suggest").addEventListener("mousedown", (e) => {     // mousedown: before the input's blur closes the list
+  const li = e.target.closest("[data-sg]");
+  if (li) { e.preventDefault(); chooseSuggestion(Number(li.dataset.sg)); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && document.activeElement !== $("search")) { e.preventDefault(); $("search").focus(); }
+  if (e.key === "Escape") { if (openId) closeDirection(); else if (document.activeElement === $("search")) { $("search").value = ""; query = ""; renderAll(); } }
+  if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".card")) { e.preventDefault(); openDirection(e.target.dataset.open); }
+});
+function fromHash() { const h = decodeURIComponent(location.hash.slice(1)); if (/^DIR-[A-Za-z0-9_.~-]+$/.test(h)) { openId = h; renderDrawer(); } }
+window.addEventListener("hashchange", fromHash);
+
+try { const el = document.getElementById("initial-scouts"); if (el) scouts = JSON.parse(el.textContent); } catch (err) { console.error(err); }
+try { const el = document.getElementById("initial"); if (el) apply(JSON.parse(el.textContent)); } catch (err) { console.error(err); }
+fromHash();
+try {                                         // ?q=... opens the board searched; &suggest also opens the list
+  const params = new URLSearchParams(location.search);
+  if (params.get("q")) { search.value = params.get("q"); query = params.get("q").trim(); renderAll(); }
+  if (params.has("suggest")) { search.focus(); renderSuggestions(); }
+} catch (e) { console.error(e); }
+initComments();
+if (MODE() === "live" && window.EventSource) {
+  const source = new EventSource("events");
+  source.addEventListener("open", () => { connected = true; tick(); });
+  source.addEventListener("error", () => { connected = false; tick(); });
+  source.addEventListener("status", (e) => { status = JSON.parse(e.data); tick(); });
+  source.addEventListener("scouts", (e) => { scouts = JSON.parse(e.data); scoutsAt = Date.now(); if (board) buildIndex(); renderScouts(); });
+  source.addEventListener("board", (e) => { connected = true; apply(JSON.parse(e.data)); });
+  setInterval(tick, 1000);
+}
+</script>

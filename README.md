@@ -137,6 +137,7 @@ words, and the agent picks the tools:
 | "What did the v0.13.7 release touch?" | changed files, then components, contracts, design claims and policies | `impact(base="tdlp--v0.13.6")` |
 | "What should be tested next?" | this round's tests, and why every other test was skipped | `status(view="plan")` |
 | "Send scouts to look for research directions on GOL-sound-designs." | directions on the research board, each with the papers behind it and the tweaks they suggest, in `.research/BOARD.md` | `board()`, the `research-scout` agent |
+| "Let me watch the research board." | the board live in your browser, with what each scout is doing; or, on request, a private Artifact you can comment on | `research-board serve`, `research-board export` |
 
 **Then break something**, to watch evidence expire:
 

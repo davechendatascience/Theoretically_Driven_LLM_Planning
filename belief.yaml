@@ -487,7 +487,9 @@ components:
       source file; serves the ledgers and a run's captured output and never a source file; names
       a ledger git would leave out of a commit; and writes nothing outside .research/, and
       nothing at all where a declaration names a file there or the latest run of a declared test
-      opened one
+      opened one; and shows the board live, and exports it, only as its build computed it -- naming
+      the commit and the moment -- writing nothing while it serves and, exporting, its page, its data
+      and a .gitignore in .research-board/ alone
     failure_modes:
       - {id: FM-result-before-spend, observable: "a result recorded before a spend is shown for that spend's direction",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_result_recorded_before_the_spend_is_not_the_directions"}
@@ -559,9 +561,33 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_one_build_reads_one_commit"}
       - {id: FM-move-writes-a-digest, observable: "a recording move writes a content digest outside .research/",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_recording_move_saves_no_content_digest"}
+      - {id: FM-live-shows-other, observable: "the live view shows a state its build did not compute, or does not name the commit and moment it was built at",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_live_view_serves_the_board_its_build_computed"}
+      - {id: FM-live-writes, observable: "serving the live view writes a file, or rewrites git's index",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_serving_the_live_view_writes_nothing"}
+      - {id: FM-host-unchecked, observable: "the live view answers a request whose Host header is neither a loopback name nor one allowed",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_server_answers_only_requests_addressed_to_it"}
+      - {id: FM-push-unchanged, observable: "the live view pushes a board that did not change",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_board_is_pushed_only_when_it_changed"}
+      - {id: FM-scout-diagram, observable: "a mermaid block anything but a digest carries is drawn as a diagram",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_mermaid_block_a_scout_wrote_is_shown_as_code"}
+      - {id: FM-export-spills, observable: "an export writes a file other than its page, its data and its .gitignore in .research-board/",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_an_export_writes_its_three_files_and_nothing_else"}
+      - {id: FM-export-over-evidence, observable: "an export writes where a declaration names a file it writes",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_an_export_writes_nothing_where_a_declaration_names_its_files"}
+      - {id: FM-export-over-a-read, observable: "an export writes where the latest run of a declared test opened a file it writes",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_an_export_writes_nothing_where_a_tests_latest_run_read_its_files"}
+      - {id: FM-export-leaks, observable: "an exported board carries a process id, an absolute path or the text of an exception",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_an_exported_board_carries_no_process_id_path_or_exception"}
+      - {id: FM-scout-misread, observable: "a scout still writing reads as not working, or one long quiet as working",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_scout_works_while_it_writes_whatever_its_meta_file_says"}
+      - {id: FM-scout-target, observable: "a scout's directions are read from anything but its own calls, or a call is counted twice",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_scouts_directions_come_from_its_own_calls_counted_once"}
+      - {id: FM-scouts-silent, observable: "the scouts view shows none without saying why",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_scouts_view_says_why_it_shows_none"}
       - {id: FM-paused-goal-charged, observable: "a spend on a direction whose goal is paused waits or costs idle hours, waits again before the commit that lifts the pause, or is made at all",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_paused_goal_stops_its_directions_clocks_from_the_commit_that_pauses_it"}
-    remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py
+    remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py; research_board.data (the board as data); research_board.live (the live view, its export and the scouts adapter)
     goal: GOL-honest-evidence
     code:
       - src/research_board/

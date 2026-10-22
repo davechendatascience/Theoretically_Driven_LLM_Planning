@@ -718,6 +718,22 @@ free; its results belong to no direction.
 * **Moves nothing else.** Recording writes the ledger and the page in `.research/` and nothing
   else: no evidence, no trial, no declaration, no commit. Where a component claims or a test names
   a file there, or the latest run of a declared test opened one, it records nothing.
+* **A live view for the person** (DEF-live-board, BRN-live-board-is-the-board). `research-board
+  serve --root <project>` shows the board in a browser on this machine.
+  - The board is rebuilt when a ledger, a background run, HEAD or a declaration moves, and every
+    15 s. Each board names the commit and the moment it was built.
+  - Every state, balance, result and time on it is the build's; the page computes none.
+  - `--scouts claude-code` adds what each research scout is doing, read from Claude Code's
+    transcripts, before it records anything.
+  - It writes nothing, binds 127.0.0.1, answers only requests addressed to a loopback name or one
+    given with `--allow-host`, and loads nothing from another host.
+* **An export for a Claude Artifact.** `research-board export` writes three files to
+  `.research-board/`: a page an Artifact publishes, the board's data and a `.gitignore`. Nothing
+  is written where a declaration names one of those files or a test's latest run opened one. The
+  agent publishes it only when the person asks, privately, and they can comment on its directions
+  and questions; the director records each comment on the board.
+* **Diagrams come from digests only.** A mermaid block in a digest is drawn as a diagram. In any
+  other text, which scouts may copy from the web, it is shown as code.
 
 ```text
 # Research board
@@ -891,6 +907,9 @@ src/
     board.py                         the rules from HEAD, the ledger, balances, results after each spend, idle hours
     play.py                          the moves, and the rules each is checked against
     page.py / reading.py             the board, a direction's brief and BOARD.md; ledger() for scouts
+    data.py                          the board as data, for the live view and its export
+    live/                            research-board serve (server.py), export, the page, the scouts adapter
+    cli.py                           research-board serve | export
   stamp_monitor/                     read-only monitor (4 tools)
     impact.py                        a change traced through both ledgers
     audit.py                         stamp, artifact and ledger integrity

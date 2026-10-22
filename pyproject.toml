@@ -23,6 +23,7 @@ stamp-monitor = "stamp_monitor.cli:main"
 graph-snapshot-mcp = "graph_snapshot.server:main"
 graph-snapshot = "graph_snapshot.cli:main"
 research-board-mcp = "research_board.server:main"
+research-board = "research_board.cli:main"
 tdlp-guard = "component_belief.goals:guard_main"
 
 [tool.setuptools.packages.find]
@@ -30,6 +31,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 graph_snapshot = ["page.html"]
+research_board = ["live/page.html", "live/mermaid.min.js", "live/MERMAID-LICENSE"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
