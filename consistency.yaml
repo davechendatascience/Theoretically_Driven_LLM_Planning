@@ -793,6 +793,28 @@ definitions:
       changes nothing else: it appends no record to the ledger DEF-ledger names, of
       any provenance, changes no declaration, makes no commit and does not
       move the head revision.
+  - id: DEF-live-board
+    term: Live board
+    meaning: >-
+      What the research board's live view shows, and what it and an export of
+      it write. The view shows one board at a time: the board the research
+      board's build computed at one moment. That build resolved the head
+      revision to one commit before it read any declaration, and read every
+      declaration at that commit; it read the research ledger, the evidence
+      ledger, the background runs and the files on disk as they stood when it
+      read them. Beside the board the view names that commit and that moment.
+      Each state, balance, result and time the view shows for a direction is
+      the one that build computed, written out in words, and a duration it
+      shows is measured to the moment of the build; it computes none of its
+      own. Serving the view appends no record to the research ledger or to the
+      ledger DEF-ledger names, changes no declaration, makes no commit, does not
+      move the head revision and writes no file. An export of the view writes
+      its page, the board's data and a file that keeps git from tracking the
+      directory they are in, and nothing else. That directory holds no
+      declaration file and no part of either ledger, and where a component's
+      code claims a file there, or a declared test names one on its run line or
+      among what it reads, the export writes nothing.
+
 lemmas:
   - id: LMA-kernel-enforces-acyclicity
     statement: >-
