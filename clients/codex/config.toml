@@ -9,32 +9,32 @@
 
 [mcp_servers.component-belief]
 command = "uvx"
-args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6", "component-belief-mcp"]
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.7", "component-belief-mcp"]
 env = { BELIEF_ACTOR = "agent", UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
 startup_timeout_sec = 300
 tool_timeout_sec = 3600
 
 [mcp_servers.consistency-belief]
 command = "uvx"
-args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6", "consistency-belief-mcp"]
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.7", "consistency-belief-mcp"]
 env = { CONSISTENCY_ACTOR = "agent", UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
 startup_timeout_sec = 300
 tool_timeout_sec = 3600
 
 [mcp_servers.stamp-monitor]
 command = "uvx"
-args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6", "stamp-monitor-mcp"]
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.7", "stamp-monitor-mcp"]
 env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
 startup_timeout_sec = 300
 
 [mcp_servers.graph-snapshot]
 command = "uvx"
-args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6", "graph-snapshot-mcp"]
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.7", "graph-snapshot-mcp"]
 env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
 startup_timeout_sec = 300
 
 [mcp_servers.research-board]
 command = "uvx"
-args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.6", "research-board-mcp"]
+args = ["--from", "git+https://github.com/davechendatascience/Theoretically_Driven_LLM_Planning@tdlp--v0.13.7", "research-board-mcp"]
 env = { UV_LINK_MODE = "copy", TDLP_ISOLATED = "1" }
 startup_timeout_sec = 300
