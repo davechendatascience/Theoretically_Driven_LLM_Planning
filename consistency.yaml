@@ -1629,6 +1629,60 @@ branches:
       working tree, from which no proof state is computed. So no proof state
       changes. evidence: CTR-research-board
     sufficiency: {n_min: 3, min_consensus: 0.8}
+
+  - id: BRN-live-board-is-the-board
+    subject: CMP-research-board
+    claim_type: contract
+    statement: >-
+      Every state, balance, result and time the live view shows for a
+      direction is the one the research board's build gave it, at the commit
+      and the moment the view names beside it. Serving the view, or exporting
+      it, changes no measured belief, no proof state and no record of the
+      research ledger.
+    premises: [DEF-live-board, DEF-research-ledger, DEF-ledger, DEF-belief-eligible, DEF-proof-state, DEF-premise-graph, DEF-current-trial, AXM-no-belief-write-path, AXM-commit-is-approval]
+    derivation_rule: >-
+      What it shows: by DEF-live-board, the view shows one board at a time,
+      the board the research board's build computed at one moment; that build
+      read every declaration at the one commit it resolved the head revision
+      to, and the view names that commit and that moment beside the board.
+      Each state, balance, result and time it shows for a direction is the one
+      that build computed, written out in words, a duration being measured to
+      the moment of the build, and it computes none of its own. So each is the
+      build's, at the commit and moment named. Records: by DEF-live-board,
+      serving the view appends no record to the research ledger or to the
+      ledger DEF-ledger names, changes no declaration, makes no commit, does
+      not move the head revision and writes no file; an export writes three
+      kinds of file -- its page, the board's data and a file keeping git from
+      tracking their directory -- in a directory that holds no declaration
+      file and no part of either ledger, and nothing at all where a
+      component's code claims a file there or a declared test names one. By
+      DEF-research-ledger the research ledger is the records the board keeps
+      in .research/, appended only by recording to the board; neither serving
+      nor exporting records, and the export's directory holds no part of it,
+      so no record of the research ledger changes. Beliefs: belief-eligible
+      evidence, by DEF-belief-eligible, is a trial record, measured or
+      imported -- a record in the ledger DEF-ledger names. Neither serving nor
+      exporting appends one, so by AXM-no-belief-write-path, under which a
+      measured belief changes only through belief-eligible evidence, no
+      measured belief moves. Proof states: by DEF-proof-state a node's proof
+      state is computed from its place in the premise graph and, for it and
+      each node it depends on, the version the build admitted and the trials
+      recorded on it, and from nothing else. By DEF-premise-graph the graph is
+      built from the declarations at the head revision and the proposals
+      staged in the ledger. Serving and exporting change no declaration, make
+      no commit, do not move the head revision and append no record, so they
+      stage, restate or withdraw no proposal, and neither the graph nor the
+      version of a node it admits changes. The files an export writes lie in a
+      directory that holds no declaration file and no part of the ledger, and
+      by AXM-commit-is-approval every proof state is computed from committed
+      content and the ledger and from no other file in the working tree. By
+      DEF-current-trial whether a trial is current depends on its validity
+      after amendments, its target being in the premise graph, and what it
+      recorded of its target and of the premises its target cites; neither
+      appends a trial or an amendment, and the graph is unchanged, so the
+      trials recorded on each node, and which of them are current, are
+      unchanged. So no proof state changes. evidence: CTR-research-board
+    sufficiency: {n_min: 3, min_consensus: 0.8}
 policies:
   - id: POL-consistency-gate
     criteria:
@@ -1652,3 +1706,4 @@ policies:
       - {target: BRN-proven-rests-on-proven, require: proven, evidence: supported}
       - {target: BRN-lean-certificates-beside-the-statements, require: proven, evidence: supported}
       - {target: BRN-research-results-follow-their-spend, require: proven, evidence: supported}
+      - {target: BRN-live-board-is-the-board, require: proven, evidence: supported}
