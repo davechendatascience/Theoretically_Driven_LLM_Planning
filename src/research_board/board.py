@@ -124,11 +124,12 @@ def _count(value: Any) -> int | None:
     return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
 
 
-def load_rules(root: Path) -> Rules:
+def load_rules(root: Path, revision: str = "HEAD") -> Rules:
     """The rules take effect from HEAD, like every declaration: an uncommitted edit changes no
-    cost, and is named so nobody mistakes it for one that did."""
+    cost, and is named so nobody mistakes it for one that did. `revision` is the commit a build
+    resolved HEAD to, so its rules and its declarations come from one commit."""
     rules = Rules()
-    committed = git(root, "show", f"HEAD:{RULES_FILE}")
+    committed = git(root, "show", f"{revision}:{RULES_FILE}")
     path = root / RULES_FILE
     worktree = path.read_text(encoding="utf-8") if path.exists() else None
     if committed is None:
@@ -140,7 +141,7 @@ def load_rules(root: Path) -> Rules:
     if worktree is not None and worktree.replace("\r\n", "\n") != committed.replace("\r\n", "\n"):
         rules.issues.append(f"PENDING {RULES_FILE}: the working tree differs from HEAD; "
                             "the uncommitted edits are not in effect")
-    rules.changed = (git(root, "log", "-1", "--format=%h %cs %s", "--", RULES_FILE) or "").strip()
+    rules.changed = (git(root, "log", "-1", "--format=%h %cs %s", revision, "--", RULES_FILE) or "").strip()
     from component_belief.declarations import load_yaml
 
     try:
@@ -427,20 +428,20 @@ def idle_stretches(start: datetime, end: datetime, research: list[datetime],
 _PAUSES: dict[tuple[str, str], dict[str, list[tuple[datetime, datetime | None]]]] = {}
 
 
-def paused_stretches(root: Path) -> dict[str, list[tuple[datetime, datetime | None]]]:
+def paused_stretches(root: Path, head: str | None = None) -> dict[str, list[tuple[datetime, datetime | None]]]:
     """When each goal was paused (DEF-research-ledger): from a commit at which goals.yaml marks it
     paused and the one before did not, until the next commit at which it no longer does -- open
     (None) while none has -- among the commits in HEAD's history that change goals.yaml, by their
-    commit times."""
+    commit times. `head` is the commit a build resolved HEAD to."""
     from component_belief.declarations import GOALS_FILE, load_yaml
 
-    head = (git(root, "rev-parse", "HEAD") or "").strip()
+    head = head if head is not None else (git(root, "rev-parse", "HEAD") or "").strip()
     key = (str(root), head)
     if key in _PAUSES:
         return _PAUSES[key]
     out: dict[str, list[tuple[datetime, datetime | None]]] = {}
     since: dict[str, datetime] = {}
-    for line in (git(root, "log", "--reverse", "--format=%H %cI", "--", GOALS_FILE) or "").splitlines():
+    for line in (git(root, "log", "--reverse", "--format=%H %cI", head or "HEAD", "--", GOALS_FILE) or "").splitlines():
         sha, _, stamp = line.partition(" ")
         moment = when(stamp)
         if moment is None:
@@ -684,6 +685,7 @@ class Board:
     goal_feedback: dict[str, list[dict[str, Any]]] = field(default_factory=dict)   # feedback on a goal itself
     evidence_error: str = ""
     ledger_ignored: str = ""       # why git would leave the ledger out of a commit, if it would
+    commit: str = ""               # the commit HEAD resolved to for this build; every declaration is from it
     now: datetime = field(default_factory=clock)
     research_until: datetime | None = None    # research counts as running until then, by the rules now
 
@@ -757,16 +759,17 @@ def _stat(path: Path) -> tuple[int, int] | None:
     return (st.st_mtime_ns, st.st_size)
 
 
-def head_reads(root: Path) -> tuple[Any, Rules]:
-    """component-belief's declarations and the research rules, as committed at HEAD."""
+def head_reads(root: Path, head: str | None = None) -> tuple[Any, Rules]:
+    """component-belief's declarations and the research rules, as committed at `head` -- the commit
+    a build resolved HEAD to, or HEAD itself."""
     from component_belief.declarations import load as load_components
 
-    key = ((git(root, "rev-parse", "HEAD") or "").strip(),
-           *(_stat(root / name) for name in _DECLARATION_FILES))
+    head = head if head is not None else (git(root, "rev-parse", "HEAD") or "").strip()
+    key = (head, *(_stat(root / name) for name in _DECLARATION_FILES))
     seen = _READS.get(str(root))
     if seen is not None and seen[0] == key:
         return seen[1], seen[2]
-    decl, rules = load_components(root), load_rules(root)
+    decl, rules = load_components(root, head or "HEAD"), load_rules(root, head or "HEAD")
     _READS[str(root)] = (key, decl, rules)
     return decl, rules
 
@@ -774,9 +777,15 @@ def head_reads(root: Path) -> tuple[Any, Rules]:
 def build(root: Path, *, with_results: bool = True) -> Board:
     """The board as it reads now. Without results it has no idle hours either -- when a spend stops
     waiting is read from its result -- so its balances leave them out; the moves check against such
-    a board only what no balance decides."""
-    decl, rules = head_reads(root)
-    board = Board(root=root, rules=rules, decl=decl, records=read_ledger(root), now=clock())
+    a board only what no balance decides.
+
+    HEAD is resolved once, and the declarations, the rules, the pauses and the code a result is
+    judged against are all read at that commit, so a commit landing mid-build cannot mix two. The
+    results read only the trials they can use: those of every contract a spend recorded or a goal
+    measures, and every trial of the runs among them, whose start a wait is timed from."""
+    head = (git(root, "rev-parse", "HEAD") or "").strip()
+    decl, rules = head_reads(root, head)
+    board = Board(root=root, rules=rules, decl=decl, records=read_ledger(root), now=clock(), commit=head)
     for record in board.records:
         kind = record.get("kind")
         rid = record.get("id")
@@ -821,7 +830,7 @@ def build(root: Path, *, with_results: bool = True) -> Board:
                 d.retarget = item
 
     board.ledger_ignored = ignored_ledger(root)
-    board.paused = paused_stretches(root)
+    board.paused = paused_stretches(root, head)
     if with_results:
         try:
             from component_belief.model import compute_slices
@@ -830,8 +839,17 @@ def build(root: Path, *, with_results: bool = True) -> Board:
 
             from component_belief.jobs import jobs as background_runs
 
-            trials = Store(root).effective_trials()
-            staleness = CodeStaleness(root)
+            store = Store(root)
+            # what any result can read: a spend's contracts as it recorded them (declared now or
+            # not, as unclaimed_runs reads them) and each goal's measure; then all of their runs
+            wanted = {c for spend in board.spends.values() for c in spend.get("contracts") or []
+                      if isinstance(c, str)}
+            wanted |= {g.measure for g in board.decl.goals.values() if isinstance(g.measure, str)}
+            trials = store.trials_for(wanted)
+            trials = store.trials_for(wanted, {t["run_id"] for t in trials
+                                               if isinstance(t.get("run_id"), (str, int)) and t["run_id"]})
+            # judged against the commit this build read, and saving no digest outside .research/
+            staleness = CodeStaleness(root, revision=head or None, persist_digests=False)
             running = board.running = [j for j in background_runs(root) if j.get("state") == "running"]
             started = run_starts(trials)
             for sid, spend in board.spends.items():
@@ -914,10 +932,8 @@ def reading_research(root: Path, decl: Any) -> list[str]:
     from component_belief.store import Store
 
     store = Store(root)
-    latest: dict[str, str] = {}
-    for t in store.effective_trials():             # the ledger's order: the last run of a test stands
-        if t.get("test_id") in decl.tests and t.get("run_id"):
-            latest[str(t["test_id"])] = str(t["run_id"])
+    # the ledger's order: the last run of a test stands
+    latest = {str(tid): str(run) for tid, run in store.latest_runs().items() if tid in decl.tests}
     return sorted(f"{tid} ({run})" for tid, run in latest.items()
                   if any(p.split("/", 1)[0] == RESEARCH_DIR for p in read(store.artifacts_dir / run)))
 

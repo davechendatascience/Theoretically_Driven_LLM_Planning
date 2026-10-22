@@ -921,3 +921,91 @@ def test_a_run_can_be_read_metrics_only(research):
     lean = reading.serve_run(research, run_id, fields={"metrics"})
     assert "conditions" in full and "conditions" not in lean and "metrics" in lean
     assert "---" in full and "---" not in lean
+
+
+def _board_state(board: B.Board) -> str:
+    """Everything a board computes from the evidence ledger, as text two builds can be compared by."""
+    return json.dumps({
+        "results": {sid: vars(result) for sid, result in board.results.items()},
+        "starts": board.starts, "measures": board.measures, "unclaimed": board.unclaimed,
+        "running": board.running, "error": board.evidence_error,
+        "directions": {d.id: [d.state, board.balance(d), vars(d.idle) if d.idle else None, d.unreflected]
+                       for d in board.directions.values()},
+    }, sort_keys=True, default=lambda o: sorted(o) if isinstance(o, set) else str(o))
+
+
+def test_the_board_reads_only_the_records_its_results_can_use(arms, clock, monkeypatch):
+    """A build reads the trials of the contracts a spend recorded or a goal measures, and every
+    trial of their runs -- and computes exactly the board it would from every record."""
+    measure(arms, "TST-cloud-fits")                       # a contract no spend names and no goal measures
+    measure(arms, "TST-see")
+    did = funded(arms, trails=2)
+    play.spend(arms, did, "test", "TST-pick", params={"arm": "plain"})
+    next_second()
+    measure(arms, "TST-pick", params={"arm": "plain"})
+    measure(arms, "TST-pick", params={"arm": "noise"})   # counts for no direction: unclaimed
+    clock.at = datetime.now(timezone.utc) + timedelta(minutes=1)   # the board's clock catches up with the runs
+    play.reflect(arms, did, "continue", "the plain arm passed")
+    play.spend(arms, did, "test", "TST-pick", params={"arm": "noise"})
+    clock.advance(hours=3)
+
+    read: list[int] = []
+    real = Store.trials_for
+
+    def counted(self, contracts=(), runs=()):
+        found = real(self, contracts, runs)
+        read.append(len(found))
+        return found
+
+    monkeypatch.setattr(Store, "trials_for", counted)
+    narrow = _board_state(B.build(arms))
+    every = Store(arms).effective_trials()
+    assert read and max(read) < len(every), "the build read fewer trials than the ledger holds"
+
+    monkeypatch.setattr(Store, "trials_for", lambda self, contracts=(), runs=(): self.effective_trials())
+    assert narrow == _board_state(B.build(arms))
+
+
+def test_one_build_reads_one_commit(research, monkeypatch):
+    """A commit landing while a build reads its declarations does not reach the rules it reads next."""
+    import component_belief.declarations as declarations
+
+    real = declarations.load
+
+    def load_then_commit(root, revision="HEAD"):
+        decl = real(root, revision)
+        monkeypatch.setattr(declarations, "load", real)
+        (research / B.RULES_FILE).write_text(RULES.replace("implement: 1", "implement: 5"), encoding="utf-8")
+        git(research, "commit", "-qam", "the rules change mid-build")
+        return decl
+
+    head = git(research, "rev-parse", "HEAD").stdout.strip()
+    monkeypatch.setattr(declarations, "load", load_then_commit)
+    board = B.build(research)
+    assert board.commit == head
+    assert board.rules.costs["implement"] == 1, "the rules came from the commit the declarations did"
+    assert git(research, "rev-parse", "HEAD").stdout.strip() != head
+
+
+def test_a_recording_move_saves_no_content_digest(research, clock):
+    """A result judged against a git-ignored input hashes it, and a move keeps that digest in memory:
+    recording writes .research/ and nothing else (DEF-research-ledger)."""
+    (research / ".gitignore").write_text("ckpt/\n", encoding="utf-8")
+    (research / "ckpt").mkdir()
+    (research / "ckpt" / "w.bin").write_bytes(b"weights-v1")
+    text = (research / "goals.yaml").read_text(encoding="utf-8").replace(
+        "    run: python eval/pick.py $OUT\n", "    run: python eval/pick.py $OUT\n    reads: [ckpt/w.bin]\n", 1)
+    (research / "goals.yaml").write_text(text, encoding="utf-8")
+    git(research, "add", "-A")
+    git(research, "commit", "-qm", "the pick eval reads a checkpoint git ignores")
+    did = funded(research)
+    play.spend(research, did, "test", "TST-pick")
+    next_second()
+    measure(research)
+    (research / "ckpt" / "w.bin").write_bytes(b"weights-v2-retrained")
+    before = _tree(research)
+    play.feedback(research, did, "the checkpoint was retrained", by="scout-1")
+    moved = {p for p in set(before) | set(_tree(research)) if before.get(p) != _tree(research).get(p)}
+    assert moved == {".research/ledger.jsonl", ".research/BOARD.md"}
+    result = B.build(research).results[last_spend(research)]
+    assert "stale" in result.states.values(), "the retrained checkpoint was judged, by its content"

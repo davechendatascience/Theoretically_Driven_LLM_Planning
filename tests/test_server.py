@@ -760,3 +760,146 @@ class TestParameters:
         git(project, "commit", "-qam", "one arm")
         decl = load(project)
         assert decl.tests["TST-grasp-ik"].version != plain and not [i for i in decl.issues if "PARAM" in i.code]
+
+
+class TestEvidenceIndex:
+    """Readers that need a few contracts, one run or a count read the evidence ledger through an
+    index of where each record sits (ledger_index). Every answer must be the full read's."""
+
+    SELECTIONS = [({"CTR-a"}, ()), ({"CTR-b"}, ()), ({"CTR-c"}, ()), ({"CTR-a", "CTR-b"}, ()),
+                  ((), {"RUN-0001"}), ({"CTR-c"}, {"RUN-0002"}),
+                  ({"CTR-a", "CTR-b", "CTR-c", "CTR-z"}, {"RUN-0001", "RUN-0002", "RUN-0003", "RUN-0004"})]
+
+    @staticmethod
+    def line(**record) -> str:
+        return json.dumps(record, sort_keys=True) + "\n"
+
+    def trial(self, eid: str, contract: str, run: str, test: str = "TST-x") -> str:
+        return self.line(kind="trial", id=eid, contract_id=contract, run_id=run, test_id=test,
+                         provenance="measured", validity="valid", metrics={"passed": True})
+
+    def seed(self, root) -> Store:
+        store = Store(root)
+        store.ensure()
+        store.evidence_path.write_text("".join([
+            self.trial("EV-0001", "CTR-a", "RUN-0001"),
+            self.trial("EV-0002", "CTR-b", "RUN-0001"),
+            "\n",
+            "not json at all\n",
+            self.line(kind="amendment", target="EV-0001", validity="invalid", reason="bad fixture"),
+            self.line(kind="note", subject="CMP-x", text="a note", provenance="asserted"),
+            self.line(kind="amendment", target="EV-0004", validity="quarantined", reason="before its trial"),
+            self.trial("EV-0003", "CTR-a", "RUN-0002", "TST-y"),
+            self.trial("EV-0004", "CTR-b", "RUN-0002", "TST-y"),
+            self.trial("EV-0002", "CTR-c", "RUN-0003"),        # a repeated id, now on another contract
+        ]), encoding="utf-8")
+        return store
+
+    def reads(self, store: Store) -> dict:
+        out = {f"{sorted(c)} {sorted(r)}": store.trials_for(c, r) for c, r in self.SELECTIONS}
+        out.update(count=store.trial_count(), latest=store.latest_runs(), notes=store.notes(),
+                   run=store.next_run_id(), ev=store.next_evidence_id())
+        return out
+
+    def same(self, store: Store, monkeypatch) -> None:
+        monkeypatch.setenv("TDLP_EVIDENCE_INDEX", "off")
+        expected = self.reads(store)
+        monkeypatch.delenv("TDLP_EVIDENCE_INDEX")
+        assert self.reads(store) == expected
+
+    def test_a_read_through_the_index_is_the_full_read(self, tmp_path, monkeypatch):
+        from component_belief.ledger_index import index_for
+
+        store = self.seed(tmp_path)
+        path = store.evidence_path
+        index = index_for(path)
+        self.same(store, monkeypatch)
+        assert index.scans == 1
+        assert store.trials_for({"CTR-a"})[0]["validity"] == "invalid", "the amendment is folded in"
+
+        with path.open("a", encoding="utf-8") as fh:              # appended: read incrementally
+            fh.write(self.trial("EV-0005", "CTR-a", "RUN-0004"))
+            fh.write(self.line(kind="amendment", target="EV-0003", supersede_with="EV-0005", reason="rerun"))
+        self.same(store, monkeypatch)
+        assert index.scans == 1
+
+        with path.open("a", encoding="utf-8") as fh:              # a last line with no newline yet
+            fh.write(self.trial("EV-0006", "CTR-b", "RUN-0004").rstrip("\n"))
+        self.same(store, monkeypatch)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write("\n" + self.trial("EV-0007", "CTR-a", "RUN-0004")[:25])   # one cut short
+        self.same(store, monkeypatch)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(self.trial("EV-0007", "CTR-a", "RUN-0004")[25:])
+        self.same(store, monkeypatch)
+        assert index.scans == 1
+
+        data = path.read_bytes()                                    # replaced: a new file
+        replacement = path.with_name("evidence.jsonl.new")
+        replacement.write_bytes(data)
+        os.replace(replacement, path)
+        self.same(store, monkeypatch)
+        assert index.scans == 2
+
+        with path.open("r+b") as fh:                                # cut back, the same file
+            fh.truncate(data.index(self.trial("EV-0003", "CTR-a", "RUN-0002", "TST-y").encode()))
+        self.same(store, monkeypatch)
+        assert index.scans == 3
+
+        before = os.stat(path)                                      # edited in place, the same size
+        path.write_bytes(path.read_bytes().replace(b'"CTR-a"', b'"CTR-z"', 1))
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000))
+        assert os.stat(path).st_size == before.st_size
+        self.same(store, monkeypatch)
+        assert index.scans == 4
+
+        text = path.read_text(encoding="utf-8").replace('"CTR-z"', '"CTR-zz"', 1)   # edited and grown
+        path.write_text(text + self.trial("EV-0008", "CTR-b", "RUN-0004"), encoding="utf-8")
+        self.same(store, monkeypatch)
+        assert index.scans == 5
+
+    def test_a_line_no_reader_can_take_fails_both_reads_alike(self, tmp_path, monkeypatch):
+        bad_lines = [(b"[1, 2]\n", "LedgerError"),                          # JSON, not an object
+                     (b"\xff\xfe\n", "UnicodeDecodeError"),                 # not UTF-8
+                     (b'{"kind": "trial", "contract_id": "CTR-a"}\n', "LedgerError")]   # a trial with no id
+        for i, (bad, error) in enumerate(bad_lines):
+            store = self.seed(tmp_path / str(i))
+            with store.evidence_path.open("ab") as fh:
+                fh.write(bad)
+            for setting in ("off", "on"):
+                monkeypatch.setenv("TDLP_EVIDENCE_INDEX", setting)
+                for read in (store.effective_trials, lambda: store.trials_for({"CTR-a"})):
+                    with pytest.raises(Exception) as caught:
+                        read()
+                    assert type(caught.value).__name__ == error, (bad, setting)
+
+    def test_an_id_the_ledger_holds_is_never_handed_out_again(self, tmp_path, monkeypatch):
+        store = Store(tmp_path)
+        store.ensure()
+        store.evidence_path.write_text(self.trial("EV-0001", "CTR-a", "RUN-0001")
+                                       + self.trial("EV-0003", "CTR-a", "RUN-0001"), encoding="utf-8")
+        for setting in ("off", "on"):                               # two trials, but EV-0003 is taken
+            monkeypatch.setenv("TDLP_EVIDENCE_INDEX", setting)
+            assert store.next_evidence_id() == "EV-0004"
+        ids = store.append_trials([{"contract_id": "CTR-a", "provenance": "measured"}] * 2)
+        assert ids == ["EV-0004", "EV-0005"]
+        assert store.append_trial({"contract_id": "CTR-a", "provenance": "measured"}) == "EV-0006"
+        trials = [r["id"] for r in store.raw_records() if r.get("kind") == "trial"]
+        assert len(trials) == len(set(trials))
+
+    def test_allocating_an_id_reads_only_the_lines_appended(self, tmp_path, monkeypatch):
+        from component_belief.ledger_index import index_for
+
+        store = self.seed(tmp_path)
+        assert store.next_evidence_id() == "EV-0006"
+        index = index_for(store.evidence_path)
+        scans = index.scans
+
+        def whole_ledger(self):
+            raise AssertionError("allocating an id read the whole evidence ledger")
+
+        monkeypatch.setattr(Store, "raw_records", whole_ledger)
+        assert store.append_trial({"contract_id": "CTR-a", "provenance": "measured"}) == "EV-0006"
+        assert store.append_trials([{"contract_id": "CTR-b", "provenance": "measured"}]) == ["EV-0007"]
+        assert store.next_run_id() == "RUN-0004"
+        assert index.scans == scans

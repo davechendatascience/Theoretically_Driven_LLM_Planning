@@ -234,13 +234,22 @@ components:
          observed_by: CTR-surface-intact, case: "tests.test_server.TestParameters::test_each_arm_runs_alone_and_is_never_pooled_with_another"}
       - {id: FM-arm-lost-in-background, observable: "a background run of one arm records its trials without the value it was given",
          observed_by: CTR-surface-intact, case: "tests.test_server.TestParameters::test_a_background_run_carries_its_arm"}
-    remediation: runner.run_test() synthesis branch; jobs.start and jobs.work; store.ledger_lock; the tool list in server.py; the checks in server.ingest()
+      - {id: FM-index-misreads, observable: "a read of the evidence ledger through its index differs from a full read after an append, an amendment, a repeated id, a rewrite, a truncation, a replaced file or an edit in place",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestEvidenceIndex::test_a_read_through_the_index_is_the_full_read"}
+      - {id: FM-unreadable-line-diverges, observable: "a ledger line no reader can take fails the full read and not the index, or the other way round",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestEvidenceIndex::test_a_line_no_reader_can_take_fails_both_reads_alike"}
+      - {id: FM-id-allocation-scans, observable: "a run or an ingest reads the whole evidence ledger to allocate an id",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestEvidenceIndex::test_allocating_an_id_reads_only_the_lines_appended"}
+      - {id: FM-id-reissued, observable: "an evidence id is handed out that the ledger already holds",
+         observed_by: CTR-surface-intact, case: "tests.test_server.TestEvidenceIndex::test_an_id_the_ledger_holds_is_never_handed_out_again"}
+    remediation: runner.run_test() synthesis branch; jobs.start and jobs.work; store.ledger_lock; ledger_index.EvidenceIndex and Store.trials_for; the tool list in server.py; the checks in server.ingest()
     goal: [GOL-honest-evidence, GOL-cross-coding-agents]
     code:
       - src/component_belief/runner.py
       - src/component_belief/jobs.py
       - src/component_belief/readlog.py
       - src/component_belief/store.py
+      - src/component_belief/ledger_index.py
       - src/component_belief/server.py
       - src/component_belief/views.py
       - src/component_belief/render.py
@@ -544,6 +553,12 @@ components:
          observed_by: CTR-research-board, case: "tests.test_research_board::test_the_human_view_says_what_each_spend_is_doing_and_the_best_measured_result"}
       - {id: FM-best-by-luck, observable: "the human view calls a small sample the best result over a larger one whose rate is better supported",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_the_best_result_is_the_one_its_count_can_vouch_for"}
+      - {id: FM-board-reads-too-little, observable: "a board built from the records its results can use differs from one built from every record",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_the_board_reads_only_the_records_its_results_can_use"}
+      - {id: FM-build-mixes-commits, observable: "one build reads its declarations, rules or pauses from two commits",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_one_build_reads_one_commit"}
+      - {id: FM-move-writes-a-digest, observable: "a recording move writes a content digest outside .research/",
+         observed_by: CTR-research-board, case: "tests.test_research_board::test_a_recording_move_saves_no_content_digest"}
       - {id: FM-paused-goal-charged, observable: "a spend on a direction whose goal is paused waits or costs idle hours, waits again before the commit that lifts the pause, or is made at all",
          observed_by: CTR-research-board, case: "tests.test_research_board::test_a_paused_goal_stops_its_directions_clocks_from_the_commit_that_pauses_it"}
     remediation: research_board.board (rules, ledger, balances and results); research_board.page (the brief, its sections and items); research_board.play (the moves); the tools in research_board/server.py

@@ -11,6 +11,7 @@ attributes, no subscripts, no names beyond the supplied variables.
 from __future__ import annotations
 
 import ast
+from functools import lru_cache
 from typing import Any, Mapping
 
 _ALLOWED_NODES = (
@@ -31,7 +32,11 @@ class ExprError(ValueError):
     """Raised for a malformed rule, or one referencing an undefined name."""
 
 
+@lru_cache(maxsize=4096)
 def _parse(source: str) -> ast.Expression:
+    """One rule's checked tree. Remembered by its text: every trial of a contract is scored by the
+    same rule, and parsing it again for each one was most of the cost of scoring. The tree is only
+    read, never changed; a rule that does not parse raises each time."""
     try:
         tree = ast.parse(source, mode="eval")
     except SyntaxError as exc:

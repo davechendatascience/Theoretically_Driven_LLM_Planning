@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from .ids import sequential_id
+from .ledger_index import apply_amendment, enabled as index_enabled, index_for, no_id, read_records
 
 #: One writer at a time. Ids are taken from the ledger as it stands, so a run that appends while
 #: another counts would hand out the same EV- id twice. Runs execute in parallel; only taking an id
@@ -118,16 +119,10 @@ class Store:
     # ---------- raw io ----------
 
     def _read(self, path: Path) -> Iterator[dict[str, Any]]:
-        if not path.exists():
-            return
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if line:
-                    try:
-                        yield json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+        """Every record, line by line: the one reading the evidence index shares, so the two never
+        disagree on what a line holds (ledger_index.read_records)."""
+        for _, record, _ in read_records(path):
+            yield record
 
     def _append(self, path: Path, record: dict[str, Any]) -> None:
         line = json.dumps(record, sort_keys=True, default=str) + "\n"
@@ -141,9 +136,40 @@ class Store:
     def raw_records(self) -> list[dict[str, Any]]:
         return list(self._read(self.evidence_path))
 
+    def _index(self) -> Any:
+        return index_for(self.evidence_path) if index_enabled() else None
+
+    def _new_evidence_ids(self, k: int) -> list[str]:
+        """The next `k` evidence ids: counted from the trials the ledger holds, as they always were,
+        and never one the ledger already holds -- a count can fall behind ids recorded out of
+        sequence, and an id handed out twice would let one record's fold drop the other's. Read
+        through the index, so allocating an id does not read the whole ledger."""
+        index = self._index()
+        if index is not None:                      # current: it rescans whenever the file moved
+            count, taken = index.trial_count(), index.has_trial_id
+        else:
+            records = self.raw_records()
+            count = sum(1 for r in records if r.get("kind") == "trial")
+            ids = {r.get("id") for r in records if r.get("kind") == "trial"}
+            taken = ids.__contains__
+        out: list[str] = []
+        n = count
+        while len(out) < k:
+            n += 1
+            candidate = sequential_id("EV", n)
+            if not taken(candidate):
+                out.append(candidate)
+        return out
+
     def next_evidence_id(self) -> str:
-        n = sum(1 for r in self.raw_records() if r.get("kind") == "trial")
-        return sequential_id("EV", n + 1)
+        return self._new_evidence_ids(1)[0]
+
+    def trial_count(self) -> int:
+        """Trial records in the ledger, counted line by line (a repeated id counts each time)."""
+        index = self._index()
+        if index is not None:
+            return index.trial_count()
+        return sum(1 for r in self.raw_records() if r.get("kind") == "trial")
 
     def append_trial(self, record: dict[str, Any]) -> str:
         with ledger_lock(self.dir):
@@ -165,12 +191,12 @@ class Store:
             return self._append_trials(records)
 
     def _append_trials(self, records: list[dict[str, Any]]) -> list[str]:
-        n = sum(1 for r in self.raw_records() if r.get("kind") == "trial")
+        fresh = self._new_evidence_ids(len(records))
         ids: list[str] = []
-        for offset, record in enumerate(records, start=1):
+        for new_id, record in zip(fresh, records):
             record = dict(record)
             record["kind"] = "trial"
-            record["id"] = sequential_id("EV", n + offset)
+            record["id"] = new_id
             record.setdefault("timestamp", utc_now())
             record.setdefault("validity", "valid")
             self._append(self.evidence_path, record)
@@ -202,24 +228,43 @@ class Store:
         """Trials with amendments folded in — the view every belief reads."""
         trials: dict[str, dict[str, Any]] = {}
         amendments: list[dict[str, Any]] = []
-        for record in self.raw_records():
+        for offset, record, _ in read_records(self.evidence_path):
             if record.get("kind") == "trial":
+                if "id" not in record:
+                    raise no_id(self.evidence_path, offset)
                 trials[record["id"]] = dict(record)
             elif record.get("kind") == "amendment":
                 amendments.append(record)
 
         for amendment in amendments:
             target = trials.get(amendment.get("target", ""))
-            if target is None:
-                continue
-            if amendment.get("validity"):
-                target["validity"] = amendment["validity"]
-                target["validity_reason"] = amendment.get("reason", "")
-            if amendment.get("supersede_with"):
-                target["validity"] = "superseded"
-                target["superseded_by"] = amendment["supersede_with"]
-                target["validity_reason"] = amendment.get("reason", "")
+            if target is not None:
+                apply_amendment(target, amendment)
         return list(trials.values())
+
+    def trials_for(self, contracts: Any = (), runs: Any = ()) -> list[dict[str, Any]]:
+        """The trials effective_trials() returns whose contract is in `contracts` or whose run is in
+        `runs`, in the same order and with the same amendments folded in -- reading only their lines
+        (DEF-evidence-record: a record enters the slices of its own contract and no other's)."""
+        contracts, runs = set(contracts), set(runs)
+        index = self._index()
+        if index is not None:
+            found = index.trials_for(contracts, runs)
+            if found is not None:
+                return found
+        return [t for t in self.effective_trials()
+                if t.get("contract_id") in contracts or t.get("run_id") in runs]
+
+    def latest_runs(self) -> dict[Any, Any]:
+        """test_id -> the run of the last trial naming both, in the order effective_trials() gives."""
+        index = self._index()
+        found = index.latest_runs() if index is not None else None
+        if found is None:
+            found = {}
+            for t in self.effective_trials():
+                if t.get("test_id") and t.get("run_id"):
+                    found[t["test_id"]] = t["run_id"]
+        return found
 
     # ---------- notes (the inert channel) ----------
 
@@ -239,7 +284,10 @@ class Store:
         return record
 
     def notes(self, subject: str | None = None) -> list[dict[str, Any]]:
-        out = [r for r in self.raw_records() if r.get("kind") == "note"]
+        index = self._index()
+        out = index.notes_read() if index is not None else None
+        if out is None:
+            out = [r for r in self.raw_records() if r.get("kind") == "note"]
         return [r for r in out if subject is None or r.get("subject") == subject]
 
     # ---------- events ----------
@@ -272,7 +320,11 @@ class Store:
     # ---------- runs ----------
 
     def next_run_id(self) -> str:
-        seen = {r.get("run_id") for r in self.raw_records()}
+        index = self._index()
+        if index is not None:
+            seen = {sequential_id("RUN", index.highest_run())}
+        else:
+            seen = {r.get("run_id") for r in self.raw_records()}
         seen |= {e.get("payload", {}).get("run_id") for e in self.events()}
         highest = 0
         for value in seen:

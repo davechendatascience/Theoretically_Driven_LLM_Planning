@@ -60,16 +60,16 @@ def _trial_line(record: dict[str, Any], fields: Collection[str] = FIELDS) -> str
     return line
 
 
-def _trials(root: Path) -> list[dict[str, Any]]:
+def _store(root: Path) -> Any:
     from component_belief.store import Store
 
-    return Store(root).effective_trials()
+    return Store(root)
 
 
 def serve_run(root: Path, run_id: str, limit: int = RECORD_LIMIT, fields: Collection[str] = FIELDS) -> str:
     if not RUN_ID.match(run_id):
         return f"{run_id!r} is not a run id (RUN-<digits>)"
-    records = [t for t in _trials(root) if t.get("run_id") == run_id]
+    records = _store(root).trials_for((), {run_id})
     lines = [f"{run_id}: {len(records)} record(s) in the evidence ledger"]
     lines += [_trial_line(r, fields) for r in records[:limit]]
     if len(records) > limit:
@@ -107,7 +107,7 @@ def serve_contract(root: Path, contract_id: str, limit: int, fields: Collection[
         test = decl.tests.get(tid)
         if test is not None:
             lines.append(f"  {tid}: {test.run}")
-    records = [t for t in _trials(root) if t.get("contract_id") == contract_id]
+    records = _store(root).trials_for({contract_id})
     lines.append(f"{len(records)} record(s); the latest {min(limit, len(records))}, newest last:")
     lines += [_trial_line(r, fields) for r in records[-limit:]]
     return "\n".join(lines)
@@ -170,10 +170,9 @@ def serve_node(root: Path, node_id: str, limit: int) -> str:
 
 
 def serve_overview(root: Path, limit: int) -> str:
-    belief = _jsonl(root / ".belief" / "evidence.jsonl")
     consistency = _jsonl(root / ".consistency" / "evidence.jsonl")
     research = B.read_ledger(root)
-    lines = [f"evidence ledger (.belief): {sum(1 for r in belief if r.get('kind') == 'trial')} records",
+    lines = [f"evidence ledger (.belief): {_store(root).trial_count()} records",
              f"design ledger (.consistency): {sum(1 for r in consistency if r.get('kind') == 'trial')} trials",
              f"research ledger (.research): {len(research)} records",
              f"the latest {limit} runs, newest last:"]

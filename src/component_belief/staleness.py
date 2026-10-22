@@ -39,6 +39,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections import OrderedDict
 import threading
 import shlex
 import subprocess
@@ -87,9 +88,10 @@ def matches(path: str, entry: str) -> bool:
             or path.startswith(entry.rstrip("/") + "/"))
 
 
-def head_blobs(root: Path) -> dict[str, str] | None:
-    """Every tracked file at HEAD and its blob id; None when there is no HEAD to compare with."""
-    listing = _git(root, "ls-tree", "-r", "-z", "--full-tree", "HEAD")
+def head_blobs(root: Path, revision: str = "HEAD") -> dict[str, str] | None:
+    """Every tracked file at `revision` (HEAD unless a reader resolved it already) and its blob id;
+    None when there is no such revision to compare with."""
+    listing = _git(root, "ls-tree", "-r", "-z", "--full-tree", revision)
     if listing is None:
         return None
     blobs: dict[str, str] = {}
@@ -154,15 +156,25 @@ def ignored_inputs(root: Path, command: str, reads: list[str]) -> list[str]:
     return sorted(p for p in listed if (root / p).is_file())
 
 
+#: Digests taken by readers that never save them (research-board's build), by (root, path): kept for
+#: the life of the process, so a reader hashes a changed checkpoint once rather than on every read.
+_UNSAVED: dict[tuple[str, str], list[Any]] = {}
+
+
 class ContentDigests:
     """Content digests of files git does not track, cached by (size, mtime) under the ledger's
-    cache: a checkpoint of several gigabytes is hashed once per change, not on every read."""
+    cache: a checkpoint of several gigabytes is hashed once per change, not on every read.
+
+    `persist=False` reads the saved digests and keeps new ones in memory only: a reader that must
+    write nothing outside its own directory -- the research board records into .research/ alone
+    (DEF-research-ledger) -- still judges the same content the same way."""
 
     FILE = "digests.json"
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, persist: bool = True) -> None:
         self.root = root
         self.path = root / STORE_DIR / "cache" / self.FILE
+        self.persist = persist
         self._cache: dict[str, list[Any]] | None = None
         self._changed = False
 
@@ -182,19 +194,23 @@ class ContentDigests:
         except OSError:
             return None
         cache = self._load()
-        hit = cache.get(rel)
-        if hit and hit[0] == info.st_size and hit[1] == info.st_mtime_ns:
-            return str(hit[2])
+        for hit in (cache.get(rel), None if self.persist else _UNSAVED.get((str(self.root), rel))):
+            if hit and hit[0] == info.st_size and hit[1] == info.st_mtime_ns:
+                return str(hit[2])
         sha = hashlib.sha256()
         with path.open("rb") as fh:
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 sha.update(chunk)
-        cache[rel] = [info.st_size, info.st_mtime_ns, sha.hexdigest()[:16]]
-        self._changed = True
-        return cache[rel][2]
+        entry = [info.st_size, info.st_mtime_ns, sha.hexdigest()[:16]]
+        if self.persist:
+            cache[rel] = entry
+            self._changed = True
+        else:
+            _UNSAVED[(str(self.root), rel)] = entry
+        return str(entry[2])
 
     def save(self) -> None:
-        if not self._changed:
+        if not self._changed or not self.persist:
             return
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -270,23 +286,42 @@ def write_stamp(artifact_dir: Path, stamp: dict[str, Any]) -> str:
     return content_hash(stamp, 16)
 
 
-class CodeStaleness:
-    """Compares each trial's stamp with HEAD. HEAD's tree is listed once, stamps are read once
-    per run, and the revision fallback runs one git call per distinct revision."""
+#: The files at a commit that a set of claimed entries matches, by (root, commit, entries): the same
+#: tree for every reader of that commit, so matched once per process. Keyed by the commit whose tree
+#: was listed, never by a separate look at HEAD, which a commit landing in between would move.
+_CLAIMED: "OrderedDict[tuple[str, str, tuple[str, ...]], set[str]]" = OrderedDict()
+_CLAIMED_KEEP = 256
 
-    def __init__(self, root: Path) -> None:
+
+class CodeStaleness:
+    """Compares each trial's stamp with HEAD. HEAD is resolved to one commit, whose tree is listed
+    once; stamps are read once per run, and the revision fallback runs one git call per distinct
+    revision.
+
+    `revision` is the commit a reader already resolved HEAD to, so everything it shows is judged
+    against one commit; `persist_digests=False` keeps new content digests in memory (ContentDigests)."""
+
+    def __init__(self, root: Path, revision: str | None = None, persist_digests: bool = True) -> None:
         self.root = root
+        self._revision = revision
         self._head: dict[str, str] | None | bool = False
         self._stamps: dict[str, dict[str, Any] | str] = {}
         self._changed: dict[str, set[str] | None] = {}
-        self._digests = ContentDigests(root)
+        self._digests = ContentDigests(root, persist=persist_digests)
         self._outside: dict[str, str | None] = {}    # stamp digest -> why its ignored inputs moved
         self._reasons: dict[tuple[Any, ...], str | None] = {}
         self._claimed: dict[tuple[str, ...], set[str]] = {}
 
+    def commit(self) -> str | None:
+        """The commit HEAD resolved to for this reader; None when there is none."""
+        if self._revision is None:
+            self._revision = (_git(self.root, "rev-parse", "HEAD") or "").strip()
+        return self._revision or None
+
     def head(self) -> dict[str, str] | None:
         if self._head is False:
-            self._head = head_blobs(self.root)
+            commit = self.commit()
+            self._head = head_blobs(self.root, commit) if commit else None
         return self._head  # type: ignore[return-value]
 
     def stamp_for(self, trial: dict[str, Any]) -> dict[str, Any] | str | None:
@@ -395,8 +430,18 @@ class CodeStaleness:
     def _claimed_at_head(self, entries: tuple[str, ...]) -> set[str]:
         """The files at HEAD the entries claim: the same tree for every run, so matched once."""
         if entries not in self._claimed:
-            head = self.head() or {}
-            self._claimed[entries] = {p for p in head if any(matches(p, e) for e in entries)}
+            key = (str(self.root), self.commit() or "", entries)
+            found = _CLAIMED.get(key)
+            if found is None:
+                head = self.head() or {}
+                found = {p for p in head if any(matches(p, e) for e in entries)}
+                if key[1]:
+                    _CLAIMED[key] = found
+                    while len(_CLAIMED) > _CLAIMED_KEEP:
+                        _CLAIMED.popitem(last=False)
+            else:
+                _CLAIMED.move_to_end(key)
+            self._claimed[entries] = found
         return self._claimed[entries]
 
     def _outside_reason(self, stamp: dict[str, Any], trial: dict[str, Any]) -> str | None:
@@ -425,7 +470,8 @@ class CodeStaleness:
         if revision not in self._changed:
             # the ledgers are never measured, and with them in the diff, rename detection paired
             # up hundreds of artifact files: about two seconds a revision on a long history
-            out = _git(self.root, "diff", "--name-only", "--no-renames", revision, "HEAD", "--", ".", *_EXCLUDE)
+            out = _git(self.root, "diff", "--name-only", "--no-renames", revision, self.commit() or "HEAD",
+                       "--", ".", *_EXCLUDE)
             self._changed[revision] = None if out is None else {
                 line.strip() for line in out.splitlines() if line.strip()}
         return self._changed[revision]

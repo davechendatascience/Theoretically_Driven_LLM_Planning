@@ -46,7 +46,8 @@ class Context:
                 contract_ids = [subject]
             else:
                 contract_ids = [c.id for c in self.decl.contracts_for_subject(subject)]
-        return compute_slices(self.decl, self.trials(), contract_ids, staleness=self.staleness)
+        trials = self.trials() if contract_ids is None else self.store.trials_for(contract_ids)
+        return compute_slices(self.decl, trials, contract_ids, staleness=self.staleness)
 
 
 def view_artifacts(ctx: "Context", subject: str | None = None) -> str:

@@ -4,6 +4,41 @@ Newest first. Versions are the `tdlp` plugin's, released as git tags `tdlp--v<ve
 0.2.0 the harness was installed by hand at version 0.1.0 and never tagged. The ids point at the
 change itself; an `evidence:` commit recording the suites' runs follows each.
 
+## 0.13.7 — 2026-10-22 · the board reads only what its results use
+
+Speed, with every answer unchanged. On a project with a 1.43 GB evidence ledger (688,231 trials, 152
+contracts), a research board build took about 16 s, and every recording move paid it: each trail,
+spend or note rewrites BOARD.md through a full build. The board's results use 4% of that ledger.
+
+- **An index of the evidence ledger, kept in memory.** Each process keeps where every record sits,
+  by contract, run, amended trial and test. It is built by one scan on first use and extended by
+  the lines appended since. It scans in full again when the file is replaced, cut back or edited in
+  place. It writes nothing and takes no lock, so a reader stays a reader. A read through it equals
+  the full read, line for line: both use one line reader and one amendment fold. A final line with
+  no newline is read as before. `TDLP_EVIDENCE_INDEX=off` turns the index off.
+- **What reads through it:**
+  - A board build reads the trials of every contract a spend recorded or a goal measures, and
+    every trial of their runs. On that project a build takes 1.4 s once the process has scanned the
+    ledger (4.8 s, once), against 17.8 s reading every record. The board is the same.
+  - Recording moves, BOARD.md, `ledger(run=...)`, `ledger(contract=...)` and the ledger overview.
+  - The impact report, and status views narrowed to a subject.
+  - Allocating an evidence id or a run id no longer reads the whole ledger. An id the ledger already
+    holds, recorded out of sequence, is never handed out again.
+- **Two caches.** An acceptance rule is parsed once per process, not once per trial. The files a
+  component claims at a commit are matched once per commit.
+- **One commit per build.** A board build resolves HEAD once and reads its declarations, rules,
+  pauses and the code its results are judged against at that commit. Before, a commit landing
+  mid-build could mix two.
+- **A recording move writes nothing outside `.research/`.** When a result was judged against a
+  git-ignored input, a move could save that input's content digest in `.belief/cache/`, which
+  DEF-research-ledger never allowed. The board now keeps such digests in memory; component-belief
+  still saves them when it runs a test.
+- **One reader for every line of the evidence, event and decision ledgers.** It splits on newlines
+  alone. A line that is JSON but not an object, or a trial without an id, is now an error that names
+  the file and byte offset, where it used to fail later with a bare `AttributeError` or `KeyError`.
+- **No theory change.** No axiom, definition or branch speaks to how a ledger is read. The commit
+  gives the reason node by node. Seven failure modes are declared, with their cases.
+
 ## 0.13.6 — 2026-10-21 · a goal can be paused, and the theory catches up with 0.13.x
 
 - **A goal can be paused.** A subgoal set aside only in a `goals.yaml` comment kept charging its

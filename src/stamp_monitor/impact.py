@@ -101,7 +101,7 @@ def impact(root: Path, base: str = "HEAD~1", worktree: bool = True) -> Impact:
     affected = sorted(
         c.id for c in decl.contracts.values()
         if resting[c.id] & set(result.components) or set(c.evaluable_by) & set(result.tests))
-    slices = compute_slices(decl, Store(root).effective_trials(), affected,
+    slices = compute_slices(decl, Store(root).trials_for(affected), affected,
                             staleness=CodeStaleness(root))
     for cid in affected:
         states = sorted({s.state for s in slices if s.contract_id == cid})
