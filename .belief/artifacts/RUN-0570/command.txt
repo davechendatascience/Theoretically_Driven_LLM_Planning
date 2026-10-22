@@ -1,0 +1,5 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0570/result.json -- acceptance/test_goals_stay_mine.py -q -p no:asyncio
+exit=0
+test=TST-acceptance-goals@dca3c1a9
+started=2026-10-22T06:22:59+00:00
+at=2026-10-22T06:23:00+00:00

@@ -1,0 +1,5 @@
+python tools/pytest_trials.py /home/edge-host/Documents/GitHub/Theoretically_Driven_LLM_Planning/.belief/artifacts/RUN-0551/result.json -- tests/test_beliefs.py tests/test_gate_and_staleness.py -q -p no:asyncio
+exit=0
+test=TST-beliefs@32bd673a
+started=2026-10-22T06:21:59+00:00
+at=2026-10-22T06:22:12+00:00
